@@ -8,24 +8,71 @@ export type { Page };
 
 // ── Configuration ──────────────────────────────────────────────────
 
-export interface ShoTestConfig {
-    /** Directory for accepted/expected screenshots (default: "test-accepted") */
-    acceptedDir: string;
-    /** Capture DOM HTML alongside screenshots (default: true) */
-    captureHtml: boolean;
-    /** Strip PNG metadata for consistent output (default: true) */
-    stripMetadata: boolean;
+const captureHtml = process.env.SHOTEST_CAPTURE_HTML !== 'false';
+
+type VideoMode = 'on' | 'retain-on-failure' | 'on-first-retry';
+
+export function getVideoModeOverride(): VideoMode | null {
+    const override = process.env.SHOTEST_VIDEO?.trim().toLowerCase();
+    if (!override || override === 'off' || override === 'false' || override === '0') {
+        return null;
+    }
+    if (override === 'retain-on-failure' || override === 'on-first-retry') {
+        return override;
+    }
+    return 'on';
 }
 
-const config: ShoTestConfig = {
-    acceptedDir: process.env.SHOTEST_EXPECTED_DIR || 'test-accepted',
-    captureHtml: process.env.SHOTEST_CAPTURE_HTML !== 'false',
-    stripMetadata: process.env.SHOTEST_STRIP_METADATA !== 'false',
-};
+export function detectVideoMode(testInfo: TestInfo): boolean {
+    const override = process.env.SHOTEST_DEMO;
+    if (override === 'on') return true;
+    if (override === 'off') return false;
 
-export function configure(overrides: Partial<ShoTestConfig>): void {
-    Object.assign(config, overrides);
+    if (getVideoModeOverride()) return true;
+
+    const use = (testInfo as any).project?.use;
+    const videoConfig = use?.video;
+    if (videoConfig === 'on' || (typeof videoConfig === 'object' && videoConfig?.mode === 'on')) {
+        return true;
+    }
+
+    if (use?.headless === false) return true;
+
+    return false;
 }
+
+const VIDEO_INIT_CSS = `
+    .shotest-touch-ripple {
+        position: fixed;
+        border: 4px solid rgba(255, 255, 255, 0.95);
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 10000000;
+        background: rgba(255, 255, 255, 0.15);
+        box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+        animation: shotest-ripple-expand 600ms ease-out forwards;
+    }
+    @keyframes shotest-ripple-expand {
+        0% { width: 20px; height: 20px; opacity: 1; margin-left: -10px; margin-top: -10px; }
+        100% { width: 140px; height: 140px; opacity: 0; margin-left: -70px; margin-top: -70px; }
+    }
+    .shotest-swipe-indicator {
+        position: fixed;
+        width: 44px; height: 44px;
+        margin-left: -22px; margin-top: -22px;
+        border: 3px solid rgba(255, 255, 255, 0.85);
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 10000000;
+        background: rgba(255, 255, 255, 0.12);
+        box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
+        transition: opacity 350ms ease-out, transform 350ms ease-out;
+    }
+    .shotest-swipe-indicator.fade-out {
+        opacity: 0;
+        transform: scale(2.2);
+    }
+`;
 
 // ── Stack trace helpers ────────────────────────────────────────────
 
@@ -311,14 +358,12 @@ export async function screenshot(page: Page, name: string): Promise<void> {
 
 async function captureStep(basePath: string, page: Page): Promise<void> {
     let pngBuffer: Buffer = await page.screenshot({ fullPage: false });
-    if (config.stripMetadata) {
-        pngBuffer = stripPngMetadata(pngBuffer);
-    }
+    pngBuffer = stripPngMetadata(pngBuffer);
     fs.writeFileSync(basePath + '.png', pngBuffer);
 
     await hideOverlay(page);
 
-    if (config.captureHtml) {
+    if (captureHtml) {
         const { body, head } = await page.evaluate(() => ({
             body: document.body.outerHTML.replace(/<path .*?<\/path>/g, ''),
             head: document.head.outerHTML,
@@ -445,6 +490,7 @@ function wrapPage(actualPage: Page): Page {
 export const test = baseTest.extend({
     page: async ({ page }, use, testInfo) => {
         const actualPage = page;
+        const videoMode = detectVideoMode(testInfo);
 
         // Use Playwright's own per-test output directory
         const outDir = testInfo.outputDir;
@@ -458,11 +504,27 @@ export const test = baseTest.extend({
 
         fs.mkdirSync(outDir, { recursive: true });
 
+        // Set video mode flag and inject appropriate CSS
+        await actualPage.addInitScript(({ isVideoMode, videoCss }: { isVideoMode: boolean; videoCss: string }) => {
+            (window as any).__VIDEO_MODE__ = isVideoMode;
+            if (isVideoMode) {
+                Object.defineProperty(navigator, 'webdriver', { get: () => false });
+                const style = document.createElement('style');
+                style.textContent = videoCss;
+                if (document.head) document.head.appendChild(style);
+                else document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+            }
+        }, { isVideoMode: videoMode, videoCss: VIDEO_INIT_CSS });
+
         actualPage.on('console', (...args: any[]) => console.log('Browser:', ...args));
         actualPage.on('pageerror', err => console.error('BROWSER ERROR:', err.message));
 
-        const wrappedPage = wrapPage(actualPage);
-        await use(wrappedPage);
+        if (videoMode) {
+            await use(actualPage);
+        } else {
+            const wrappedPage = wrapPage(actualPage);
+            await use(wrappedPage);
+        }
 
         // Determine error info
         const errorObj = testInfo.error as any;
@@ -479,7 +541,7 @@ export const test = baseTest.extend({
             errorStack = errorObj ? stripAnsi(rawStack) || null : null;
 
             // Only capture if our action/expect wrappers didn't already
-            if (!failureCaptured) {
+            if (!videoMode && !failureCaptured) {
                 await hideOverlay(actualPage);
                 await showOverlayBanner(actualPage, errorMessage, 'error');
                 await takeScreenshot(actualPage, true, failureLoc).catch(() => {});

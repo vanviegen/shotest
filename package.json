@@ -17,11 +17,6 @@
       "types": "./build/index.d.ts",
       "bun": "./src/index.ts",
       "default": "./build/index.js"
-    },
-    "./video": {
-      "types": "./build/video.d.ts",
-      "bun": "./src/video.ts",
-      "default": "./build/video.js"
     }
   },
   "bin": {

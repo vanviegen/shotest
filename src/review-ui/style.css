@@ -170,20 +170,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
   margin-top: 6px;
   text-align: center;
   display: block;
-  max-width: 18ch;
-  margin-left: auto;
-  margin-right: auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.step .img-label {
-  font-size: 10px;
-  color: var(--fg2);
-  text-align: center;
-  margin-top: 6px;
-  display: block;
-  max-width: 18ch;
   margin-left: auto;
   margin-right: auto;
   overflow: hidden;

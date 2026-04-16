@@ -20,7 +20,7 @@ import type { TestManifest } from './fixture.ts';
 // ── Configuration ──────────────────────────────────────────────────
 
 const outputDir = process.env.SHOTEST_OUTPUT_DIR || 'test-results';
-const acceptedDir = process.env.SHOTEST_EXPECTED_DIR || 'test-accepted';
+const acceptedDir = process.env.SHOTEST_ACCEPTED_DIR || 'test-accepted';
 const port = parseInt(process.env.SHOTEST_PORT || '3847');
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const reviewUiPath = path.join(thisDir, '..', 'build', 'review-ui.html');

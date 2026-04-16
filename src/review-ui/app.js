@@ -6,13 +6,14 @@ const state = A.proxy({
     selected: null,
     detail: null,
     scale: 0.8,
-    tick: 0,
-    hoverStep: null,
-    hoverSide: null,
+    switchState: true,
 });
 
 let pendingSelectionToken = 0;
-setInterval(() => state.tick++, 1000);
+setInterval(() => {
+    state.switchState = false;
+    setInterval(() => state.switchState = true, 500);
+}, 1500);
 
 function pathForTest(name) {
     return name ? '/test/' + encodeURIComponent(name) : '/';
@@ -32,7 +33,7 @@ async function fetchTests() {
         a.line - b.line ||
         a.title.localeCompare(b.title)
     );
-    state.tests.length = 0;
+    state.tests = [];
     for (const t of tests) state.tests.push(t);
 
     const wanted = routeTestName();
@@ -62,8 +63,8 @@ async function selectTest(name, updateRoute = true) {
 
 async function acceptChanges(name) {
     await fetch('/api/accept/' + encodeURIComponent(name), { method: 'POST' });
+    deselectTest();
     await fetchTests();
-    await selectTest(name, false);
 }
 
 function deselectTest(updateRoute = true) {
@@ -72,26 +73,6 @@ function deselectTest(updateRoute = true) {
     state.detail = null;
     if (updateRoute && route.current.path !== '/') {
         route.go('/');
-    }
-}
-
-function compareMode(stepKey) {
-    if (state.hoverStep === stepKey) {
-        return state.hoverSide === 'left' ? 'accepted' : 'current';
-    }
-    return state.tick % 3 === 0 ? 'accepted' : 'current';
-}
-
-function hoverCompare(stepKey, event) {
-    const box = event.currentTarget.getBoundingClientRect();
-    state.hoverStep = stepKey;
-    state.hoverSide = event.clientX - box.left < box.width / 2 ? 'left' : 'right';
-}
-
-function clearHover(stepKey) {
-    if (state.hoverStep === stepKey) {
-        state.hoverStep = null;
-        state.hoverSide = null;
     }
 }
 
@@ -169,35 +150,37 @@ A(detailEl, () => {
 
         A('div.steps-grid', () => {
             for (const step of steps) {
-                const isNew = !step.acceptedImage && step.currentImage;
-                const isRemoved = step.acceptedImage && !step.currentImage;
-                const cls = isNew ? '.new' : isRemoved ? '.removed' : step.changed ? '.changed' : '';
-                const stepKey = [state.selected, step.location, step.acceptedImage || '', step.currentImage || ''].join('::');
-
-                A('div.step' + cls, () => {
-                    A(() => {
-                        const mode = compareMode(stepKey);
-
-                        if (step.acceptedImage && step.currentImage && step.changed) {
-                            A('div.image-stage.compare-view', '$zoom=', state.scale, 'mousemove=', (event) => hoverCompare(stepKey, event), 'mouseleave=', () => clearHover(stepKey), () => {
-                                A('img.compare-layer .visible=', mode === 'accepted', 'src=', '/image/expected/' + encodeURIComponent(state.selected) + '/' + step.acceptedImage);
-                                A('img.compare-layer .visible=', mode === 'current', 'src=', '/image/current/' + encodeURIComponent(state.selected) + '/' + step.currentImage);
-                            });
-                            A('div.img-label #' + (mode === 'accepted' ? 'accepted' : 'current'));
-                        } else {
-                            const variant = step.currentImage ? 'current' : 'accepted';
-                            const img = step.currentImage || step.acceptedImage;
-                            if (img) {
-                                const src = '/image/' + variant + '/' + encodeURIComponent(state.selected) + '/' + img;
-                                A('div.image-stage', '$zoom=', state.scale, () => {
-                                    A('img src=', src);
-                                });
-                                A('div.img-label #' + variant);
-                            }
+                
+                const change = step.acceptedImage ? (step.currentImage ? (step.changed ? 'changed' : 'unchanged') : 'removed') : 'new';
+                A(`div.step.${change}`, () => {
+                    
+                    if (change === 'changed') {
+                        let mouseState = A.create();
+                        function onMouseMove(event) {
+                            const box = event.currentTarget.getBoundingClientRect();
+                            mouseState.value = event.clientX - box.left > box.width / 2; // true for 'current', false for 'accepted'
                         }
-                    });
-
-                    A('div.label #' + step.location);
+                        function onMouseLeave() {
+                            mouseState.value = undefined;
+                        }
+                        const switchState = A.derive(() => mouseState.value ?? state.switchState);
+                        A('div.image-stage.compare-view', '$zoom=', state.scale, 'mousemove=', onMouseMove, 'mouseleave=', onMouseLeave, () => {
+                            A('img.compare-layer', 'src=', '/image/expected/' + encodeURIComponent(state.selected) + '/' + step.acceptedImage);
+                            A('img.compare-layer .visible=', switchState, 'src=', '/image/current/' + encodeURIComponent(state.selected) + '/' + step.currentImage);
+                        });
+                        A(`div.label`, () => {
+                            A(`#line ${step.location.split(':')[1]} • ${change} • showing ${switchState.value ? 'current' : 'accepted'}`);
+                        });
+                    } else {
+                        const img = step.currentImage || step.acceptedImage;
+                        if (img) {
+                            const src = '/image/' + (step.currentImage ? 'current' : 'accepted') + '/' + encodeURIComponent(state.selected) + '/' + img;
+                            A('div.image-stage', '$zoom=', state.scale, () => {
+                                A('img src=', src);
+                            });
+                        }
+                        A(`div.label #line ${step.location.split(':')[1]} • ${change}`);
+                    }
                 });
             }
         });

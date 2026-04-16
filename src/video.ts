@@ -1,103 +1,26 @@
 /**
- * shoTest video mode — helpers for recording promotional demos.
+ * shoTest video helpers — visual interaction effects for demo recordings.
  *
- * Usage:
- *   import { test, expect, tap, slowType, pause, swipe, screenshot } from 'shotest/video';
- *
- * In video mode (VIDEO_MODE=true env var), tap/slowType/pause/swipe add
- * visual indicators and delays. In test mode they run instantly.
+ * Video mode is auto-detected from Playwright config (video: 'on' or headless: false)
+ * and can be overridden with the SHOTEST_DEMO environment variable ('on' or 'off').
  */
 
-export * from '@playwright/test';
-
-import { test as plainTest, expect } from '@playwright/test';
-import { test as screenshottingTest, screenshot, configure, waitForVisualStability, type Page } from './fixture.js';
-import * as path from 'path';
-import * as fs from 'fs';
-
-export { expect, screenshot, configure, waitForVisualStability };
+import type { Page } from '@playwright/test';
 
 type Locator = ReturnType<Page['locator']>;
 
-const VIDEO_MODE = !!process.env.VIDEO_MODE;
-const baseTest = VIDEO_MODE ? plainTest : screenshottingTest;
-
-export const test = baseTest.extend({
-    page: async ({ page }: { page: Page }, use: (page: Page) => Promise<void>) => {
-        await page.addInitScript((videoMode: boolean) => {
-            (window as any).__VIDEO_MODE__ = videoMode;
-
-            if (videoMode) {
-                Object.defineProperty(navigator, 'webdriver', { get: () => false });
-                const style = document.createElement('style');
-                style.textContent = `
-                    .shotest-touch-ripple {
-                        position: fixed;
-                        border: 4px solid rgba(255, 255, 255, 0.95);
-                        border-radius: 50%;
-                        pointer-events: none;
-                        z-index: 10000000;
-                        background: rgba(255, 255, 255, 0.15);
-                        box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
-                        animation: shotest-ripple-expand 600ms ease-out forwards;
-                    }
-                    @keyframes shotest-ripple-expand {
-                        0% { width: 20px; height: 20px; opacity: 1; margin-left: -10px; margin-top: -10px; }
-                        100% { width: 140px; height: 140px; opacity: 0; margin-left: -70px; margin-top: -70px; }
-                    }
-                    .shotest-swipe-indicator {
-                        position: fixed;
-                        width: 44px; height: 44px;
-                        margin-left: -22px; margin-top: -22px;
-                        border: 3px solid rgba(255, 255, 255, 0.85);
-                        border-radius: 50%;
-                        pointer-events: none;
-                        z-index: 10000000;
-                        background: rgba(255, 255, 255, 0.12);
-                        box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
-                        transition: opacity 350ms ease-out, transform 350ms ease-out;
-                    }
-                    .shotest-swipe-indicator.fade-out {
-                        opacity: 0;
-                        transform: scale(2.2);
-                    }
-                `;
-                if (document.head) document.head.appendChild(style);
-                else document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
-            } else {
-                const style = document.createElement('style');
-                style.textContent = `
-                    *, *::before, *::after { transition: none !important; animation: none !important; }
-                `;
-                if (document.head) document.head.appendChild(style);
-                else document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
-            }
-        }, VIDEO_MODE);
-
-        await use(page);
-
-        // Video mode: copy video to build.video/
-        if (VIDEO_MODE) {
-            const videoPath = await page.video()?.path();
-            if (videoPath) {
-                await page.close();
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                if (fs.existsSync(videoPath)) {
-                    const outputDir = path.join(process.cwd(), 'build.video');
-                    fs.mkdirSync(outputDir, { recursive: true });
-                    const destPath = path.join(outputDir, 'demo.webm');
-                    fs.copyFileSync(videoPath, destPath);
-                    console.log(`\n✅ Video saved to: ${destPath}\n`);
-                    const playwrightDir = path.dirname(videoPath);
-                    try { fs.rmSync(playwrightDir, { recursive: true, force: true }); } catch {}
-                }
-            }
-        }
-    },
-});
-
-/** Tap with visual ripple (video) or instant click (test) */
-export async function tap(page: Page, locator: Locator, delayMs: number = 800): Promise<void> {
+/**
+ * Tap an element with a visible touch ripple effect.
+ *
+ * In video mode, shows an expanding ripple animation at the tap point and
+ * waits briefly after clicking for a natural feel. When not in video mode,
+ * performs an instant click with no delay.
+ *
+ * @param page - The Playwright page instance.
+ * @param locator - The element to tap.
+ * @param delayMs - Post-tap delay in video mode (default: 800ms). Ignored outside video mode.
+ */
+export async function demoTap(page: Page, locator: Locator, delayMs: number = 800): Promise<void> {
     const hasVideo = await page.evaluate(() => (window as any).__VIDEO_MODE__ === true);
 
     if (hasVideo) {
@@ -121,8 +44,19 @@ export async function tap(page: Page, locator: Locator, delayMs: number = 800): 
     }
 }
 
-/** Type character-by-character (video) or fill instantly (test) */
-export async function slowType(page: Page, locator: Locator, text: string, charDelayMs: number = 80): Promise<void> {
+/**
+ * Type text character-by-character with natural timing.
+ *
+ * In video mode, clicks the element and types each character with a delay,
+ * simulating realistic human typing. When not in video mode, fills the input
+ * instantly using `locator.fill()`.
+ *
+ * @param page - The Playwright page instance.
+ * @param locator - The input element to type into.
+ * @param text - The text to type.
+ * @param charDelayMs - Delay between characters in video mode (default: 80ms). Ignored outside video mode.
+ */
+export async function demoType(page: Page, locator: Locator, text: string, charDelayMs: number = 80): Promise<void> {
     const hasVideo = await page.evaluate(() => (window as any).__VIDEO_MODE__ === true);
     if (hasVideo) {
         await locator.click();
@@ -136,16 +70,36 @@ export async function slowType(page: Page, locator: Locator, text: string, charD
     }
 }
 
-/** Pause for viewing time (video only, skipped in test mode) */
-export async function pause(page: Page, ms: number = 2000): Promise<void> {
+/**
+ * Pause for a specified duration (video mode only).
+ *
+ * In video mode, waits for the given number of milliseconds, useful for
+ * giving viewers time to see the current state. When not in video mode,
+ * returns immediately with no delay.
+ *
+ * @param page - The Playwright page instance.
+ * @param ms - Duration to pause in milliseconds (default: 2000ms). Ignored outside video mode.
+ */
+export async function demoPause(page: Page, ms: number = 2000): Promise<void> {
     const hasVideo = await page.evaluate(() => (window as any).__VIDEO_MODE__ === true);
     if (hasVideo) {
         await page.waitForTimeout(ms);
     }
 }
 
-/** Swipe gesture with visual indicator (video) or fast gesture (test) */
-export async function swipe(page: Page, locator: Locator, direction: 'up' | 'down' | 'left' | 'right', distancePx: number = 200): Promise<void> {
+/**
+ * Perform a swipe gesture with a visible touch indicator.
+ *
+ * In video mode, shows a circular touch indicator that follows the swipe
+ * path with eased motion and a fade-out effect at the end. When not in
+ * video mode, performs a fast programmatic swipe with no visual indicator.
+ *
+ * @param page - The Playwright page instance.
+ * @param locator - The element to swipe on.
+ * @param direction - Swipe direction: 'up', 'down', 'left', or 'right'.
+ * @param distancePx - Distance to swipe in pixels (default: 200).
+ */
+export async function demoSwipe(page: Page, locator: Locator, direction: 'up' | 'down' | 'left' | 'right', distancePx: number = 200): Promise<void> {
     const hasVideo = await page.evaluate(() => (window as any).__VIDEO_MODE__ === true);
 
     const box = await locator.boundingBox();

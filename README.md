@@ -98,61 +98,51 @@ http://localhost:3847
 
 Use the review page to inspect failures, compare screenshots, and accept the new baseline when the change is intentional.
 
-## Video helpers
+## Recording demo videos
 
-For demo-style recordings, import from `shotest/video` instead of `shotest`. It adds a couple of helper functions.
-
+shoTest includes helper functions for recording demonstration videos with visible interactions and natural delays. They are exported directly from `shotest`, alongside the regular Playwright functions:
+ 
 ```ts
-import { test, expect, tap, slowType, pause, swipe } from 'shotest/video';
+import { test, expect, demoTap, demoType, demoPause, demoSwipe } from 'shotest';
 
 test('demo', async ({ page }) => {
   await page.goto('http://localhost:3000');
-  await tap(page, page.getByRole('button', { name: 'Open settings' }));
-  await slowType(page, page.getByLabel('Name'), 'Living room');
-  await pause(page, 1200);
+  await demoTap(page, page.getByRole('button', { name: 'Open settings' }));
+  await demoType(page, page.getByLabel('Name'), 'Living room');
+  await demoPause(page, 1200);
 });
 ```
 
-The same spec can still run as a normal test. To record an actual video, you only need two things in the Playwright run:
+**Important:** These helpers can run in two modes:
 
-- enable Playwright video output
-- set `VIDEO_MODE=true`
+- Demo mode. The helper functions will emulate real user interactions with small delays, and add touch effects to taps and swipes. No overlaid screenshots are captured, so as not to disturb the video.
+- Regular test mode, meaning they run as fast as possible with no delays or visual effects. This allows you to include your demo recording script in your test suite, without an outsized impact on test runtime.
 
-A minimal recording config looks like this:
+Demo mode is automatically activated when Playwright video recording is enabled, when `SHOTEST_VIDEO` is set for the run, or when it's running in headed mode. You can override this by setting the `SHOTEST_DEMO` environment variable to `on` or `off`.
 
-```ts
-import { defineConfig } from 'shotest';
+To record demo videos for a run, set `SHOTEST_VIDEO` when invoking Playwright:
 
-process.env.VIDEO_MODE = 'true';
-
-export default defineConfig({
-  use: {
-    video: { mode: 'on' },
-  },
-});
+```sh
+SHOTEST_VIDEO=on npx playwright test
 ```
 
-In normal test mode the helpers run quickly. In video mode they add small delays and visible interaction effects.
+This uses Playwright's normal video output handling, so the videos are written to the standard per-test output directory under `test-results/`. You can also use Playwright's other video modes, for example:
 
-## Configuration
-
-You can override the defaults in code:
-
-```ts
-import { configure } from 'shotest';
-
-configure({
-  acceptedDir: 'my-baselines',
-  captureHtml: true,
-  stripMetadata: true,
-});
+```sh
+SHOTEST_VIDEO=retain-on-failure npx playwright test
 ```
 
-Or through environment variables:
 
-- `SHOTEST_EXPECTED_DIR`
-- `SHOTEST_CAPTURE_HTML`
-- `SHOTEST_STRIP_METADATA`
-- `SHOTEST_PORT`
-- `SHOTEST_OUTPUT_DIR` (optional, for the review server if your Playwright `outputDir` is not `test-results`)
+## Environment variables
 
+For test recording:
+
+- `SHOTEST_CAPTURE_HTML`: Whether to capture DOM HTML alongside screenshots (`'on'` or `'off'`, defaults to `'off'`)
+- `SHOTEST_VIDEO`: Enables Playwright video recording for the run. Set it to `on`, `retain-on-failure`, or `on-first-retry`; set it to `off` to disable it.
+- `SHOTEST_DEMO`: Whether the video helper methods emulate user behavior (`'on'` or `'off'`, defaults to auto-detecting recording, `SHOTEST_VIDEO`, or headed mode)
+
+For the review server:
+
+- `SHOTEST_OUTPUT_DIR`: Where to read test results (defaults to `test-results`)
+- `SHOTEST_ACCEPTED_DIR`: Where to store accepted baseline images (defaults to `test-accepted`)
+- `SHOTEST_PORT`: Web server TCP port (defaults to `3847`)
