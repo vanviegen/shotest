@@ -396,12 +396,12 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             try {
                 await hideOverlay(actualPage);
                 await waitForVisualStability(actualPage, 250);
-                const box = await actualLocator.boundingBox({ timeout: 3000 }).catch(() => null);
+                await actualLocator.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+                const box = await actualLocator.boundingBox().catch(() => null);
                 if (!box) {
-                    await showOverlayBanner(actualPage, `Cannot find ${actualLocator} for ${short}`, 'info');
-                } else {
-                    await showOverlayCheck(actualPage, box, short);
+                    throw new Error(failureText);
                 }
+                await showOverlayCheck(actualPage, box, short);
                 await takeScreenshot(actualPage, true, loc);
                 const result = await (actualLocator as any)[method](...args);
                 pendingFailureText = '';
@@ -430,7 +430,8 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             const result = await (actualLocator as any)._expect(method, options);
             await hideOverlay(actualPage);
             await waitForVisualStability(actualPage, 200);
-            const box = await actualLocator.boundingBox({ timeout: 1000 }).catch(() => null);
+            await actualLocator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+            const box = await actualLocator.boundingBox().catch(() => null);
             if (box) {
                 await showOverlayCheck(actualPage, box, label, 'assert');
             } else {
@@ -442,7 +443,8 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         } catch (error: any) {
             await hideOverlay(actualPage);
             await waitForVisualStability(actualPage, 120);
-            const box = await actualLocator.boundingBox({ timeout: 500 }).catch(() => null);
+            await actualLocator.scrollIntoViewIfNeeded({ timeout: 500 }).catch(() => {});
+            const box = await actualLocator.boundingBox().catch(() => null);
             if (box) {
                 await showOverlayCheck(actualPage, box, failureText, 'assert');
             } else {
@@ -452,6 +454,22 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             failureCaptured = true;
             throw error;
         }
+    };
+
+    wrapped.waitFor = async function (options?: any) {
+        const loc = getCallerLocation();
+        lastStepLocation = loc;
+        await (actualLocator as any).waitFor(options);
+        await hideOverlay(actualPage);
+        await waitForVisualStability(actualPage, 200);
+        await actualLocator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+        const box = await actualLocator.boundingBox().catch(() => null);
+        if (box) {
+            await showOverlayCheck(actualPage, box, 'waitFor');
+        } else {
+            await showOverlayBanner(actualPage, 'waitFor', 'info');
+        }
+        await takeScreenshot(actualPage, true, loc);
     };
 
     const locatorReturning = ['locator', 'filter', 'nth', 'first', 'last', 'getByText', 'getByRole', 'getByPlaceholder', 'getByLabel', 'getByTestId', 'getByAltText', 'getByTitle'];
@@ -483,7 +501,6 @@ function wrapPage(actualPage: Page): Page {
         lastStepLocation = loc;
         await actualPage.goto(url, options);
         await actualPage.waitForLoadState('load').catch(() => { });
-        await actualPage.addStyleTag({ content: OVERLAY_STYLE });
         await waitForVisualStability(actualPage, 500);
         await showOverlayBanner(actualPage, 'goto ' + url, 'info');
         await takeScreenshot(actualPage, true, loc);
@@ -512,16 +529,18 @@ export const test = baseTest.extend({
         fs.mkdirSync(outDir, { recursive: true });
 
         // Set video mode flag and inject appropriate CSS
-        await actualPage.addInitScript(({ isVideoMode, videoCss }: { isVideoMode: boolean; videoCss: string }) => {
+        await actualPage.addInitScript(({ isVideoMode, videoCss, overlayCss }: { isVideoMode: boolean; videoCss: string; overlayCss: string }) => {
             (window as any).__VIDEO_MODE__ = isVideoMode;
+            const style = document.createElement('style');
             if (isVideoMode) {
                 Object.defineProperty(navigator, 'webdriver', { get: () => false });
-                const style = document.createElement('style');
                 style.textContent = videoCss;
-                if (document.head) document.head.appendChild(style);
-                else document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+            } else {
+                style.textContent = overlayCss;
             }
-        }, { isVideoMode: videoMode, videoCss: VIDEO_INIT_CSS });
+            if (document.head) document.head.appendChild(style);
+            else document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+        }, { isVideoMode: videoMode, videoCss: VIDEO_INIT_CSS, overlayCss: OVERLAY_STYLE });
 
         actualPage.on('console', (...args: any[]) => console.log('Browser:', ...args));
         actualPage.on('pageerror', err => console.error('BROWSER ERROR:', err.message));

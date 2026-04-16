@@ -6,11 +6,11 @@
       "name": "shotest",
       "dependencies": {
         "@playwright/test": "^1.59.1",
-        "readme-tsdoc": "^1.1.6",
       },
       "devDependencies": {
         "@types/node": "^25.0.3",
         "aberdeen": "^1.9.0",
+        "readme-tsdoc": "^1.1.7",
         "typescript": "^5.8.3",
         "vite": "^7.3.1",
         "vite-plugin-singlefile": "^2.3.0",
@@ -154,7 +154,7 @@
 
     "postcss": ["postcss@8.5.9", "", { "dependencies": { "nanoid": "^3.3.11", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-7a70Nsot+EMX9fFU3064K/kdHWZqGVY+BADLyXc8Dfv+mTLLVl6JzJpPaCZ2kQL9gIJvKXSLMHhqdRRjwQeFtw=="],
 
-    "readme-tsdoc": ["readme-tsdoc@1.1.6", "", { "dependencies": { "typescript": "^5.0.0" }, "bin": { "readme-tsdoc": "src/cli.js" } }, "sha512-v0Rw7qKy6JsaEhg41LQx+SKsfMY4y7XGb+QbJj/bgYNU/Mi2mmLlBG7GO1PCRwjAVIG7pYgzWUboJzPxr9fr+g=="],
+    "readme-tsdoc": ["readme-tsdoc@1.1.7", "", { "dependencies": { "typescript": "^5.0.0" }, "bin": { "readme-tsdoc": "src/cli.js" } }, "sha512-zMDnqkCV0CBR2uumOeznxSodNfQ0Zvovtiu585QLRvzIfzm5ekfK6+MYQ+rvW9Ed9GSNJtBAoVQFZ2gSbj3d2Q=="],
 
     "rollup": ["rollup@4.60.1", "", { "dependencies": { "@types/estree": "1.0.8" }, "optionalDependencies": { "@rollup/rollup-android-arm-eabi": "4.60.1", "@rollup/rollup-android-arm64": "4.60.1", "@rollup/rollup-darwin-arm64": "4.60.1", "@rollup/rollup-darwin-x64": "4.60.1", "@rollup/rollup-freebsd-arm64": "4.60.1", "@rollup/rollup-freebsd-x64": "4.60.1", "@rollup/rollup-linux-arm-gnueabihf": "4.60.1", "@rollup/rollup-linux-arm-musleabihf": "4.60.1", "@rollup/rollup-linux-arm64-gnu": "4.60.1", "@rollup/rollup-linux-arm64-musl": "4.60.1", "@rollup/rollup-linux-loong64-gnu": "4.60.1", "@rollup/rollup-linux-loong64-musl": "4.60.1", "@rollup/rollup-linux-ppc64-gnu": "4.60.1", "@rollup/rollup-linux-ppc64-musl": "4.60.1", "@rollup/rollup-linux-riscv64-gnu": "4.60.1", "@rollup/rollup-linux-riscv64-musl": "4.60.1", "@rollup/rollup-linux-s390x-gnu": "4.60.1", "@rollup/rollup-linux-x64-gnu": "4.60.1", "@rollup/rollup-linux-x64-musl": "4.60.1", "@rollup/rollup-openbsd-x64": "4.60.1", "@rollup/rollup-openharmony-arm64": "4.60.1", "@rollup/rollup-win32-arm64-msvc": "4.60.1", "@rollup/rollup-win32-ia32-msvc": "4.60.1", "@rollup/rollup-win32-x64-gnu": "4.60.1", "@rollup/rollup-win32-x64-msvc": "4.60.1", "fsevents": "~2.3.2" }, "bin": "dist/bin/rollup" }, "sha512-VmtB2rFU/GroZ4oL8+ZqXgSA38O6GR8KSIvWmEFv63pQ0G6KaBH9s07PO8XTXP4vI+3UJUEypOfjkGfmSBBR0w=="],
 

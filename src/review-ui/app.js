@@ -155,7 +155,7 @@ A(detailEl, () => {
                 A(`div.step.${change}`, () => {
                     
                     if (change === 'changed') {
-                        let mouseState = A.create();
+                        let mouseState = A.proxy();
                         function onMouseMove(event) {
                             const box = event.currentTarget.getBoundingClientRect();
                             mouseState.value = event.clientX - box.left > box.width / 2; // true for 'current', false for 'accepted'
@@ -199,7 +199,7 @@ A(detailEl, () => {
 
         const hasAnyChanges = steps.some(s => s.changed || (!s.acceptedImage && s.currentImage) || (s.acceptedImage && !s.currentImage));
         if (hasAnyChanges) {
-            A('button.accept-btn #Accept visual changes', 'click=', () => acceptChanges(state.selected));
+            A('button.accept-btn #Accept visuals', 'click=', () => acceptChanges(state.selected));
         }
     });
 });

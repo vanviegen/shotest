@@ -11,61 +11,69 @@ shoTest is a small wrapper around Playwright Test that acts as a drop-in replace
 
 ## Setup
 
-Install the dependency and browser:
+Install `shotest` (*instead* of installing `@playwright/test` directly) and install a browser:
 
 ```bash
 npm install -D shotest
 npx playwright install chromium
 ```
 
-The package also exposes the Playwright CLI, so standard commands like the browser installer keep working unchanged.
+Create a `tests/` directory, in which your tests will live as `.spec.ts` files.
 
-Create a place for your tests:
+Add the `test-results` directory to `.gitignore`.
 
-```bash
-mkdir -p tests
-```
-
-Put your specs in `tests/` and name them `*.spec.ts`.
-
-Add the run output directory to `.gitignore`:
-
-```gitignore
-test-results/
-```
-
-A minimal `playwright.config.ts` for shoTest looks like this:
+Create a `playwright.config.ts`, that may look something like this:
 
 ```ts
-import { defineConfig } from 'shotest';
+import { defineConfig, devices } from 'shotest';
 
 export default defineConfig({
-  fullyParallel: false,
-  workers: 1, // set this if your app has state
   use: {
-    baseURL: 'https://google.com', // set to your app URL
+    baseURL: 'https://automationexercise.com/', // set to your app URL
     screenshot: 'off', // shoTest captures its own screenshots
+    viewport: { width: 450, height: 800 },
   },
+  timeout: 5000, // ms before a test fails
+  workers: 1, // set this if your app has state
+  webServer: [ // start your test-servers here (optional)
+    // { 
+    //   command: 'exec npm run dev -- --port 25833',
+    //   port: 25833,
+    // },
+  ]
 });
+```
+
+If you use Claude Code, GitHub Copilot or another AI agent that supports Skills, shoTest includes a `skill/` directory in its npm package that provides the docs such that it can be easily loaded as a skill for in-context guidance while writing tests. To set this up:
+
+```bash
+mkdir -p .claude/skills
+ln -s ../../node_modules/shotest/skill .claude/skills/shotest
 ```
 
 ## Basic usage
 
-shoTest re-exports the full Playwright Test API, so you can replace imports from Playwright directly with shoTest:
+shoTest re-exports the full Playwright Test API, which you can use like normal. For example:
 
 ```ts
 // tests/example.spec.ts
-import { test, expect, screenshot } from 'shotest';
+import { test } from 'shotest';
 
-test('open settings', async ({ page }) => {
-  await page.getBy('button', { name: 'Settings' }).click();
-  await expect(page.getByText('Preferences')).toBeVisible();
+test('view and buy a product', async ({ page }) => {
+    await page.goto('/');
 
-  await screenshot(page, 'settings-open');
+    await page
+        .locator('.product-image-wrapper', { hasText: 'Fancy Green Top' })
+        .getByRole('link', { name: 'View Product' })
+        .click();
+
+    await page.getByRole('heading', { name: 'Fancy Green Top' }).waitFor();
+    await page.getByRole('button', { name: /add to cart/i }).click();
+    await page.getByRole('link', { name: /view cart/i }).click();
 });
 ```
 
-Everything from Playwright Test remains available, including symbols such as browsers, devices, and config helpers. Most common page and locator actions are wrapped so that a screenshot is taken automatically during the test.
+Most common page and locator actions are wrapped so that a screenshot is taken automatically during the test.
 
 Run the tests using:
 
@@ -73,34 +81,23 @@ Run the tests using:
 npx playwright test
 ```
 
-## Output directories
+This should output screenshots and HTML snapshots for each step to the default Playwright per-test output directory under `test-results/`.
 
-By default shoTest uses:
+## Reviewing app
 
-- Playwright's standard `test-results/` output folder for the current run
-- `test-accepted/` for accepted baseline images
-
-Each test run gets its own Playwright output subdirectory, and shoTest stores screenshots, HTML snapshots, and `manifest.json` there. Usually you clean `test-results/` on each run and keep `test-accepted/` in version control.
-
-## Reviewing changes
-
-After running the tests:
+In order to review test results, compare changes against the baseline, and accept intentional changes, run the shoTest review server:
 
 ```bash
 npx shotest
 ```
 
-Then open:
+It serves a web app on localhost and attempts to open it in your default browser.
 
-```text
-http://localhost:3847
-```
-
-Use the review page to inspect failures, compare screenshots, and accept the new baseline when the change is intentional.
+When you press the 'Accept visuals' button for a test, its output screenshots are copied to the `test-accepted` directory (configurable through `SHOTEST_ACCEPTED_DIR`), and become the new accepted baseline. It is recommended to commit changes to this directory to version control (unlike `test-results/`).
 
 ## Recording demo videos
 
-shoTest includes helper functions for recording demonstration videos with visible interactions and natural delays. They are exported directly from `shotest`, alongside the regular Playwright functions:
+shoTest includes a couple of helper functions (named `demo`Something) that are not part of Playwright, for recording demonstration videos with visible interactions and natural delays. 
  
 ```ts
 import { test, expect, demoTap, demoType, demoPause, demoSwipe } from 'shotest';
@@ -113,25 +110,89 @@ test('demo', async ({ page }) => {
 });
 ```
 
-**Important:** These helpers can run in two modes:
+**Important:** These helpers behave differently, depending on whether *demo mode* is active:
 
-- Demo mode. The helper functions will emulate real user interactions with small delays, and add touch effects to taps and swipes. No overlaid screenshots are captured, so as not to disturb the video.
-- Regular test mode, meaning they run as fast as possible with no delays or visual effects. This allows you to include your demo recording script in your test suite, without an outsized impact on test runtime.
+- Demo mode active. The helper functions will emulate real user interactions with small delays, and add touch effects to taps and swipes. No overlaid screenshots are captured, so as not to disturb the video.
+- Demo mode inactive. The helper functions run as fast as possible with no delays or visual effects. This allows you to include your demo recording script in your test suite, without an outsized impact on test runtime.
 
-Demo mode is automatically activated when Playwright video recording is enabled, when `SHOTEST_VIDEO` is set for the run, or when it's running in headed mode. You can override this by setting the `SHOTEST_DEMO` environment variable to `on` or `off`.
+Demo mode is automatically activated when Playwright video recording is enabled or when it's running in headed mode. You can override this by setting the `SHOTEST_DEMO` environment variable to `on` or `off`.
 
-To record demo videos for a run, set `SHOTEST_VIDEO` when invoking Playwright:
+A convenient way to record demo videos for a run is to set `SHOTEST_VIDEO` to `on` when invoking Playwright:
 
 ```sh
 SHOTEST_VIDEO=on npx playwright test
 ```
 
-This uses Playwright's normal video output handling, so the videos are written to the standard per-test output directory under `test-results/`. You can also use Playwright's other video modes, for example:
+This uses Playwright's normal video output handling (which you can also enable through its `defineConfig`), so the videos are written to the standard per-test output directory under `test-results/`. 
 
-```sh
-SHOTEST_VIDEO=retain-on-failure npx playwright test
-```
+### Demo function reference
 
+The following is auto-generated from `src/video.ts`:
+
+### demoTap · function
+
+Tap an element with a visible touch ripple effect.
+
+In video mode, shows an expanding ripple animation at the tap point and
+waits briefly after clicking for a natural feel. When not in video mode,
+performs an instant click with no delay.
+
+**Signature:** `(page: Page, locator: Locator, delayMs?: number) => Promise<void>`
+
+**Parameters:**
+
+- `page: Page` - - The Playwright page instance.
+- `locator: Locator` - - The element to tap.
+- `delayMs: number` (optional) - - Post-tap delay in video mode (default: 800ms). Ignored outside video mode.
+
+### demoType · function
+
+Type text character-by-character with natural timing.
+
+In video mode, clicks the element and types each character with a delay,
+simulating realistic human typing. When not in video mode, fills the input
+instantly using `locator.fill()`.
+
+**Signature:** `(page: Page, locator: Locator, text: string, charDelayMs?: number) => Promise<void>`
+
+**Parameters:**
+
+- `page: Page` - - The Playwright page instance.
+- `locator: Locator` - - The input element to type into.
+- `text: string` - - The text to type.
+- `charDelayMs: number` (optional) - - Delay between characters in video mode (default: 80ms). Ignored outside video mode.
+
+### demoPause · function
+
+Pause for a specified duration (video mode only).
+
+In video mode, waits for the given number of milliseconds, useful for
+giving viewers time to see the current state. When not in video mode,
+returns immediately with no delay.
+
+**Signature:** `(page: Page, ms?: number) => Promise<void>`
+
+**Parameters:**
+
+- `page: Page` - - The Playwright page instance.
+- `ms: number` (optional) - - Duration to pause in milliseconds (default: 2000ms). Ignored outside video mode.
+
+### demoSwipe · function
+
+Perform a swipe gesture with a visible touch indicator.
+
+In video mode, shows a circular touch indicator that follows the swipe
+path with eased motion and a fade-out effect at the end. When not in
+video mode, performs a fast programmatic swipe with no visual indicator.
+
+**Signature:** `(page: Page, locator: Locator, direction: "up" | "down" | "left" | "right", distancePx?: number) => Promise<void>`
+
+**Parameters:**
+
+- `page: Page` - - The Playwright page instance.
+- `locator: Locator` - - The element to swipe on.
+- `direction: 'up' | 'down' | 'left' | 'right'` - - Swipe direction: 'up', 'down', 'left', or 'right'.
+- `distancePx: number` (optional) - - Distance to swipe in pixels (default: 200).
 
 ## Environment variables
 
