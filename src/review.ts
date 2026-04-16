@@ -20,9 +20,10 @@ import type { TestManifest } from './fixture.ts';
 // ── Configuration ──────────────────────────────────────────────────
 
 const outputDir = process.env.SHOTEST_OUTPUT_DIR || 'test-results';
-const expectedDir = process.env.SHOTEST_EXPECTED_DIR || 'test-accepted';
+const acceptedDir = process.env.SHOTEST_EXPECTED_DIR || 'test-accepted';
 const port = parseInt(process.env.SHOTEST_PORT || '3847');
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
+const reviewUiPath = path.join(thisDir, '..', 'build', 'review-ui.html');
 
 // ── Image hashing ──────────────────────────────────────────────────
 
@@ -115,6 +116,8 @@ function alignImages(accepted: ImageEntry[], current: ImageEntry[]): AlignedPair
 
 interface TestSummary {
     name: string;
+    file: string;
+    line: number;
     title: string;
     status: string;
     hasChanges: boolean;
@@ -125,11 +128,12 @@ function getTests(): TestSummary[] {
 
     const dirs = fs.readdirSync(outputDir, { withFileTypes: true })
         .filter((d: fs.Dirent) => d.isDirectory())
-        .map((d: fs.Dirent) => d.name)
-        .sort();
+        .map((d: fs.Dirent) => d.name);
 
-    return dirs.map((name: string) => {
+    const tests = dirs.map((name: string) => {
         const manifestPath = path.join(outputDir, name, 'manifest.json');
+        let file = name;
+        let line = 0;
         let title = name;
         let status = 'unknown';
         let steps: { name: string; source: string }[] = [];
@@ -137,6 +141,8 @@ function getTests(): TestSummary[] {
         if (fs.existsSync(manifestPath)) {
             try {
                 const manifest: TestManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+                file = manifest.file;
+                line = manifest.line;
                 title = manifest.title;
                 status = manifest.status;
                 steps = manifest.steps;
@@ -144,7 +150,7 @@ function getTests(): TestSummary[] {
         }
 
         // Check for visual changes
-        const expDir = path.join(expectedDir, name);
+        const expDir = path.join(acceptedDir, name);
         let hasChanges = false;
 
         if (!fs.existsSync(expDir)) {
@@ -176,8 +182,14 @@ function getTests(): TestSummary[] {
             }
         }
 
-        return { name, title, status, hasChanges };
+        return { name, file, line, title, status, hasChanges };
     });
+
+    return tests.sort((a, b) =>
+        a.file.localeCompare(b.file) ||
+        a.line - b.line ||
+        a.name.localeCompare(b.name)
+    );
 }
 
 function getTestDetails(testName: string): {
@@ -192,7 +204,7 @@ function getTestDetails(testName: string): {
     }
 
     const manifest: TestManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-    const expDir = path.join(expectedDir, testName);
+    const expDir = path.join(acceptedDir, testName);
 
     // Build current image entries
     const currentEntries: ImageEntry[] = manifest.steps
@@ -240,7 +252,7 @@ function getTestDetails(testName: string): {
 
 function acceptTest(testName: string): void {
     const testDir = path.join(outputDir, testName);
-    const expDir = path.join(expectedDir, testName);
+    const expDir = path.join(acceptedDir, testName);
 
     if (!fs.existsSync(testDir)) return;
 
@@ -293,8 +305,8 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
         return;
     }
 
-    if (pathname === '/') {
-        serveFile(res, path.join(thisDir, 'review-ui.html'), 'text/html; charset=utf-8');
+    if (req.method === 'GET' && !pathname.startsWith('/api/') && !pathname.startsWith('/image/')) {
+        serveFile(res, reviewUiPath, 'text/html; charset=utf-8');
         return;
     }
 
@@ -320,7 +332,7 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
     // Serve images from test-results/ and test-accepted/
     const imageMatch = pathname.match(/^\/image\/(current|expected)\/(.+)/);
     if (imageMatch) {
-        const baseDir = imageMatch[1] === 'current' ? outputDir : expectedDir;
+        const baseDir = imageMatch[1] === 'current' ? outputDir : acceptedDir;
         const filePath = path.join(baseDir, imageMatch[2]);
         // Prevent directory traversal
         const resolved = path.resolve(filePath);

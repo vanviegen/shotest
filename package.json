@@ -1,33 +1,49 @@
 {
   "name": "shotest",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Screenshot testing for Playwright. Capture, compare, review.",
   "type": "module",
+  "main": "./build/index.js",
+  "types": "./build/index.d.ts",
+  "author": "Frank van Viegen BV",
   "files": [
     "bin",
+    "build",
     "src",
     "README.md"
   ],
   "exports": {
-    ".": "./src/index.ts",
-    "./video": "./src/video.ts"
+    ".": {
+      "types": "./build/index.d.ts",
+      "bun": "./src/index.ts",
+      "default": "./build/index.js"
+    },
+    "./video": {
+      "types": "./build/video.d.ts",
+      "bun": "./src/video.ts",
+      "default": "./build/video.js"
+    }
   },
   "bin": {
-    "shotest": "./bin/review.mjs"
+    "shotest": "./bin/review.mjs",
+    "playwright": "./bin/playwright.mjs"
   },
   "scripts": {
-    "build": "node scripts/build-review-ui.mjs",
-    "review": "npm run build && node --experimental-strip-types src/review.ts",
+    "build": "node scripts/build.mjs",
+    "build:skill": "rm -rf skill ; mkdir skill ; cat skill-header.md README.md > skill/SKILL.md && readme-tsdoc --split --file skill/SKILL.md && readme-tsdoc --repo-url https://github.com/vanviegen/edinburgh",
+    "review": "npm run build && node build/review.js",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build"
   },
-  "peerDependencies": {
-    "@playwright/test": ">=1.40.0"
+  "dependencies": {
+    "@playwright/test": "^1.59.1"
   },
   "devDependencies": {
     "@types/node": "^25.0.3",
     "aberdeen": "^1.9.0",
+    "typescript": "^5.8.3",
     "vite": "^7.3.1",
-    "vite-plugin-singlefile": "^2.3.0"
+    "vite-plugin-singlefile": "^2.3.0",
+    "readme-tsdoc": "^1.1.6"
   }
 }

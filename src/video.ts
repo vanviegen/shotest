@@ -8,12 +8,14 @@
  * visual indicators and delays. In test mode they run instantly.
  */
 
+export * from '@playwright/test';
+
 import { test as plainTest, expect } from '@playwright/test';
-import { test as screenshottingTest, screenshot, type Page } from './fixture.js';
+import { test as screenshottingTest, screenshot, configure, waitForVisualStability, type Page } from './fixture.js';
 import * as path from 'path';
 import * as fs from 'fs';
 
-export { expect, screenshot };
+export { expect, screenshot, configure, waitForVisualStability };
 
 type Locator = ReturnType<Page['locator']>;
 
@@ -66,7 +68,6 @@ export const test = baseTest.extend({
                 const style = document.createElement('style');
                 style.textContent = `
                     *, *::before, *::after { transition: none !important; animation: none !important; }
-                    .fadeOut, .fadeOut * { pointer-events: none !important; visibility: hidden !important; }
                 `;
                 if (document.head) document.head.appendChild(style);
                 else document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));

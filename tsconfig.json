@@ -7,9 +7,10 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "types": ["node"],
-    "outDir": "dist",
+    "outDir": "build",
     "rootDir": "src",
     "declaration": true,
+    "declarationMap": true,
     "sourceMap": true
   },
   "include": ["src/**/*.ts"]

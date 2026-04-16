@@ -14,23 +14,59 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--fg); display: flex; height: 100vh; overflow: hidden; }
 
-/* Left panel: test list */
 #test-list {
-  width: 280px; min-width: 280px;
+  width: 320px; min-width: 320px;
   background: var(--bg2);
   border-right: 1px solid var(--border);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
-#test-list h2 {
+.list-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 12px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--fg2);
+  background: var(--bg2);
   border-bottom: 1px solid var(--border);
+}
+.list-toolbar h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg);
+  letter-spacing: 0.2px;
+  text-transform: none;
+  flex-shrink: 0;
+}
+.scale-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--fg2);
+  font-size: 11px;
+}
+.scale-control input {
+  width: 90px;
+  accent-color: var(--accent);
+}
+.scale-value {
+  min-width: 38px;
+  color: var(--fg);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.file-header {
+  padding: 10px 16px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg2);
+  background: var(--bg2);
+  text-transform: none;
+  border-top: 1px solid var(--border);
 }
 .test-item {
   padding: 8px 16px;
@@ -64,7 +100,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 }
 .test-item .title.failed { color: var(--red); font-weight: 600; }
 
-/* Right panel: test detail */
 #test-detail {
   flex: 1;
   overflow-y: auto;
@@ -80,42 +115,82 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
   font-size: 16px;
 }
 
-/* Steps grid */
 .steps-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 18px;
+  align-items: flex-start;
 }
 .step {
   background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
-.step.changed { border-color: var(--yellow); }
-.step.new { border-color: var(--green); }
-.step.removed { border-color: var(--red); }
-.step .images {
-  display: flex;
-  gap: 4px;
+.step.changed {
+  border-color: var(--yellow);
+  box-shadow: inset 0 0 0 1px rgba(220, 220, 170, 0.18), 0 0 18px rgba(220, 220, 170, 0.28);
+}
+.step.new {
+  border-color: var(--green);
+  box-shadow: inset 0 0 0 1px rgba(106, 153, 85, 0.2), 0 0 18px rgba(106, 153, 85, 0.3);
+}
+.step.removed {
+  border-color: var(--red);
+  box-shadow: inset 0 0 0 1px rgba(244, 71, 71, 0.18), 0 0 18px rgba(244, 71, 71, 0.3);
+}
+.step .image-stage {
+  position: relative;
+  display: inline-grid;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #000;
+}
+.step .compare-view {
+  cursor: ew-resize;
 }
 .step img {
-  border-radius: 3px;
+  grid-area: 1 / 1;
+  display: block;
+  max-width: none;
+  border-radius: 4px;
   background: #000;
+}
+.step .compare-layer {
+  opacity: 0;
+  transition: opacity 120ms linear;
+}
+.step .compare-layer.visible {
+  opacity: 1;
 }
 .step .label {
   font-size: 11px;
   color: var(--fg2);
-  margin-top: 4px;
+  margin-top: 6px;
   text-align: center;
+  display: block;
+  max-width: 18ch;
+  margin-left: auto;
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .step .img-label {
   font-size: 10px;
   color: var(--fg2);
   text-align: center;
+  margin-top: 6px;
+  display: block;
+  max-width: 18ch;
+  margin-left: auto;
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Error box */
 .error-box {
   background: rgba(244, 71, 71, 0.1);
   border: 1px solid var(--red);
@@ -129,8 +204,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
   max-height: 200px;
   overflow-y: auto;
 }
+.error-source {
+  margin-top: 6px;
+  color: var(--fg2);
+  font-size: 12px;
+}
+.error-stack {
+  margin-top: 6px;
+  color: var(--fg2);
+  font-size: 11px;
+  max-height: 120px;
+  overflow-y: auto;
+}
 
-/* Accept button */
 .accept-btn {
   background: var(--green);
   color: white;

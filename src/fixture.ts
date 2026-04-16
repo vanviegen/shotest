@@ -9,10 +9,8 @@ export type { Page };
 // ── Configuration ──────────────────────────────────────────────────
 
 export interface ShoTestConfig {
-    /** Directory for test output (default: "test-results") */
-    outputDir: string;
     /** Directory for accepted/expected screenshots (default: "test-accepted") */
-    expectedDir: string;
+    acceptedDir: string;
     /** Capture DOM HTML alongside screenshots (default: true) */
     captureHtml: boolean;
     /** Strip PNG metadata for consistent output (default: true) */
@@ -20,8 +18,7 @@ export interface ShoTestConfig {
 }
 
 const config: ShoTestConfig = {
-    outputDir: process.env.SHOTEST_OUTPUT_DIR || 'test-results',
-    expectedDir: process.env.SHOTEST_EXPECTED_DIR || 'test-accepted',
+    acceptedDir: process.env.SHOTEST_EXPECTED_DIR || 'test-accepted',
     captureHtml: process.env.SHOTEST_CAPTURE_HTML !== 'false',
     stripMetadata: process.env.SHOTEST_STRIP_METADATA !== 'false',
 };
@@ -32,19 +29,21 @@ export function configure(overrides: Partial<ShoTestConfig>): void {
 
 // ── Stack trace helpers ────────────────────────────────────────────
 
-function getCallerLocation(): { file: string; line: number } {
-    const stack = new Error().stack || '';
+type SourceLocation = { file: string; line: number };
+
+function getLocationFromStack(stack: string): SourceLocation | null {
     const frames = stack.split('\n');
-    // Look for test/spec files
+
+    // Look for test/spec files first
     for (const frame of frames) {
         const match = frame.match(/([^\s(]+\.(spec|test)\.[jt]sx?):(\d+):\d+/);
         if (match) {
             let file = match[1];
-            // Strip file:// URL prefix if present
             file = file.replace(/^file:\/\//, '');
             return { file, line: parseInt(match[3]) };
         }
     }
+
     // Fallback: first non-internal frame
     for (const frame of frames) {
         if (frame.includes('node_modules')) continue;
@@ -55,17 +54,29 @@ function getCallerLocation(): { file: string; line: number } {
             return { file, line: parseInt(match[2]) };
         }
     }
-    return { file: 'unknown', line: 0 };
+
+    return null;
 }
+
+function getCallerLocation(): SourceLocation {
+    return getLocationFromStack(new Error().stack || '') || { file: 'unknown', line: 0 };
+}
+
+
 
 // ── Overlay helpers ────────────────────────────────────────────────
 
 const OVERLAY_STYLE = `
-    *, *::before, *::after { transition: none !important; animation: none !important; }
-    .fadeOut, .fadeOut * { pointer-events: none !important; visibility: hidden !important; }
+    html, body, * {
+        scroll-behavior: auto !important;
+    }
+    *, *::before, *::after {
+        transition: none !important;
+        animation: none !important;
+    }
     #shotest-overlay.check,
     #shotest-overlay.assert {
-        position: fixed;
+        position: absolute;
         border-radius: 8px;
         border-bottom-left-radius: 0;
         pointer-events: none;
@@ -109,48 +120,113 @@ const OVERLAY_STYLE = `
     #shotest-overlay.banner.success { border-top-color: #28a745 !important; }
 `;
 
+export async function waitForVisualStability(page: Page, timeoutMs: number = 400) {
+    await page.waitForLoadState('domcontentloaded').catch(() => { });
+    await page.waitForLoadState('networkidle', { timeout: Math.min(timeoutMs, 250) }).catch(() => { });
+
+    await page.evaluate(async (timeout: number) => {
+        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+        const raf = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+
+        try {
+            if ('fonts' in document) {
+                await Promise.race([(document as any).fonts.ready, sleep(timeout)]);
+            }
+        } catch { }
+
+        try {
+            const pendingImages = Array.from(document.images)
+                .filter((img) => !img.complete)
+                .map((img) => new Promise((resolve) => {
+                    img.addEventListener('load', resolve, { once: true });
+                    img.addEventListener('error', resolve, { once: true });
+                }));
+            await Promise.race([Promise.all(pendingImages), sleep(timeout)]);
+        } catch { }
+
+        await new Promise<void>((resolve) => {
+            let done = false;
+            let idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+            const finish = () => {
+                if (done) return;
+                done = true;
+                observer.disconnect();
+                if (idleTimer) clearTimeout(idleTimer);
+                resolve();
+            };
+
+            const observer = new MutationObserver(() => {
+                if (idleTimer) clearTimeout(idleTimer);
+                idleTimer = setTimeout(finish, 60);
+            });
+
+            observer.observe(document.documentElement, {
+                subtree: true,
+                childList: true,
+                attributes: true,
+                characterData: true,
+            });
+
+            idleTimer = setTimeout(finish, 60);
+            setTimeout(finish, timeout);
+        });
+
+        await raf();
+        await raf();
+    }, Math.max(120, timeoutMs)).catch(() => { });
+}
+
 async function waitForRepaint(page: Page) {
-    await page.evaluate(() => new Promise<void>(resolve =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-    ));
+    await waitForVisualStability(page);
 }
 
 async function hideOverlay(page: Page) {
-    await page.evaluate(() => {
-        const el = document.getElementById("shotest-overlay");
-        if (el) el.remove();
-    });
+    try {
+        await page.evaluate(() => {
+            const el = document.getElementById("shotest-overlay");
+            if (el) el.remove();
+        });
+    } catch { }
 }
 
 async function showOverlayCheck(page: Page, box: { x: number; y: number; width: number; height: number }, text?: string, kind: 'check' | 'assert' = 'check') {
-    await page.evaluate(({ x, y, w, h, text, kind }) => {
-        const el = document.createElement('div');
-        el.id = 'shotest-overlay';
-        el.className = kind;
-        document.body.appendChild(el);
-        Object.assign(el.style, {
-            left: (x - 4) + 'px',
-            top: (y - 4) + 'px',
-            width: (w + 8) + 'px',
-            height: (h + 8) + 'px',
-        });
-        if (text) {
-            const p = document.createElement('p');
-            p.innerText = text;
-            el.appendChild(p);
-        }
-    }, { x: box.x, y: box.y, w: box.width, h: box.height, text, kind });
+    try {
+        await page.evaluate(({ x, y, w, h, text, kind }) => {
+            const el = document.createElement('div');
+            el.id = 'shotest-overlay';
+            el.className = kind;
+            document.body.appendChild(el);
+            Object.assign(el.style, {
+                left: (x + window.scrollX - 4) + 'px',
+                top: (y + window.scrollY - 4) + 'px',
+                width: (w + 8) + 'px',
+                height: (h + 8) + 'px',
+            });
+            if (text) {
+                const p = document.createElement('p');
+                p.innerText = text;
+                el.appendChild(p);
+            }
+        }, { x: box.x, y: box.y, w: box.width, h: box.height, text, kind });
+    } catch { }
+}
+
+function stripAnsi(text: string): string {
+    return text.replace(/\u001b\[[0-9;]*m/g, '');
 }
 
 async function showOverlayBanner(page: Page, text: string, type: 'info' | 'error' | 'success' = 'info') {
-    if (type === 'error') console.error(text);
-    await page.evaluate(({ text, type }) => {
-        const el = document.createElement('div');
-        el.id = 'shotest-overlay';
-        el.className = 'banner ' + type;
-        document.body.appendChild(el);
-        el.textContent = text;
-    }, { text, type });
+    const cleanText = stripAnsi(text);
+    try {
+        await page.evaluate(({ text, type }) => {
+            const el = document.createElement('div');
+            el.id = 'shotest-overlay';
+            el.className = 'banner ' + type;
+            document.body.appendChild(el);
+            el.textContent = text;
+        }, { text: cleanText, type });
+    } catch { }
 }
 
 function describeExpectation(method: string): string {
@@ -182,6 +258,8 @@ export interface TestManifest {
     status: string;
     duration: number;
     error: string | null;
+    errorSource?: string | null;
+    errorStack?: string | null;
     steps: StepInfo[];
 }
 
@@ -189,9 +267,11 @@ let currentOutDir = '';
 let currentSteps: StepInfo[] = [];
 let lastScreenshotKey = '';
 let lastScreenshotSeq = 0;
+let lastStepLocation: SourceLocation | null = null;
+let pendingFailureText = '';
+let failureCaptured = false;
 
-async function takeScreenshot(actualPage: Page) {
-    const loc = getCallerLocation();
+async function takeScreenshot(actualPage: Page, alreadyStable: boolean = false, loc: SourceLocation = getCallerLocation()): Promise<StepInfo> {
     const key = currentOutDir + ':' + loc.line;
     if (lastScreenshotKey !== key) {
         lastScreenshotKey = key;
@@ -200,40 +280,42 @@ async function takeScreenshot(actualPage: Page) {
         lastScreenshotSeq++;
     }
 
-    await waitForRepaint(actualPage);
+    if (!alreadyStable) {
+        await waitForRepaint(actualPage);
+    }
 
     const name = `${loc.line.toString().padStart(4, '0')}${String.fromCharCode(97 + lastScreenshotSeq)}`;
     const basePath = path.join(currentOutDir, name);
     const relFile = path.relative(process.cwd(), loc.file);
 
     await captureStep(basePath, actualPage);
-    currentSteps.push({ name, source: `${relFile}:${loc.line}` });
+
+    const step = { name, source: `${relFile}:${loc.line}` };
+    currentSteps.push(step);
+    return step;
 }
 
 /**
  * Take a named screenshot (clean, no overlay). Useful for promotional material.
  */
 export async function screenshot(page: Page, name: string): Promise<void> {
+    const loc = getCallerLocation();
     await waitForRepaint(page);
     const basePath = path.join(currentOutDir, name);
-    const loc = getCallerLocation();
     const relFile = path.relative(process.cwd(), loc.file);
 
-    // Capture without overlay
     await hideOverlay(page);
     await captureStep(basePath, page);
     currentSteps.push({ name, source: `${relFile}:${loc.line}` });
 }
 
 async function captureStep(basePath: string, page: Page): Promise<void> {
-    // Capture screenshot
-    let pngBuffer = await page.screenshot({ fullPage: true });
+    let pngBuffer: Buffer = await page.screenshot({ fullPage: false });
     if (config.stripMetadata) {
         pngBuffer = stripPngMetadata(pngBuffer);
     }
     fs.writeFileSync(basePath + '.png', pngBuffer);
 
-    // Remove overlay before capturing HTML
     await hideOverlay(page);
 
     if (config.captureHtml) {
@@ -254,19 +336,28 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
     const actionMethods = ['click', 'fill', 'type', 'press', 'check', 'uncheck', 'selectOption', 'hover', 'dblclick', 'clear'];
     for (const method of actionMethods) {
         wrapped[method] = async function (...args: any[]) {
+            const loc = getCallerLocation();
+            lastStepLocation = loc;
             const short = typeof args[0] === 'string' ? method + ' ' + JSON.stringify(args[0]) : method;
+            const failureText = `Locator ${actualLocator} failed ${short}`;
+            pendingFailureText = failureText;
             try {
+                await hideOverlay(actualPage);
+                await waitForVisualStability(actualPage, 250);
                 const box = await actualLocator.boundingBox({ timeout: 3000 }).catch(() => null);
                 if (!box) {
                     await showOverlayBanner(actualPage, `Cannot find ${actualLocator} for ${short}`, 'info');
                 } else {
                     await showOverlayCheck(actualPage, box, short);
                 }
-                await takeScreenshot(actualPage);
-                return await (actualLocator as any)[method](...args);
+                await takeScreenshot(actualPage, true, loc);
+                const result = await (actualLocator as any)[method](...args);
+                pendingFailureText = '';
+                return result;
             } catch (error: any) {
-                await showOverlayBanner(actualPage, `Locator ${actualLocator} failed ${short}`, 'error');
-                await takeScreenshot(actualPage);
+                await showOverlayBanner(actualPage, failureText, 'error');
+                await takeScreenshot(actualPage, true, loc).catch(() => {});
+                failureCaptured = true;
                 if (error.stack) {
                     error.stack = error.stack.split('\n')
                         .filter((l: string) => !/shotest\//.test(l))
@@ -278,25 +369,35 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
     }
 
     wrapped._expect = async function (method: string, options: any) {
+        const loc = getCallerLocation();
+        lastStepLocation = loc;
         const label = describeExpectation(method);
+        const failureText = `${label} failed`;
+        pendingFailureText = failureText;
         try {
             const result = await (actualLocator as any)._expect(method, options);
+            await hideOverlay(actualPage);
+            await waitForVisualStability(actualPage, 200);
             const box = await actualLocator.boundingBox({ timeout: 1000 }).catch(() => null);
             if (box) {
                 await showOverlayCheck(actualPage, box, label, 'assert');
             } else {
                 await showOverlayBanner(actualPage, label, 'info');
             }
-            await takeScreenshot(actualPage);
+            await takeScreenshot(actualPage, true, loc);
+            pendingFailureText = '';
             return result;
         } catch (error: any) {
+            await hideOverlay(actualPage);
+            await waitForVisualStability(actualPage, 120);
             const box = await actualLocator.boundingBox({ timeout: 500 }).catch(() => null);
             if (box) {
-                await showOverlayCheck(actualPage, box, `${label} failed`, 'assert');
+                await showOverlayCheck(actualPage, box, failureText, 'assert');
             } else {
-                await showOverlayBanner(actualPage, `${label} failed`, 'error');
+                await showOverlayBanner(actualPage, failureText, 'error');
             }
-            await takeScreenshot(actualPage);
+            await takeScreenshot(actualPage, true, loc);
+            failureCaptured = true;
             throw error;
         }
     };
@@ -326,11 +427,14 @@ function wrapPage(actualPage: Page): Page {
     }
 
     wrapped.goto = async function (url: string, options: any) {
+        const loc = getCallerLocation();
+        lastStepLocation = loc;
         await actualPage.goto(url, options);
         await actualPage.waitForLoadState('load').catch(() => { });
         await actualPage.addStyleTag({ content: OVERLAY_STYLE });
+        await waitForVisualStability(actualPage, 500);
         await showOverlayBanner(actualPage, 'goto ' + url, 'info');
-        await takeScreenshot(actualPage);
+        await takeScreenshot(actualPage, true, loc);
     };
 
     return wrapped;
@@ -342,14 +446,15 @@ export const test = baseTest.extend({
     page: async ({ page }, use, testInfo) => {
         const actualPage = page;
 
-        // Build output directory
-        const baseName = path.basename(testInfo.file, path.extname(testInfo.file)).replace(/\.spec$|\.test$/, '');
-        const dirName = `${baseName}-${testInfo.line.toString().padStart(4, '0')}`;
-        const outDir = path.join(config.outputDir, dirName);
+        // Use Playwright's own per-test output directory
+        const outDir = testInfo.outputDir;
         currentOutDir = outDir;
         currentSteps = [];
         lastScreenshotKey = '';
         lastScreenshotSeq = 0;
+        lastStepLocation = null;
+        pendingFailureText = '';
+        failureCaptured = false;
 
         fs.mkdirSync(outDir, { recursive: true });
 
@@ -359,18 +464,39 @@ export const test = baseTest.extend({
         const wrappedPage = wrapPage(actualPage);
         await use(wrappedPage);
 
-        // Capture failure state
-        if (testInfo.status === 'failed' || testInfo.status === 'timedOut') {
-            await captureStep(path.join(outDir, 'error'), actualPage);
+        // Determine error info
+        const errorObj = testInfo.error as any;
+        let errorMessage: string | null = null;
+        let errorSource: string | null = null;
+        let errorStack: string | null = null;
 
-            let errorInfo = `Test: ${testInfo.title}\n`;
-            errorInfo += `Status: ${testInfo.status}\n`;
-            errorInfo += `Current URL: ${actualPage.url()}\n`;
-            errorInfo += `Duration: ${testInfo.duration}ms\n\n`;
-            if (testInfo.error) {
-                errorInfo += `Error:\n${testInfo.error.stack || testInfo.error.message}\n\n`;
+        if (testInfo.status === 'failed' || testInfo.status === 'timedOut') {
+            const rawStack = errorObj ? String(errorObj.stack || errorObj.message || '') : '';
+            const failureLoc = getLocationFromStack(rawStack) || lastStepLocation || { file: testInfo.file, line: testInfo.line };
+
+            errorMessage = stripAnsi(pendingFailureText || (errorObj ? String(errorObj.message || errorObj.value || testInfo.status) : `Test ${testInfo.status}`));
+            errorSource = `${path.relative(process.cwd(), failureLoc.file)}:${failureLoc.line}`;
+            errorStack = errorObj ? stripAnsi(rawStack) || null : null;
+
+            // Only capture if our action/expect wrappers didn't already
+            if (!failureCaptured) {
+                await hideOverlay(actualPage);
+                await showOverlayBanner(actualPage, errorMessage, 'error');
+                await takeScreenshot(actualPage, true, failureLoc).catch(() => {});
             }
-            fs.writeFileSync(path.join(outDir, 'error.txt'), errorInfo, 'utf-8');
+
+            let currentUrl = '';
+            try { currentUrl = actualPage.url(); } catch { currentUrl = 'unavailable'; }
+
+            fs.writeFileSync(path.join(outDir, 'error.txt'), [
+                `Test: ${testInfo.title}`,
+                `Status: ${testInfo.status}`,
+                `Duration: ${testInfo.duration}ms`,
+                `URL: ${currentUrl}`,
+                `Source: ${errorSource}`,
+                `Message: ${errorMessage}`,
+                errorStack ? `Exception: ${errorStack}` : '',
+            ].filter(Boolean).join('\n') + '\n', 'utf-8');
         }
 
         // Write manifest
@@ -380,7 +506,9 @@ export const test = baseTest.extend({
             line: testInfo.line,
             status: testInfo.status || 'unknown',
             duration: testInfo.duration,
-            error: testInfo.error ? (testInfo.error.stack || testInfo.error.message || null) : null,
+            error: errorMessage,
+            errorSource: errorSource,
+            errorStack: errorStack,
             steps: currentSteps,
         };
         fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8');

@@ -1,12 +1,18 @@
 #!/usr/bin/env node
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
+import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const reviewScript = join(__dirname, '..', 'src', 'review.ts');
+const builtReview = join(__dirname, '..', 'build', 'review.js');
+const sourceReview = join(__dirname, '..', 'src', 'review.ts');
 
-execSync(`node --experimental-strip-types ${reviewScript} ${process.argv.slice(2).join(' ')}`, {
+const args = existsSync(builtReview)
+  ? [builtReview, ...process.argv.slice(2)]
+  : ['--experimental-strip-types', sourceReview, ...process.argv.slice(2)];
+
+execFileSync(process.execPath, args, {
   stdio: 'inherit',
   cwd: process.cwd(),
 });
