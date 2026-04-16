@@ -357,19 +357,26 @@ export async function screenshot(page: Page, name: string): Promise<void> {
 }
 
 async function captureStep(basePath: string, page: Page): Promise<void> {
-    let pngBuffer: Buffer = await page.screenshot({ fullPage: false });
+    let pngBuffer: Buffer;
+    try {
+        pngBuffer = await page.screenshot({ fullPage: false });
+    } catch {
+        return; // page closed (e.g. test timed out)
+    }
     pngBuffer = stripPngMetadata(pngBuffer);
     fs.writeFileSync(basePath + '.png', pngBuffer);
 
     await hideOverlay(page);
 
     if (captureHtml) {
-        const { body, head } = await page.evaluate(() => ({
-            body: document.body.outerHTML.replace(/<path .*?<\/path>/g, ''),
-            head: document.head.outerHTML,
-        }));
-        fs.writeFileSync(basePath + '.body.html', body, 'utf-8');
-        fs.writeFileSync(basePath + '.head.html', head, 'utf-8');
+        try {
+            const { body, head } = await page.evaluate(() => ({
+                body: document.body.outerHTML.replace(/<path .*?<\/path>/g, ''),
+                head: document.head.outerHTML,
+            }));
+            fs.writeFileSync(basePath + '.body.html', body, 'utf-8');
+            fs.writeFileSync(basePath + '.head.html', head, 'utf-8');
+        } catch { }
     }
 }
 
@@ -441,7 +448,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             } else {
                 await showOverlayBanner(actualPage, failureText, 'error');
             }
-            await takeScreenshot(actualPage, true, loc);
+            await takeScreenshot(actualPage, true, loc).catch(() => {});
             failureCaptured = true;
             throw error;
         }
