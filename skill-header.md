@@ -1,6 +1,6 @@
 ---
 name: shotest
-description: shoTest is a visual testing wrapper built around Playwright Test. If `shotest` is a devDependency of this project, you must provide visual test specs for all new/modified features you create. Just write Playwright specs in `tests/`, but import from `shotest` what you would normally import from `@playwright/test`. If you need further guidance, load this skill.
+description: ShoTest is a visual testing wrapper built around Playwright Test. If `shotest` is a devDependency of this project, you must provide visual test specs for all new/modified features you create. Just write Playwright specs in `tests/`, but import from `shotest` what you would normally import from `@playwright/test`. If you need further guidance, load this skill.
 ---
 
 # UI Testing Guidance

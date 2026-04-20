@@ -1,13 +1,13 @@
-# shoTest
+# ShoTest
 
-shoTest is a small wrapper around Playwright Test that acts as a drop-in replacement and provides:
+ShoTest is a small wrapper around Playwright Test that acts as a drop-in replacement and provides:
 
 - Automatic screenshots at every step of your test, overlaid with markers showing actions taken or elements verified.
 - A local web app for browsing test results, comparing changes against the stored baseline, and accepting intentional changes.
 - HTML snapshots at every step, for debugging (by coding agents).
 - Helpers for recording demo videos with visible interactions and natural delays.
 
-![shoTest review screenshot](screenshot.png)
+![ShoTest review screenshot](screenshot.png)
 
 ## Setup
 
@@ -30,7 +30,7 @@ import { defineConfig, devices } from 'shotest';
 export default defineConfig({
   use: {
     baseURL: 'https://automationexercise.com/', // set to your app URL
-    screenshot: 'off', // shoTest captures its own screenshots
+    screenshot: 'off', // ShoTest captures its own screenshots
     viewport: { width: 450, height: 800 },
   },
   timeout: 5000, // ms before a test fails
@@ -44,7 +44,7 @@ export default defineConfig({
 });
 ```
 
-If you use Claude Code, GitHub Copilot or another AI agent that supports Skills, shoTest includes a `skill/` directory in its npm package that provides the docs such that it can be easily loaded as a skill for in-context guidance while writing tests. To set this up:
+If you use Claude Code, GitHub Copilot or another AI agent that supports Skills, ShoTest includes a `skill/` directory in its npm package that provides the docs such that it can be easily loaded as a skill for in-context guidance while writing tests. To set this up:
 
 ```bash
 mkdir -p .claude/skills
@@ -53,7 +53,7 @@ ln -s ../../node_modules/shotest/skill .claude/skills/shotest
 
 ## Basic usage
 
-shoTest re-exports the full Playwright Test API, which you can use like normal. For example:
+ShoTest re-exports the full Playwright Test API, which you can use like normal. For example:
 
 ```ts
 // tests/example.spec.ts
@@ -85,7 +85,7 @@ This should output screenshots and HTML snapshots for each step to the default P
 
 ## Reviewing app
 
-In order to review test results, compare changes against the baseline, and accept intentional changes, run the shoTest review server:
+In order to review test results, compare changes against the baseline, and accept intentional changes, run the ShoTest review server:
 
 ```bash
 npx shotest
@@ -95,9 +95,38 @@ It serves a web app on localhost and attempts to open it in your default browser
 
 When you press the 'Accept visuals' button for a test, its output screenshots are copied to the `test-accepted` directory (configurable through `SHOTEST_ACCEPTED_DIR`), and become the new accepted baseline. It is recommended to commit changes to this directory to version control (unlike `test-results/`).
 
+## Multi-user tests
+
+ShoTest can label screenshots per browser page, which makes multi-user interaction tests practical to script and review.
+
+The recommended API is `splitIntoRoles(page, ...)`. It repurposes the current `page` for the first requested role, then creates additional labeled browser sessions for the later roles and opens them on the same URL as the original page.
+
+```ts
+import { test, expect, splitIntoRoles } from 'shotest';
+
+test('buyer sees seller status update', async ({ page }) => {
+  await page.goto('/orders');
+
+  const { seller, buyer } = await splitIntoRoles(page, 'seller', 'buyer');
+
+  await seller.getByRole('button', { name: 'Mark as shipped' }).click();
+  await buyer.getByText('Shipped').waitFor();
+
+  await expect(buyer.getByText('Shipped')).toBeVisible();
+});
+```
+
+Notes:
+
+- Call `splitIntoRoles(page, ...)` before the first interaction you want attributed to those roles. The first named role reuses the current page.
+- Later roles start on the same URL as the original page, but in their own browser sessions.
+- Repeating a role name within a test returns the same page instead of creating a duplicate session.
+- Labeled pages prefix screenshot filenames automatically, so named screenshots like `screenshot(page, 'dashboard')` do not collide across users.
+- Extra pages created by `splitIntoRoles()` are closed automatically at the end of the test.
+
 ## Recording demo videos
 
-shoTest includes a couple of helper functions (named `demo`Something) that are not part of Playwright, for recording demonstration videos with visible interactions and natural delays. 
+ShoTest includes a couple of helper functions (named `demo`Something) that are not part of Playwright, for recording demonstration videos with visible interactions and natural delays. 
  
 ```ts
 import { test, expect, demoTap, demoType, demoPause, demoSwipe } from 'shotest';

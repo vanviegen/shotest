@@ -108,7 +108,7 @@ A(() => {
 const listEl = document.getElementById('test-list');
 A(listEl, () => {
     A('div.list-toolbar display:flex', () => {
-        A('h2 flex:1 #shoTest');
+        A('h2 flex:1 #ShoTest');
         A('label.scale-control', () => {
             A('span #scale');
             A('input type=range min=0.1 max=1 step=0.01 bind=', A.ref(state, 'scale'));

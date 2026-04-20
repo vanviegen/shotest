@@ -418,6 +418,29 @@ export async function screenshot(page: Page, name: string): Promise<void> {
     });
 }
 
+export async function splitIntoRoles<const Names extends readonly string[]>(page: Page, ...names: Names): Promise<{ [K in Names[number]]: Page }> {
+    if (names.length === 0) throw new Error('splitIntoRoles(page, ...) requires at least one role name');
+    const browser = page.context().browser();
+    if (!browser) throw new Error('ShoTest could not access a browser instance for splitIntoRoles(page, ...)');
+    let currentUrl = 'about:blank';
+    try { currentUrl = page.url(); } catch { }
+    const result: Partial<Record<Names[number], Page>> = {};
+    const splitPages = new Map<string, Page>();
+    for (let i = 0; i < names.length; i++) {
+        const role = String(names[i]).trim() as Names[number];
+        if (!splitPages.has(role)) {
+            if (splitPages.size === 0 && i === 0) splitPages.set(role, page);
+            else {
+                const clone = await browser.newPage();
+                if (currentUrl && currentUrl !== 'about:blank') await clone.goto(currentUrl).catch(() => { });
+                splitPages.set(role, wrapPage(clone));
+            }
+        }
+        result[role] = splitPages.get(role)!;
+    }
+    return result as { [K in Names[number]]: Page };
+}
+
 async function captureStep(basePath: string, page: Page): Promise<boolean> {
     let pngBuffer: Buffer;
     try {

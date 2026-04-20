@@ -1,5 +1,5 @@
 /**
- * shoTest — Screenshot testing for Playwright
+ * ShoTest — Screenshot testing for Playwright
  *
  * Usage:
  *   import { test, expect, screenshot } from 'shotest';
@@ -14,7 +14,7 @@
 export * from '@playwright/test';
 
 import { defineConfig as playwrightDefineConfig } from '@playwright/test';
-import { test, expect, screenshot, waitForVisualStability, getVideoModeOverride } from './fixture.js';
+import { test, expect, screenshot, waitForVisualStability, getVideoModeOverride, splitIntoRoles } from './fixture.js';
 import type { TestManifest, StepInfo } from './fixture.js';
 
 function applyShotestDefaults(config: Record<string, any>): Record<string, any> {
@@ -38,7 +38,7 @@ export function defineConfig(
   return playwrightDefineConfig(...updatedConfigs);
 }
 
-export { test, expect, screenshot, waitForVisualStability };
+export { test, expect, screenshot, waitForVisualStability, splitIntoRoles };
 export type { TestManifest, StepInfo };
 
 export { demoTap, demoType, demoPause, demoSwipe } from './video.js';

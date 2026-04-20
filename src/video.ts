@@ -1,5 +1,5 @@
 /**
- * shoTest video helpers — visual interaction effects for demo recordings.
+ * ShoTest video helpers — visual interaction effects for demo recordings.
  *
  * Video mode is auto-detected from Playwright config (video: 'on' or headless: false)
  * and can be overridden with the SHOTEST_DEMO environment variable ('on' or 'off').

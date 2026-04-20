@@ -1,5 +1,5 @@
 /**
- * shoTest Review Server
+ * ShoTest Review Server
  *
  * A simple Node.js HTTP server that serves a review UI for comparing
  * test screenshots against accepted baselines.
@@ -368,7 +368,7 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
 
 server.listen(port, () => {
     const url = `http://localhost:${port}`;
-    console.log(`\nshoTest Review: ${url}\n`);
+    console.log(`\nShoTest Review: ${url}\n`);
 
     // Try to open browser
     try {
