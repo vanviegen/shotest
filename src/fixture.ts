@@ -77,6 +77,8 @@ const VIDEO_INIT_CSS = `
 // ── Stack trace helpers ────────────────────────────────────────────
 
 type SourceLocation = { file: string; line: number };
+type OverlayBannerType = 'info' | 'error' | 'success';
+type OverlayNotice = { text: string; type: OverlayBannerType };
 
 function getLocationFromStack(stack: string): SourceLocation | null {
     const frames = stack.split('\n');
@@ -121,24 +123,24 @@ const OVERLAY_STYLE = `
         transition: none !important;
         animation: none !important;
     }
-    #shotest-overlay.check,
-    #shotest-overlay.assert {
+    .shotest-overlay.check,
+    .shotest-overlay.assert {
         position: absolute;
         border-radius: 8px;
         border-bottom-left-radius: 0;
         pointer-events: none;
         z-index: 1000000;
     }
-    #shotest-overlay.check {
+    .shotest-overlay.check {
         border: 2px solid #28a745;
         background: rgba(40, 167, 69, 0.2);
     }
-    #shotest-overlay.assert {
+    .shotest-overlay.assert {
         border: 2px solid #4fc1ff;
         background: rgba(79, 193, 255, 0.2);
     }
-    #shotest-overlay.check > p,
-    #shotest-overlay.assert > p {
+    .shotest-overlay.check > p,
+    .shotest-overlay.assert > p {
         position: absolute;
         top: 100%;
         left: -2px;
@@ -148,23 +150,32 @@ const OVERLAY_STYLE = `
         border-top-left-radius: 0;
         font-size: 12px; white-space: nowrap; font-family: sans-serif;
     }
-    #shotest-overlay.check > p { background: #28a745; }
-    #shotest-overlay.assert > p { background: #4fc1ff; }
-    #shotest-overlay.banner {
+    .shotest-overlay.check > p { background: #28a745; }
+    .shotest-overlay.assert > p { background: #4fc1ff; }
+    #shotest-overlay-notices {
         position: fixed;
-        bottom: 0; left: 0; right: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        pointer-events: none;
+        z-index: 1000002;
+    }
+    .shotest-overlay.banner {
+        position: relative;
         background: rgba(0, 0, 0, 0.7);
         color: white;
         padding: 10px 20px;
         font-family: sans-serif;
         font-size: 14px;
-        z-index: 1000002;
         border-top: 2px solid #333;
         white-space: pre-wrap;
     }
-    #shotest-overlay.banner.error { border-top-color: red !important; background: rgba(80, 0, 0, 0.9) !important; }
-    #shotest-overlay.banner.info { border-top-color: #007acc !important; }
-    #shotest-overlay.banner.success { border-top-color: #28a745 !important; }
+    .shotest-overlay.banner.error { border-top-color: red !important; background: rgba(80, 0, 0, 0.9) !important; }
+    .shotest-overlay.banner.info { border-top-color: #007acc !important; }
+    .shotest-overlay.banner.success { border-top-color: #28a745 !important; }
 `;
 
 export async function waitForVisualStability(page: Page, timeoutMs: number = 400) {
@@ -231,8 +242,9 @@ async function waitForRepaint(page: Page) {
 async function hideOverlay(page: Page) {
     try {
         await page.evaluate(() => {
-            const el = document.getElementById("shotest-overlay");
-            if (el) el.remove();
+            document.querySelectorAll('.shotest-overlay').forEach((el) => el.remove());
+            const notices = document.getElementById('shotest-overlay-notices');
+            if (notices) notices.remove();
         });
     } catch { }
 }
@@ -241,8 +253,7 @@ async function showOverlayCheck(page: Page, box: { x: number; y: number; width: 
     try {
         await page.evaluate(({ x, y, w, h, text, kind }) => {
             const el = document.createElement('div');
-            el.id = 'shotest-overlay';
-            el.className = kind;
+            el.className = 'shotest-overlay ' + kind;
             document.body.appendChild(el);
             Object.assign(el.style, {
                 left: (x + window.scrollX - 4) + 'px',
@@ -263,17 +274,43 @@ function stripAnsi(text: string): string {
     return text.replace(/\u001b\[[0-9;]*m/g, '');
 }
 
-async function showOverlayBanner(page: Page, text: string, type: 'info' | 'error' | 'success' = 'info') {
-    const cleanText = stripAnsi(text);
+async function showOverlayBanners(page: Page, notices: OverlayNotice[], position: 'append' | 'prepend' = 'append'): Promise<boolean> {
+    if (notices.length === 0) return true;
     try {
-        await page.evaluate(({ text, type }) => {
-            const el = document.createElement('div');
-            el.id = 'shotest-overlay';
-            el.className = 'banner ' + type;
-            document.body.appendChild(el);
-            el.textContent = text;
-        }, { text: cleanText, type });
-    } catch { }
+        await page.evaluate(({ notices, position }) => {
+            let container = document.getElementById('shotest-overlay-notices');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'shotest-overlay-notices';
+                document.body.appendChild(container);
+            }
+
+            const fragment = document.createDocumentFragment();
+            for (const notice of notices) {
+                const el = document.createElement('div');
+                el.className = 'shotest-overlay banner ' + notice.type;
+                el.textContent = notice.text;
+                fragment.appendChild(el);
+            }
+
+            if (position === 'prepend' && container.firstChild) {
+                container.insertBefore(fragment, container.firstChild);
+            } else {
+                container.appendChild(fragment);
+            }
+        }, { notices, position });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function showOverlayBanner(page: Page, text: string, type: OverlayBannerType = 'info') {
+    await showOverlayBanners(page, [{ text: stripAnsi(text), type }]);
+}
+
+function queueOverlayBanner(text: string, type: OverlayBannerType = 'info') {
+    pendingOverlayNotices.push({ text: stripAnsi(text), type });
 }
 
 function describeExpectation(method: string): string {
@@ -318,6 +355,7 @@ let lastScreenshotKey = '';
 let lastScreenshotSeq = 0;
 let lastStepLocation: SourceLocation | null = null;
 let pendingFailureText = '';
+let pendingOverlayNotices: OverlayNotice[] = [];
 let failureCaptured = false;
 
 async function takeScreenshot(
@@ -338,11 +376,19 @@ async function takeScreenshot(
         await waitForRepaint(actualPage);
     }
 
+    let flushedPendingNotices = false;
+    if (pendingOverlayNotices.length > 0) {
+        flushedPendingNotices = await showOverlayBanners(actualPage, pendingOverlayNotices, 'prepend');
+    }
+
     const name = `${loc.line.toString().padStart(4, '0')}${String.fromCharCode(97 + lastScreenshotSeq)}`;
     const basePath = path.join(currentOutDir, name);
     const relFile = path.relative(process.cwd(), loc.file);
 
-    await captureStep(basePath, actualPage);
+    const captured = await captureStep(basePath, actualPage);
+    if (captured && flushedPendingNotices) {
+        pendingOverlayNotices = [];
+    }
 
     const step = {
         name,
@@ -372,12 +418,12 @@ export async function screenshot(page: Page, name: string): Promise<void> {
     });
 }
 
-async function captureStep(basePath: string, page: Page): Promise<void> {
+async function captureStep(basePath: string, page: Page): Promise<boolean> {
     let pngBuffer: Buffer;
     try {
         pngBuffer = await page.screenshot({ fullPage: false });
     } catch {
-        return; // page closed (e.g. test timed out)
+        return false; // page closed (e.g. test timed out)
     }
     pngBuffer = stripPngMetadata(pngBuffer);
     fs.writeFileSync(basePath + '.png', pngBuffer);
@@ -394,6 +440,8 @@ async function captureStep(basePath: string, page: Page): Promise<void> {
             fs.writeFileSync(basePath + '.head.html', head, 'utf-8');
         } catch { }
     }
+
+    return true;
 }
 
 // ── Locator wrapping ───────────────────────────────────────────────
@@ -517,13 +565,9 @@ function wrapPage(actualPage: Page): Page {
 
     wrapped.goto = async function (url: string, options: any) {
         const loc = getCallerLocation();
-        const stepStartTimeMs = Date.now();
         lastStepLocation = loc;
         await actualPage.goto(url, options);
-        await actualPage.waitForLoadState('load').catch(() => { });
-        await waitForVisualStability(actualPage, 500);
-        await showOverlayBanner(actualPage, 'goto ' + url, 'info');
-        await takeScreenshot(actualPage, true, loc, stepStartTimeMs);
+        queueOverlayBanner('goto ' + url, 'info');
     };
 
     return wrapped;
@@ -544,6 +588,7 @@ export const test = baseTest.extend({
         lastScreenshotSeq = 0;
         lastStepLocation = null;
         pendingFailureText = '';
+        pendingOverlayNotices = [];
         failureCaptured = false;
 
         fs.mkdirSync(outDir, { recursive: true });
