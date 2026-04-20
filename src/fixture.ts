@@ -296,6 +296,8 @@ export interface StepInfo {
     name: string;
     /** Source location like "my-test.spec.ts:10" */
     source: string;
+    /** Time spent producing this step screenshot in milliseconds */
+    duration: number;
 }
 
 export interface TestManifest {
@@ -318,7 +320,12 @@ let lastStepLocation: SourceLocation | null = null;
 let pendingFailureText = '';
 let failureCaptured = false;
 
-async function takeScreenshot(actualPage: Page, alreadyStable: boolean = false, loc: SourceLocation = getCallerLocation()): Promise<StepInfo> {
+async function takeScreenshot(
+    actualPage: Page,
+    alreadyStable: boolean = false,
+    loc: SourceLocation = getCallerLocation(),
+    stepStartTimeMs: number = Date.now(),
+): Promise<StepInfo> {
     const key = currentOutDir + ':' + loc.line;
     if (lastScreenshotKey !== key) {
         lastScreenshotKey = key;
@@ -337,7 +344,11 @@ async function takeScreenshot(actualPage: Page, alreadyStable: boolean = false, 
 
     await captureStep(basePath, actualPage);
 
-    const step = { name, source: `${relFile}:${loc.line}` };
+    const step = {
+        name,
+        source: `${relFile}:${loc.line}`,
+        duration: Math.max(0, Date.now() - stepStartTimeMs),
+    };
     currentSteps.push(step);
     return step;
 }
@@ -347,13 +358,18 @@ async function takeScreenshot(actualPage: Page, alreadyStable: boolean = false, 
  */
 export async function screenshot(page: Page, name: string): Promise<void> {
     const loc = getCallerLocation();
+    const stepStartTimeMs = Date.now();
     await waitForRepaint(page);
     const basePath = path.join(currentOutDir, name);
     const relFile = path.relative(process.cwd(), loc.file);
 
     await hideOverlay(page);
     await captureStep(basePath, page);
-    currentSteps.push({ name, source: `${relFile}:${loc.line}` });
+    currentSteps.push({
+        name,
+        source: `${relFile}:${loc.line}`,
+        duration: Math.max(0, Date.now() - stepStartTimeMs),
+    });
 }
 
 async function captureStep(basePath: string, page: Page): Promise<void> {
@@ -389,6 +405,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
     for (const method of actionMethods) {
         wrapped[method] = async function (...args: any[]) {
             const loc = getCallerLocation();
+            const stepStartTimeMs = Date.now();
             lastStepLocation = loc;
             const short = typeof args[0] === 'string' ? method + ' ' + JSON.stringify(args[0]) : method;
             const failureText = `Locator ${actualLocator} failed ${short}`;
@@ -402,13 +419,13 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
                     throw new Error(failureText);
                 }
                 await showOverlayCheck(actualPage, box, short);
-                await takeScreenshot(actualPage, true, loc);
+                await takeScreenshot(actualPage, true, loc, stepStartTimeMs);
                 const result = await (actualLocator as any)[method](...args);
                 pendingFailureText = '';
                 return result;
             } catch (error: any) {
                 await showOverlayBanner(actualPage, failureText, 'error');
-                await takeScreenshot(actualPage, true, loc).catch(() => {});
+                await takeScreenshot(actualPage, true, loc, stepStartTimeMs).catch(() => {});
                 failureCaptured = true;
                 if (error.stack) {
                     error.stack = error.stack.split('\n')
@@ -422,6 +439,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
 
     wrapped._expect = async function (method: string, options: any) {
         const loc = getCallerLocation();
+        const stepStartTimeMs = Date.now();
         lastStepLocation = loc;
         const label = describeExpectation(method);
         const failureText = `${label} failed`;
@@ -437,7 +455,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             } else {
                 await showOverlayBanner(actualPage, label, 'info');
             }
-            await takeScreenshot(actualPage, true, loc);
+            await takeScreenshot(actualPage, true, loc, stepStartTimeMs);
             pendingFailureText = '';
             return result;
         } catch (error: any) {
@@ -450,7 +468,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             } else {
                 await showOverlayBanner(actualPage, failureText, 'error');
             }
-            await takeScreenshot(actualPage, true, loc).catch(() => {});
+            await takeScreenshot(actualPage, true, loc, stepStartTimeMs).catch(() => {});
             failureCaptured = true;
             throw error;
         }
@@ -458,6 +476,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
 
     wrapped.waitFor = async function (options?: any) {
         const loc = getCallerLocation();
+        const stepStartTimeMs = Date.now();
         lastStepLocation = loc;
         await (actualLocator as any).waitFor(options);
         await hideOverlay(actualPage);
@@ -469,7 +488,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         } else {
             await showOverlayBanner(actualPage, 'waitFor', 'info');
         }
-        await takeScreenshot(actualPage, true, loc);
+        await takeScreenshot(actualPage, true, loc, stepStartTimeMs);
     };
 
     const locatorReturning = ['locator', 'filter', 'nth', 'first', 'last', 'getByText', 'getByRole', 'getByPlaceholder', 'getByLabel', 'getByTestId', 'getByAltText', 'getByTitle'];
@@ -498,12 +517,13 @@ function wrapPage(actualPage: Page): Page {
 
     wrapped.goto = async function (url: string, options: any) {
         const loc = getCallerLocation();
+        const stepStartTimeMs = Date.now();
         lastStepLocation = loc;
         await actualPage.goto(url, options);
         await actualPage.waitForLoadState('load').catch(() => { });
         await waitForVisualStability(actualPage, 500);
         await showOverlayBanner(actualPage, 'goto ' + url, 'info');
-        await takeScreenshot(actualPage, true, loc);
+        await takeScreenshot(actualPage, true, loc, stepStartTimeMs);
     };
 
     return wrapped;

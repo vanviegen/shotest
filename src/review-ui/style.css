@@ -176,6 +176,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.step .label .duration {
+  font-variant-numeric: tabular-nums;
+}
+.step .label .duration.warn {
+  color: var(--orange);
+  font-weight: 600;
+}
+.step .label .duration.danger {
+  color: var(--red);
+  font-weight: 700;
+}
 
 .error-box {
   background: rgba(244, 71, 71, 0.1);

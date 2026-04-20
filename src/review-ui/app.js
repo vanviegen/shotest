@@ -76,6 +76,23 @@ function deselectTest(updateRoute = true) {
     }
 }
 
+function parseLine(location) {
+    const idx = location.lastIndexOf(':');
+    return idx >= 0 ? location.slice(idx + 1) : '?';
+}
+
+function formatDuration(duration) {
+    if (typeof duration !== 'number' || !Number.isFinite(duration)) return 'n/a';
+    return Math.max(0, Math.round(duration)) + 'ms';
+}
+
+function durationClass(duration) {
+    if (typeof duration !== 'number' || !Number.isFinite(duration)) return 'unknown';
+    if (duration > 3000) return 'danger';
+    if (duration > 500) return 'warn';
+    return 'ok';
+}
+
 A(() => {
     const wanted = routeTestName();
     if (!wanted) {
@@ -150,10 +167,11 @@ A(detailEl, () => {
 
         A('div.steps-grid', () => {
             for (const step of steps) {
-                
+                const line = parseLine(step.location);
+                const durationText = formatDuration(step.duration);
+                const durationSeverity = durationClass(step.duration);
                 const change = step.acceptedImage ? (step.currentImage ? (step.changed ? 'changed' : 'unchanged') : 'removed') : 'new';
                 A(`div.step.${change}`, () => {
-                    
                     if (change === 'changed') {
                         let mouseState = A.proxy();
                         function onMouseMove(event) {
@@ -169,7 +187,10 @@ A(detailEl, () => {
                             A('img.compare-layer .visible=', switchState, 'src=', '/image/current/' + encodeURIComponent(state.selected) + '/' + step.currentImage);
                         });
                         A(`div.label`, () => {
-                            A(`#line ${step.location.split(':')[1]} • ${change} • showing ${switchState.value ? 'current' : 'accepted'}`);
+                            A('span #line ' + line + ' ');
+                            A('span #' + String.fromCharCode(8226) + ' ');
+                            A('span.duration.' + durationSeverity + ' #' + durationText + ' ');
+                            A('span #' + String.fromCharCode(8226) + ' ' + change + ' ' + String.fromCharCode(8226) + ' showing ' + (switchState.value ? 'current' : 'accepted'));
                         });
                     } else {
                         const img = step.currentImage || step.acceptedImage;
@@ -179,7 +200,12 @@ A(detailEl, () => {
                                 A('img src=', src);
                             });
                         }
-                        A(`div.label #line ${step.location.split(':')[1]} • ${change}`);
+                        A(`div.label`, () => {
+                            A('span #line ' + line + ' ');
+                            A('span #' + String.fromCharCode(8226) + ' ');
+                            A('span.duration.' + durationSeverity + ' #' + durationText + ' ');
+                            A('span #' + String.fromCharCode(8226) + ' ' + change);
+                        });
                     }
                 });
             }

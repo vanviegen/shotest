@@ -38,12 +38,14 @@ interface ImageEntry {
     name: string;
     hash: string;
     source: string;
+    duration: number | null;
 }
 
 interface AlignedPair {
     acceptedImage: string | undefined;
     currentImage: string | undefined;
     location: string;
+    duration: number | null;
     changed: boolean;
 }
 
@@ -79,6 +81,7 @@ function alignImages(accepted: ImageEntry[], current: ImageEntry[]): AlignedPair
                 acceptedImage: accepted[i - 1].name + '.png',
                 currentImage: current[j - 1].name + '.png',
                 location: current[j - 1].source,
+                duration: current[j - 1].duration,
                 changed: false,
             });
             i--; j--;
@@ -87,6 +90,7 @@ function alignImages(accepted: ImageEntry[], current: ImageEntry[]): AlignedPair
                 acceptedImage: accepted[i - 1].name + '.png',
                 currentImage: current[j - 1].name + '.png',
                 location: current[j - 1].source,
+                duration: current[j - 1].duration,
                 changed: true,
             });
             i--; j--;
@@ -95,6 +99,7 @@ function alignImages(accepted: ImageEntry[], current: ImageEntry[]): AlignedPair
                 acceptedImage: accepted[i - 1].name + '.png',
                 currentImage: undefined,
                 location: accepted[i - 1].source,
+                duration: accepted[i - 1].duration,
                 changed: true,
             });
             i--;
@@ -103,6 +108,7 @@ function alignImages(accepted: ImageEntry[], current: ImageEntry[]): AlignedPair
                 acceptedImage: undefined,
                 currentImage: current[j - 1].name + '.png',
                 location: current[j - 1].source,
+                duration: current[j - 1].duration,
                 changed: true,
             });
             j--;
@@ -213,6 +219,7 @@ function getTestDetails(testName: string): {
             name: s.name,
             hash: hashFile(path.join(testDir, s.name + '.png')),
             source: s.source,
+            duration: typeof s.duration === 'number' ? s.duration : null,
         }));
 
     // Build accepted image entries
@@ -228,6 +235,7 @@ function getTestDetails(testName: string): {
                         name: s.name,
                         hash: hashFile(path.join(expDir, s.name + '.png')),
                         source: s.source,
+                        duration: typeof s.duration === 'number' ? s.duration : null,
                     }));
             } catch { }
         } else {
@@ -241,6 +249,7 @@ function getTestDetails(testName: string): {
                         name,
                         hash: hashFile(path.join(expDir, f)),
                         source: name,
+                        duration: null,
                     };
                 });
         }

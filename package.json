@@ -1,6 +1,6 @@
 {
   "name": "shotest",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Screenshot testing for Playwright. Capture, compare, review.",
   "type": "module",
   "main": "./build/index.js",
