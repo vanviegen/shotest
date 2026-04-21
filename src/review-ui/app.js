@@ -6,13 +6,13 @@ const state = A.proxy({
     selected: null,
     detail: null,
     scale: 0.8,
-    switchState: true,
+    showNew: true,
 });
 
 let pendingSelectionToken = 0;
 setInterval(() => {
-    state.switchState = false;
-    setInterval(() => state.switchState = true, 500);
+    state.showNew = false;
+    setTimeout(() => state.showNew = true, 500);
 }, 1500);
 
 function pathForTest(name) {
@@ -173,24 +173,27 @@ A(detailEl, () => {
                 const change = step.acceptedImage ? (step.currentImage ? (step.changed ? 'changed' : 'unchanged') : 'removed') : 'new';
                 A(`div.step.${change}`, () => {
                     if (change === 'changed') {
-                        let mouseState = A.proxy();
+                        let mouseShowNew = A.proxy();
                         function onMouseMove(event) {
                             const box = event.currentTarget.getBoundingClientRect();
-                            mouseState.value = event.clientX - box.left > box.width / 2; // true for 'current', false for 'accepted'
+                            mouseShowNew.value = event.clientX - box.left > box.width / 2; // true for 'current', false for 'accepted'
                         }
                         function onMouseLeave() {
-                            mouseState.value = undefined;
+                            mouseShowNew.value = undefined;
                         }
-                        const switchState = A.derive(() => mouseState.value ?? state.switchState);
+                        A(() => {
+                            console.log('showNew', mouseShowNew.value, state.showNew);
+                        })
+                        const showNew = A.derive(() => mouseShowNew.value ?? state.showNew);
                         A('div.image-stage.compare-view', '$zoom=', state.scale, 'mousemove=', onMouseMove, 'mouseleave=', onMouseLeave, () => {
-                            A('img.compare-layer', 'src=', '/image/expected/' + encodeURIComponent(state.selected) + '/' + step.acceptedImage);
-                            A('img.compare-layer .visible=', switchState, 'src=', '/image/current/' + encodeURIComponent(state.selected) + '/' + step.currentImage);
+                            A('img.compare-layer .visible', 'src=', '/image/accepted/' + encodeURIComponent(state.selected) + '/' + step.acceptedImage);
+                            A('img.compare-layer .visible=', showNew, 'src=', '/image/current/' + encodeURIComponent(state.selected) + '/' + step.currentImage);
                         });
                         A(`div.label`, () => {
                             A('span #line ' + line + ' ');
                             A('span #' + String.fromCharCode(8226) + ' ');
                             A('span.duration.' + durationSeverity + ' #' + durationText + ' ');
-                            A('span #' + String.fromCharCode(8226) + ' ' + change + ' ' + String.fromCharCode(8226) + ' showing ' + (switchState.value ? 'current' : 'accepted'));
+                            A('span #' + String.fromCharCode(8226) + ' ' + change + ' ' + String.fromCharCode(8226) + ' showing ' + (showNew.value ? 'current' : 'accepted'));
                         });
                     } else {
                         const img = step.currentImage || step.acceptedImage;

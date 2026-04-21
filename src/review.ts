@@ -160,27 +160,27 @@ function getTests(): TestSummary[] {
         let hasChanges = false;
 
         if (!fs.existsSync(expDir)) {
-            // No expected dir = all images are new
+            // No accepted dir = all images are new
             hasChanges = steps.length > 0;
         } else {
-            // Compare current and expected images
+            // Compare current and accepted images
             const currentPngs = steps.map(s => s.name);
-            const expectedPngs = fs.readdirSync(expDir)
+            const acceptedPngs = fs.readdirSync(expDir)
                 .filter((f: string) => f.endsWith('.png') && f !== 'error.png')
                 .map((f: string) => f.replace('.png', ''))
                 .sort();
 
-            if (currentPngs.length !== expectedPngs.length) {
+            if (currentPngs.length !== acceptedPngs.length) {
                 hasChanges = true;
             } else {
                 for (const step of steps) {
                     const currentFile = path.join(outputDir, name, step.name + '.png');
-                    const expectedFile = path.join(expDir, step.name + '.png');
-                    if (!fs.existsSync(expectedFile)) {
+                    const acceptedFile = path.join(expDir, step.name + '.png');
+                    if (!fs.existsSync(acceptedFile)) {
                         hasChanges = true;
                         break;
                     }
-                    if (hashFile(currentFile) !== hashFile(expectedFile)) {
+                    if (hashFile(currentFile) !== hashFile(acceptedFile)) {
                         hasChanges = true;
                         break;
                     }
@@ -239,7 +239,7 @@ function getTestDetails(testName: string): {
                     }));
             } catch { }
         } else {
-            // No manifest in expected dir — build from files
+            // No manifest in accepted dir — build from files
             acceptedEntries = fs.readdirSync(expDir)
                 .filter((f: string) => f.endsWith('.png') && f !== 'error.png')
                 .sort()
@@ -265,7 +265,7 @@ function acceptTest(testName: string): void {
 
     if (!fs.existsSync(testDir)) return;
 
-    // Clear existing expected dir
+    // Clear existing accepted dir
     if (fs.existsSync(expDir)) {
         fs.rmSync(expDir, { recursive: true });
     }
@@ -339,7 +339,7 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
     }
 
     // Serve images from test-results/ and test-accepted/
-    const imageMatch = pathname.match(/^\/image\/(current|expected)\/(.+)/);
+    const imageMatch = pathname.match(/^\/image\/(current|accepted)\/(.+)/);
     if (imageMatch) {
         const baseDir = imageMatch[1] === 'current' ? outputDir : acceptedDir;
         const filePath = path.join(baseDir, imageMatch[2]);
