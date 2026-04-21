@@ -15,7 +15,7 @@ Install `shotest` (*instead* of installing `@playwright/test` directly) and inst
 
 ```bash
 npm install -D shotest
-npx playwright install chromium
+npx shotest install chromium
 ```
 
 Create a `tests/` directory, in which your tests will live as `.spec.ts` files.
@@ -78,17 +78,19 @@ Most common page and locator actions are wrapped so that a screenshot is taken a
 Run the tests using:
 
 ```sh
-npx playwright test
+npx shotest
 ```
 
 This should output screenshots and HTML snapshots for each step to the default Playwright per-test output directory under `test-results/`.
 
-## Reviewing app
+The `shotest` command forwards arguments to Playwright, so `npx shotest test --ui` maps to `playwright test --ui`.
+
+## Reviewing and accepting visual changes
 
 In order to review test results, compare changes against the baseline, and accept intentional changes, run the ShoTest review server:
 
 ```bash
-npx shotest
+npx shotest review
 ```
 
 It serves a web app on localhost and attempts to open it in your default browser.
@@ -146,10 +148,10 @@ test('demo', async ({ page }) => {
 
 Demo mode is automatically activated when Playwright video recording is enabled or when it's running in headed mode. You can override this by setting the `SHOTEST_DEMO` environment variable to `on` or `off`.
 
-A convenient way to record demo videos for a run is to set `SHOTEST_VIDEO` to `on` when invoking Playwright:
+A convenient way to record demo videos for a run is to set `SHOTEST_VIDEO` to `on` when invoking ShoTest:
 
 ```sh
-SHOTEST_VIDEO=on npx playwright test
+SHOTEST_VIDEO=on npx shotest
 ```
 
 This uses Playwright's normal video output handling (which you can also enable through its `defineConfig`), so the videos are written to the standard per-test output directory under `test-results/`. 

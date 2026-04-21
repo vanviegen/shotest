@@ -4,9 +4,6 @@
   "workspaces": {
     "": {
       "name": "shotest",
-      "dependencies": {
-        "@playwright/test": "^1.59.1",
-      },
       "devDependencies": {
         "@types/node": "^25.0.3",
         "aberdeen": "^1.9.0",
@@ -14,6 +11,9 @@
         "typescript": "^5.8.3",
         "vite": "^7.3.1",
         "vite-plugin-singlefile": "^2.3.0",
+      },
+      "peerDependencies": {
+        "@playwright/test": "^1.59.1",
       },
     },
   },
