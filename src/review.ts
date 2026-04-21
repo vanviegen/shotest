@@ -161,10 +161,12 @@ function getTests(): TestSummary[] {
 
         if (!fs.existsSync(expDir)) {
             // No accepted dir = all images are new
-            hasChanges = steps.length > 0;
+            hasChanges = steps.some((step) => fs.existsSync(path.join(outputDir, name, step.name + '.png')));
         } else {
             // Compare current and accepted images
-            const currentPngs = steps.map(s => s.name);
+            const currentPngs = Array.from(new Set(steps
+                .filter((s) => fs.existsSync(path.join(outputDir, name, s.name + '.png')))
+                .map((s) => s.name)));
             const acceptedPngs = fs.readdirSync(expDir)
                 .filter((f: string) => f.endsWith('.png') && f !== 'error.png')
                 .map((f: string) => f.replace('.png', ''))
@@ -173,9 +175,9 @@ function getTests(): TestSummary[] {
             if (currentPngs.length !== acceptedPngs.length) {
                 hasChanges = true;
             } else {
-                for (const step of steps) {
-                    const currentFile = path.join(outputDir, name, step.name + '.png');
-                    const acceptedFile = path.join(expDir, step.name + '.png');
+                for (const pngName of currentPngs) {
+                    const currentFile = path.join(outputDir, name, pngName + '.png');
+                    const acceptedFile = path.join(expDir, pngName + '.png');
                     if (!fs.existsSync(acceptedFile)) {
                         hasChanges = true;
                         break;

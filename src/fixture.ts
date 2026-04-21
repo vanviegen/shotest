@@ -235,6 +235,26 @@ export async function waitForVisualStability(page: Page, timeoutMs: number = 400
     }, Math.max(120, timeoutMs)).catch(() => { });
 }
 
+async function waitForPageResources(page: Page, timeoutMs: number = 2500) {
+    const deadline = Date.now() + timeoutMs;
+
+    const waitWithRemainingTime = async (waiter: (remainingMs: number) => Promise<unknown>) => {
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) return;
+        try {
+            await waiter(remainingMs);
+        } catch { }
+    };
+
+    await waitWithRemainingTime((remainingMs) => page.waitForLoadState('load', { timeout: remainingMs }));
+    await waitWithRemainingTime((remainingMs) => page.waitForFunction(() => {
+        if (document.readyState !== 'complete') return false;
+        const fonts = (document as Document & { fonts?: { status?: string } }).fonts;
+        return !fonts || fonts.status === 'loaded';
+    }, undefined, { timeout: remainingMs }));
+    await waitWithRemainingTime((remainingMs) => page.waitForLoadState('networkidle', { timeout: remainingMs }));
+}
+
 async function waitForRepaint(page: Page) {
     await waitForVisualStability(page);
 }
@@ -405,6 +425,7 @@ async function takeScreenshot(
 export async function screenshot(page: Page, name: string): Promise<void> {
     const loc = getCallerLocation();
     const stepStartTimeMs = Date.now();
+    await waitForPageResources(page);
     await waitForRepaint(page);
     const basePath = path.join(currentOutDir, name);
     const relFile = path.relative(process.cwd(), loc.file);
@@ -444,6 +465,7 @@ export async function splitIntoRoles<const Names extends readonly string[]>(page
 async function captureStep(basePath: string, page: Page): Promise<boolean> {
     let pngBuffer: Buffer;
     try {
+        await waitForPageResources(page);
         pngBuffer = await page.screenshot({ fullPage: false });
     } catch {
         return false; // page closed (e.g. test timed out)
