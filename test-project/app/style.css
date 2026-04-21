@@ -1,0 +1,82 @@
+:root {
+  color-scheme: light;
+  font-family: "Iosevka Aile", "IBM Plex Sans", sans-serif;
+  background: linear-gradient(180deg, #f4fbff 0%, #eef5ff 100%);
+  color: #0f2336;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.shell {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  gap: 14px;
+}
+
+h1 {
+  margin: 0;
+  letter-spacing: 0.03em;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #d9e4ef;
+  border-radius: 12px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.inline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input,
+textarea {
+  caret-color: transparent;
+}
+
+button {
+  width: fit-content;
+  border-radius: 10px;
+  border: 1px solid #95abc0;
+  background: #f2f7fc;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+#double-btn {
+  user-select: none;
+}
+
+#swipe-zone {
+  width: 100%;
+  min-height: 90px;
+  border: 2px dashed #8da7bd;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: #f5faff;
+  user-select: none;
+}

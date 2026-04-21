@@ -1,6 +1,6 @@
 {
   "name": "shotest",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Screenshot testing for Playwright. Capture, compare, review.",
   "type": "module",
   "main": "./build/index.js",
@@ -26,6 +26,7 @@
   "scripts": {
     "build": "node scripts/build.mjs && npm run build:docs",
     "build:docs": "readme-tsdoc && rm -rf skill ; mkdir skill ; cat skill-header.md README.md > skill/SKILL.md",
+    "test": "npm --prefix test-project run test:run && node scripts/test-project-compare.mjs",
     "review": "npm run build && node build/review.js",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build"

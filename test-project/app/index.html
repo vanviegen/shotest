@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ShoTest Test Project</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <h1>Client Demo</h1>
+
+      <section class="card" aria-label="Counter">
+        <h2>Counter</h2>
+        <p id="count-value">0</p>
+        <button id="increment-btn" type="button">Increment</button>
+      </section>
+
+      <section class="card" aria-label="Form">
+        <h2>Form Controls</h2>
+        <label for="name-input">Name</label>
+        <input id="name-input" type="text" autocomplete="off" />
+
+        <label for="color-select">Theme color</label>
+        <select id="color-select">
+          <option value="sky">Sky</option>
+          <option value="mint">Mint</option>
+          <option value="amber">Amber</option>
+        </select>
+
+        <label class="inline-row" for="news-checkbox">
+          <input id="news-checkbox" type="checkbox" />
+          Receive newsletter
+        </label>
+
+        <button id="submit-btn" type="button">Submit</button>
+        <p id="form-status">Form idle</p>
+      </section>
+
+      <section class="card" aria-label="Pointer interactions">
+        <h2>Pointer interactions</h2>
+        <button id="hover-btn" type="button">Hover me</button>
+        <p id="hover-state">not hovered</p>
+
+        <button id="double-btn" type="button">Double click me</button>
+        <p id="double-state">not doubled</p>
+
+        <div id="swipe-zone" role="region" aria-label="Swipe zone">Swipe here</div>
+        <p id="swipe-state">none</p>
+      </section>
+
+      <section class="card" aria-label="Roles">
+        <h2>Roles</h2>
+        <button id="role-toggle" type="button">Toggle role state</button>
+        <p id="role-state">off</p>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

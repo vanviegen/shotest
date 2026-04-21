@@ -1,0 +1,42 @@
+{
+  "file": "tests/shotest.spec.js",
+  "title": "covers demo helpers in non-video mode",
+  "line": 68,
+  "status": "passed",
+  "duration": 1919,
+  "error": null,
+  "errorSource": null,
+  "errorStack": null,
+  "steps": [
+    {
+      "name": "0071a",
+      "source": "tests/shotest.spec.js:71",
+      "duration": 425
+    },
+    {
+      "name": "0072a",
+      "source": "tests/shotest.spec.js:72",
+      "duration": 156
+    },
+    {
+      "name": "0074a",
+      "source": "tests/shotest.spec.js:74",
+      "duration": 148
+    },
+    {
+      "name": "0075a",
+      "source": "tests/shotest.spec.js:75",
+      "duration": 157
+    },
+    {
+      "name": "0081a",
+      "source": "tests/shotest.spec.js:81",
+      "duration": 148
+    },
+    {
+      "name": "demo-final",
+      "source": "tests/shotest.spec.js:83",
+      "duration": 114
+    }
+  ]
+}
