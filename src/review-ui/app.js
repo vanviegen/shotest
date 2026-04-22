@@ -93,6 +93,16 @@ function durationClass(duration) {
     return 'ok';
 }
 
+function renderRoleChrome(step) {
+    if (!step.role) return;
+    A('div.step-topbar', () => {
+        A('span.step-role-badge', () => {
+            A('span.role-label #role');
+            A('span.role-name #' + step.role);
+        });
+    });
+}
+
 A(() => {
     const wanted = routeTestName();
     if (!wanted) {
@@ -172,6 +182,7 @@ A(detailEl, () => {
                 const durationSeverity = durationClass(step.duration);
                 const change = step.acceptedImage ? (step.currentImage ? (step.changed ? 'changed' : 'unchanged') : 'removed') : 'new';
                 A(`div.step.${change}`, () => {
+                    renderRoleChrome(step);
                     if (change === 'changed') {
                         let mouseShowNew = A.proxy();
                         function onMouseMove(event) {

@@ -355,6 +355,8 @@ export interface StepInfo {
     source: string;
     /** Time spent producing this step screenshot in milliseconds */
     duration: number;
+    /** Role name assigned via splitIntoRoles(page, ...) */
+    role: string | undefined;
 }
 
 export interface TestManifest {
@@ -377,6 +379,15 @@ let lastStepLocation: SourceLocation | null = null;
 let pendingFailureText = '';
 let pendingOverlayNotices: OverlayNotice[] = [];
 let failureCaptured = false;
+
+function setPageRole(page: Page, role: string): void {
+    const actualPage = (page as any)._shotestActualPage ?? page;
+    (actualPage as any)._shotestRole = role;
+}
+
+function getPageRole(page: Page): string | undefined {
+    return (page as any)._shotestRole;
+}
 
 async function takeScreenshot(
     actualPage: Page,
@@ -414,6 +425,7 @@ async function takeScreenshot(
         name,
         source: `${relFile}:${loc.line}`,
         duration: Math.max(0, Date.now() - stepStartTimeMs),
+        role: getPageRole(actualPage),
     };
     currentSteps.push(step);
     return step;
@@ -436,6 +448,7 @@ export async function screenshot(page: Page, name: string): Promise<void> {
         name,
         source: `${relFile}:${loc.line}`,
         duration: Math.max(0, Date.now() - stepStartTimeMs),
+        role: getPageRole(page),
     });
 }
 
@@ -457,7 +470,9 @@ export async function splitIntoRoles<const Names extends readonly string[]>(page
                 splitPages.set(role, wrapPage(clone));
             }
         }
-        result[role] = splitPages.get(role)!;
+        const rolePage = splitPages.get(role)!;
+        setPageRole(rolePage, role);
+        result[role] = rolePage;
     }
     return result as { [K in Names[number]]: Page };
 }
@@ -599,6 +614,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
 
 function wrapPage(actualPage: Page): Page {
     const wrapped = Object.create(actualPage) as any;
+    wrapped._shotestActualPage = actualPage;
 
     const locatorReturning = ['locator', 'getByText', 'getByRole', 'getByPlaceholder', 'getByLabel', 'getByTestId', 'getByAltText', 'getByTitle'];
     for (const method of locatorReturning) {

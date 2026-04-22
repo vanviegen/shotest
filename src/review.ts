@@ -38,20 +38,38 @@ interface ImageEntry {
     name: string;
     hash: string;
     source: string;
-    duration: number | null;
+    duration: number | undefined;
+    role: string | undefined;
 }
 
 interface AlignedPair {
     acceptedImage: string | undefined;
     currentImage: string | undefined;
     location: string;
-    duration: number | null;
+    duration: number | undefined;
+    role: string | undefined;
     changed: boolean;
 }
 
 function alignImages(accepted: ImageEntry[], current: ImageEntry[]): AlignedPair[] {
     const m = accepted.length;
     const n = current.length;
+
+    function makeAlignedPair(
+        acceptedEntry: ImageEntry | undefined,
+        currentEntry: ImageEntry | undefined,
+        changed: boolean,
+    ): AlignedPair {
+        const imageEntry = currentEntry ?? acceptedEntry!;
+        return {
+            acceptedImage: acceptedEntry ? acceptedEntry.name + '.png' : undefined,
+            currentImage: currentEntry ? currentEntry.name + '.png' : undefined,
+            location: imageEntry.source,
+            duration: imageEntry.duration,
+            role: currentEntry?.role ?? acceptedEntry?.role,
+            changed,
+        };
+    }
 
     // DP table for edit distance
     const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
@@ -77,40 +95,16 @@ function alignImages(accepted: ImageEntry[], current: ImageEntry[]): AlignedPair
     let i = m, j = n;
     while (i > 0 || j > 0) {
         if (i > 0 && j > 0 && accepted[i - 1].hash === current[j - 1].hash) {
-            result.unshift({
-                acceptedImage: accepted[i - 1].name + '.png',
-                currentImage: current[j - 1].name + '.png',
-                location: current[j - 1].source,
-                duration: current[j - 1].duration,
-                changed: false,
-            });
+            result.unshift(makeAlignedPair(accepted[i - 1], current[j - 1], false));
             i--; j--;
         } else if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
-            result.unshift({
-                acceptedImage: accepted[i - 1].name + '.png',
-                currentImage: current[j - 1].name + '.png',
-                location: current[j - 1].source,
-                duration: current[j - 1].duration,
-                changed: true,
-            });
+            result.unshift(makeAlignedPair(accepted[i - 1], current[j - 1], true));
             i--; j--;
         } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
-            result.unshift({
-                acceptedImage: accepted[i - 1].name + '.png',
-                currentImage: undefined,
-                location: accepted[i - 1].source,
-                duration: accepted[i - 1].duration,
-                changed: true,
-            });
+            result.unshift(makeAlignedPair(accepted[i - 1], undefined, true));
             i--;
         } else {
-            result.unshift({
-                acceptedImage: undefined,
-                currentImage: current[j - 1].name + '.png',
-                location: current[j - 1].source,
-                duration: current[j - 1].duration,
-                changed: true,
-            });
+            result.unshift(makeAlignedPair(undefined, current[j - 1], true));
             j--;
         }
     }
@@ -221,7 +215,8 @@ function getTestDetails(testName: string): {
             name: s.name,
             hash: hashFile(path.join(testDir, s.name + '.png')),
             source: s.source,
-            duration: typeof s.duration === 'number' ? s.duration : null,
+            duration: s.duration,
+            role: s.role,
         }));
 
     // Build accepted image entries
@@ -237,7 +232,8 @@ function getTestDetails(testName: string): {
                         name: s.name,
                         hash: hashFile(path.join(expDir, s.name + '.png')),
                         source: s.source,
-                        duration: typeof s.duration === 'number' ? s.duration : null,
+                        duration: s.duration,
+                        role: s.role,
                     }));
             } catch { }
         } else {
@@ -251,7 +247,8 @@ function getTestDetails(testName: string): {
                         name,
                         hash: hashFile(path.join(expDir, f)),
                         source: name,
-                        duration: null,
+                        duration: undefined,
+                        role: undefined,
                     };
                 });
         }

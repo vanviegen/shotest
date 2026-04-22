@@ -128,6 +128,48 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
   padding: 10px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
+.step-topbar {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  margin: -10px -10px 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    linear-gradient(90deg, rgba(88, 146, 201, 0.14), rgba(88, 146, 201, 0));
+}
+.step-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(130, 205, 255, 0.3);
+  background: linear-gradient(135deg, rgba(44, 94, 133, 0.72), rgba(24, 56, 89, 0.94));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: #d7eeff;
+  font-size: 10px;
+  line-height: 1;
+}
+.step-role-badge .role-label {
+  color: rgba(215, 238, 255, 0.72);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+}
+.step-role-badge .role-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
 .step.changed {
   border-color: var(--yellow);
   box-shadow: inset 0 0 0 1px rgba(220, 220, 170, 0.18), 0 0 18px rgba(220, 220, 170, 0.28);
