@@ -176,20 +176,20 @@ A(detailEl, () => {
                         let mouseShowNew = A.proxy();
                         function onMouseMove(event) {
                             const box = event.currentTarget.getBoundingClientRect();
-                            mouseShowNew.value = event.clientX - box.left > box.width / 2; // true for 'current', false for 'accepted'
+                            mouseShowNew.value = event.clientX - box.left > box.width / 2;
                         }
                         function onMouseLeave() {
                             mouseShowNew.value = undefined;
                         }
                         A(() => {
                             console.log('showNew', mouseShowNew.value, state.showNew);
-                        })
+                        });
                         const showNew = A.derive(() => mouseShowNew.value ?? state.showNew);
                         A('div.image-stage.compare-view', '$zoom=', state.scale, 'mousemove=', onMouseMove, 'mouseleave=', onMouseLeave, () => {
                             A('img.compare-layer .visible', 'src=', '/image/accepted/' + encodeURIComponent(state.selected) + '/' + step.acceptedImage);
                             A('img.compare-layer .visible=', showNew, 'src=', '/image/current/' + encodeURIComponent(state.selected) + '/' + step.currentImage);
                         });
-                        A(`div.label`, () => {
+                        A('div.label', () => {
                             A('span #line ' + line + ' ');
                             A('span #' + String.fromCharCode(8226) + ' ');
                             A('span.duration.' + durationSeverity + ' #' + durationText + ' ');
@@ -203,7 +203,7 @@ A(detailEl, () => {
                                 A('img src=', src);
                             });
                         }
-                        A(`div.label`, () => {
+                        A('div.label', () => {
                             A('span #line ' + line + ' ');
                             A('span #' + String.fromCharCode(8226) + ' ');
                             A('span.duration.' + durationSeverity + ' #' + durationText + ' ');
@@ -213,6 +213,9 @@ A(detailEl, () => {
                 });
             }
         });
+        if (steps.length === 0) {
+            A('div', 'color: var(--fg2); font-size: 14px; padding: 16px 0;', '#No screenshots taken');
+        }
 
         if (manifest && manifest.error) {
             A('div.error-box', () => {

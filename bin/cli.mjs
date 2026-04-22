@@ -24,6 +24,7 @@ function getVisualSummary(outputDir, acceptedDir) {
   let passed = 0;
   let changed = 0;
   let unchanged = 0;
+  let noScreenshots = 0;
 
   for (const testName of testDirs) {
     const manifestPath = join(outputDir, testName, 'manifest.json');
@@ -37,11 +38,18 @@ function getVisualSummary(outputDir, acceptedDir) {
     }
 
     if (manifest?.status !== 'passed') continue;
-    passed++;
 
     const currentSteps = Array.from(new Set((manifest.steps ?? [])
       .filter((step) => existsSync(join(outputDir, testName, step.name + '.png')))
       .map((step) => step.name)));
+
+    if (currentSteps.length === 0) {
+      noScreenshots++;
+      continue;
+    }
+
+    passed++;
+
     const acceptedTestDir = join(acceptedDir, testName);
 
     let hasChanges = false;
@@ -70,8 +78,8 @@ function getVisualSummary(outputDir, acceptedDir) {
     else unchanged++;
   }
 
-  if (passed === 0) return null;
-  return { passed, changed, unchanged };
+  if (passed === 0 && noScreenshots === 0) return null;
+  return { passed, changed, unchanged, noScreenshots };
 }
 
 function printVisualSummary() {
@@ -80,9 +88,15 @@ function printVisualSummary() {
     process.env.SHOTEST_ACCEPTED_DIR || 'test-accepted',
   );
 
-  if (!summary) return;
+  if (!summary) return false;
 
-  console.log(`\nShoTest visuals: ${summary.changed} changed, ${summary.unchanged} unchanged across ${summary.passed} passed test(s)`);
+  const noScreenshotsText = summary.noScreenshots > 0
+    ? `, ${summary.noScreenshots} passed with no screenshots`
+    : '';
+
+  console.log(`\nShoTest visuals: ${summary.changed} changed, ${summary.unchanged} unchanged across ${summary.passed} passed test(s)${noScreenshotsText}`);
+  if (summary.changed > 0) console.log('Run "npx shotest review" to review and accept visual changes');
+  return summary.changed > 0;
 }
 
 if (firstArg === 'review') {
@@ -124,7 +138,10 @@ if (result.error) {
 }
 
 if (playwrightArgs[0] === 'test') {
-  printVisualSummary();
+  const hasVisualChanges = printVisualSummary();
+  if ((result.status ?? 0) === 0 && hasVisualChanges) {
+    process.exit(1);
+  }
 }
 
 process.exit(result.status ?? 0);

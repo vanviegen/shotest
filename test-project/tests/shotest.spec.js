@@ -82,3 +82,12 @@ test('covers demo helpers in non-video mode', async ({ page }) => {
 
   await screenshot(page, 'demo-final');
 });
+
+test('passes without screenshots when only using plain page methods', async ({ page }) => {
+  await page.goto('/');
+
+  const title = await page.title();
+  if (title !== 'ShoTest Test Project') {
+    throw new Error(`Expected page title to be "ShoTest Test Project", got ${JSON.stringify(title)}`);
+  }
+});
