@@ -85,6 +85,8 @@ This should output screenshots and HTML snapshots for each step to the default P
 
 The `shotest` command forwards arguments to Playwright, so `npx shotest test --ui` maps to `playwright test --ui`.
 
+When the `--fail-on-visual-changes` flag is passed, ShoTest exits with a non-zero code if any visual changes compared to the accepted baseline in `test-accepted/` (or `$SHOTEST_ACCEPTED_DIR`) are detected, even if the test assertions pass. This allows you to enforce visual consistency in your CI pipeline.
+
 ## Reviewing and accepting visual changes
 
 In order to review test results, compare changes against the baseline, and accept intentional changes, run the ShoTest review server:

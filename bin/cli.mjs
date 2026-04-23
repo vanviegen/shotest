@@ -7,6 +7,11 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const argv = process.argv.slice(2);
+let failOnVisualChanges = false;
+if (argv.indexOf('--fail-on-visual-changes') >= 0) {
+  failOnVisualChanges = true;
+  argv = argv.filter((arg) => arg !== '--fail-on-visual-changes');
+}
 const firstArg = argv[0];
 
 function hashFile(filePath) {
@@ -138,7 +143,7 @@ if (result.error) {
 
 if (argv[0] === 'test') {
   const hasVisualChanges = printVisualSummary();
-  if ((result.status ?? 0) === 0 && hasVisualChanges) {
+  if ((result.status ?? 0) === 0 && hasVisualChanges && failOnVisualChanges) {
     process.exit(1);
   }
 }
