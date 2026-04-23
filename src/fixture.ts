@@ -178,85 +178,31 @@ const OVERLAY_STYLE = `
     .shotest-overlay.banner.success { border-top-color: #28a745 !important; }
 `;
 
-export async function waitForVisualStability(page: Page, timeoutMs: number = 400) {
-    await page.waitForLoadState('domcontentloaded').catch(() => { });
-    await page.waitForLoadState('networkidle', { timeout: Math.min(timeoutMs, 250) }).catch(() => { });
-
-    await page.evaluate(async (timeout: number) => {
-        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-        const raf = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-
-        try {
-            if ('fonts' in document) {
-                await Promise.race([(document as any).fonts.ready, sleep(timeout)]);
-            }
-        } catch { }
-
-        try {
-            const pendingImages = Array.from(document.images)
-                .filter((img) => !img.complete)
-                .map((img) => new Promise((resolve) => {
-                    img.addEventListener('load', resolve, { once: true });
-                    img.addEventListener('error', resolve, { once: true });
-                }));
-            await Promise.race([Promise.all(pendingImages), sleep(timeout)]);
-        } catch { }
-
-        await new Promise<void>((resolve) => {
-            let done = false;
-            let idleTimer: ReturnType<typeof setTimeout> | undefined;
-
-            const finish = () => {
-                if (done) return;
-                done = true;
-                observer.disconnect();
-                if (idleTimer) clearTimeout(idleTimer);
-                resolve();
-            };
-
-            const observer = new MutationObserver(() => {
-                if (idleTimer) clearTimeout(idleTimer);
-                idleTimer = setTimeout(finish, 60);
-            });
-
-            observer.observe(document.documentElement, {
-                subtree: true,
-                childList: true,
-                attributes: true,
-                characterData: true,
-            });
-
-            idleTimer = setTimeout(finish, 60);
-            setTimeout(finish, timeout);
-        });
-
-        await raf();
-        await raf();
-    }, Math.max(120, timeoutMs)).catch(() => { });
-}
-
-async function waitForPageResources(page: Page, timeoutMs: number = 2500) {
-    const deadline = Date.now() + timeoutMs;
-
-    const waitWithRemainingTime = async (waiter: (remainingMs: number) => Promise<unknown>) => {
-        const remainingMs = deadline - Date.now();
-        if (remainingMs <= 0) return;
-        try {
-            await waiter(remainingMs);
-        } catch { }
-    };
-
-    await waitWithRemainingTime((remainingMs) => page.waitForLoadState('load', { timeout: remainingMs }));
-    await waitWithRemainingTime((remainingMs) => page.waitForFunction(() => {
-        if (document.readyState !== 'complete') return false;
-        const fonts = (document as Document & { fonts?: { status?: string } }).fonts;
-        return !fonts || fonts.status === 'loaded';
-    }, undefined, { timeout: remainingMs }));
-    await waitWithRemainingTime((remainingMs) => page.waitForLoadState('networkidle', { timeout: remainingMs }));
-}
-
-async function waitForRepaint(page: Page) {
-    await waitForVisualStability(page);
+/**
+ * Wait for the page to be visually stable enough to screenshot.
+ *
+ * Playwright already handles the heavy lifting — actionability waits gate every
+ * click/fill, web-first assertions auto-retry, and CSS animations/transitions
+ * are disabled globally by the injected overlay stylesheet. The only things
+ * left that can still cause a "wobbly" screenshot are:
+ *   1. Web fonts not yet loaded (text reflows mid-shot).
+ *   2. The browser not having flushed the latest layout to a frame.
+ *
+ * So: wait (briefly) for `document.fonts.ready`, then two rAFs to ensure the
+ * compositor has painted. Everything else (networkidle, MutationObserver idle
+ * loops, image-load polling) was redundant and slow.
+ */
+export async function waitForVisualStability(page: Page, timeoutMs: number = 500) {
+    await page.evaluate((timeout: number) => new Promise<void>((resolve) => {
+        const paint = () => requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        const fonts = (document as Document & { fonts?: { ready: Promise<unknown>; status?: string } }).fonts;
+        if (fonts && fonts.status !== 'loaded') {
+            const cap = setTimeout(paint, timeout);
+            fonts.ready.then(() => { clearTimeout(cap); paint(); }, () => paint());
+        } else {
+            paint();
+        }
+    }), timeoutMs).catch(() => { });
 }
 
 async function hideOverlay(page: Page) {
@@ -404,7 +350,7 @@ async function takeScreenshot(
     }
 
     if (!alreadyStable) {
-        await waitForRepaint(actualPage);
+        await waitForVisualStability(actualPage);
     }
 
     let flushedPendingNotices = false;
@@ -437,8 +383,7 @@ async function takeScreenshot(
 export async function screenshot(page: Page, name: string): Promise<void> {
     const loc = getCallerLocation();
     const stepStartTimeMs = Date.now();
-    await waitForPageResources(page);
-    await waitForRepaint(page);
+    await waitForVisualStability(page);
     const basePath = path.join(currentOutDir, name);
     const relFile = path.relative(process.cwd(), loc.file);
 
@@ -480,7 +425,6 @@ export async function splitIntoRoles<const Names extends readonly string[]>(page
 async function captureStep(basePath: string, page: Page): Promise<boolean> {
     let pngBuffer: Buffer;
     try {
-        await waitForPageResources(page);
         pngBuffer = await page.screenshot({ fullPage: false });
     } catch {
         return false; // page closed (e.g. test timed out)
@@ -520,20 +464,19 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             pendingFailureText = failureText;
             try {
                 await hideOverlay(actualPage);
-                await waitForVisualStability(actualPage, 250);
                 await actualLocator.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
                 const box = await actualLocator.boundingBox().catch(() => null);
                 if (!box) {
                     throw new Error(failureText);
                 }
                 await showOverlayCheck(actualPage, box, short);
-                await takeScreenshot(actualPage, true, loc, stepStartTimeMs);
+                await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
                 const result = await (actualLocator as any)[method](...args);
                 pendingFailureText = '';
                 return result;
             } catch (error: any) {
                 await showOverlayBanner(actualPage, failureText, 'error');
-                await takeScreenshot(actualPage, true, loc, stepStartTimeMs).catch(() => {});
+                await takeScreenshot(actualPage, false, loc, stepStartTimeMs).catch(() => {});
                 failureCaptured = true;
                 if (error.stack) {
                     error.stack = error.stack.split('\n')
@@ -555,7 +498,6 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         try {
             const result = await (actualLocator as any)._expect(method, options);
             await hideOverlay(actualPage);
-            await waitForVisualStability(actualPage, 200);
             await actualLocator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
             const box = await actualLocator.boundingBox().catch(() => null);
             if (box) {
@@ -563,12 +505,11 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             } else {
                 await showOverlayBanner(actualPage, label, 'info');
             }
-            await takeScreenshot(actualPage, true, loc, stepStartTimeMs);
+            await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
             pendingFailureText = '';
             return result;
         } catch (error: any) {
             await hideOverlay(actualPage);
-            await waitForVisualStability(actualPage, 120);
             await actualLocator.scrollIntoViewIfNeeded({ timeout: 500 }).catch(() => {});
             const box = await actualLocator.boundingBox().catch(() => null);
             if (box) {
@@ -576,7 +517,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             } else {
                 await showOverlayBanner(actualPage, failureText, 'error');
             }
-            await takeScreenshot(actualPage, true, loc, stepStartTimeMs).catch(() => {});
+            await takeScreenshot(actualPage, false, loc, stepStartTimeMs).catch(() => {});
             failureCaptured = true;
             throw error;
         }
@@ -588,7 +529,6 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         lastStepLocation = loc;
         await (actualLocator as any).waitFor(options);
         await hideOverlay(actualPage);
-        await waitForVisualStability(actualPage, 200);
         await actualLocator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
         const box = await actualLocator.boundingBox().catch(() => null);
         if (box) {
@@ -596,7 +536,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         } else {
             await showOverlayBanner(actualPage, 'waitFor', 'info');
         }
-        await takeScreenshot(actualPage, true, loc, stepStartTimeMs);
+        await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
     };
 
     const locatorReturning = ['locator', 'filter', 'nth', 'first', 'last', 'getByText', 'getByRole', 'getByPlaceholder', 'getByLabel', 'getByTestId', 'getByAltText', 'getByTitle'];
