@@ -111,19 +111,59 @@ function consoleTone(type) {
     return 'log';
 }
 
+function summarizeConsoleMessages(messages) {
+    const counts = {
+        error: 0,
+        warning: 0,
+        info: 0,
+        debug: 0,
+        log: 0,
+    };
+
+    for (const message of messages) {
+        counts[consoleTone(message.type)]++;
+    }
+
+    return ['error', 'warning', 'info', 'debug', 'log']
+        .filter((tone) => counts[tone] > 0)
+        .map((tone) => ({ tone, count: counts[tone] }));
+}
+
 function renderConsoleMessages(step) {
-    if (!step.consoleMessages || step.consoleMessages.length === 0) return;
-    A('div.console-messages', () => {
-        for (const message of step.consoleMessages) {
-            const tone = consoleTone(message.type);
-            A('div.console-message.' + tone, () => {
-                A('span.console-type #' + String(message.type || 'log'));
-                A('span.console-text #' + String(message.text || ''));
-                if (message.source) {
-                    A('div.console-source #' + message.source);
-                }
+    const messages = step.consoleMessages || [];
+    const summary = summarizeConsoleMessages(messages);
+
+    if (messages.length === 0) {
+        A('div.console-messages.empty', () => {
+            A('div.console-summary.empty', () => {
+                A('span.console-summary-part.none #no messages');
             });
-        }
+        });
+        return;
+    }
+
+    A('details.console-messages', () => {
+        A('summary.console-summary', () => {
+            summary.forEach((part, index) => {
+                if (index > 0) {
+                    A('span.console-summary-separator #|');
+                }
+                A('span.console-summary-part.' + part.tone + ' #' + part.count + ' ' + part.tone);
+            });
+        });
+
+        A('div.console-message-list', () => {
+            for (const message of messages) {
+                const tone = consoleTone(message.type);
+                A('div.console-message.' + tone, () => {
+                    A('span.console-type #' + String(message.type || 'log'));
+                    A('span.console-text #' + String(message.text || ''));
+                    if (message.source) {
+                        A('div.console-source #' + message.source);
+                    }
+                });
+            }
+        });
     });
 }
 

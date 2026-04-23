@@ -242,11 +242,75 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 
 .console-messages {
   margin-top: 10px;
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+.console-messages.empty {
+  border-color: rgba(255, 255, 255, 0.05);
+}
+.console-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fg2);
+}
+.console-messages summary {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.console-messages summary::-webkit-details-marker {
+  display: none;
+}
+.console-messages summary::before {
+  content: '▸';
+  color: var(--fg2);
+  transition: transform 120ms ease;
+}
+.console-messages[open] summary::before {
+  transform: rotate(90deg);
+}
+.console-messages[open] .console-summary {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.console-summary.empty {
+  color: var(--fg2);
+}
+.console-summary-part.none {
+  color: var(--fg2);
+}
+.console-summary-part.error {
+  color: #ffd7d7;
+}
+.console-summary-part.warning {
+  color: #ffe4c7;
+}
+.console-summary-part.info {
+  color: #d8efff;
+}
+.console-summary-part.debug {
+  color: #e2ddff;
+}
+.console-summary-part.log {
+  color: #d7deea;
+}
+.console-summary-separator {
+  color: var(--fg2);
+}
+.console-message-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 100%;
-  max-width: 100%;
+  padding: 8px;
 }
 .console-message {
   border-left: 3px solid var(--border);
