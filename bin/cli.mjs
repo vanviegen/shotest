@@ -124,9 +124,8 @@ if (firstArg === 'review') {
 
 const require = createRequire(import.meta.url);
 const cliPath = require.resolve('@playwright/test/cli');
-const playwrightArgs = argv.length === 0 ? ['test'] : argv;
 
-const result = spawnSync(process.execPath, [cliPath, ...playwrightArgs], {
+const result = spawnSync(process.execPath, [cliPath, ...argv], {
   stdio: 'inherit',
   cwd: process.cwd(),
   env: process.env,
@@ -137,7 +136,7 @@ if (result.error) {
   process.exit(1);
 }
 
-if (playwrightArgs[0] === 'test') {
+if (argv[0] === 'test') {
   const hasVisualChanges = printVisualSummary();
   if ((result.status ?? 0) === 0 && hasVisualChanges) {
     process.exit(1);

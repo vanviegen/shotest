@@ -78,7 +78,7 @@ Most common page and locator actions are wrapped so that a screenshot is taken a
 Run the tests using:
 
 ```sh
-npx shotest
+npx shotest test
 ```
 
 This should output screenshots and HTML snapshots for each step to the default Playwright per-test output directory under `test-results/`.
@@ -151,7 +151,7 @@ Demo mode is automatically activated when Playwright video recording is enabled 
 A convenient way to record demo videos for a run is to set `SHOTEST_VIDEO` to `on` when invoking ShoTest:
 
 ```sh
-SHOTEST_VIDEO=on npx shotest
+SHOTEST_VIDEO=on npx shotest test
 ```
 
 This uses Playwright's normal video output handling (which you can also enable through its `defineConfig`), so the videos are written to the standard per-test output directory under `test-results/`. 
@@ -237,4 +237,4 @@ For the review server:
 
 - `SHOTEST_OUTPUT_DIR`: Where to read test results (defaults to `test-results`)
 - `SHOTEST_ACCEPTED_DIR`: Where to store accepted baseline images (defaults to `test-accepted`)
-- `SHOTEST_PORT`: Web server TCP port (defaults to `3847`)
+- `SHOTEST_PORT`: Preferred web server TCP port (defaults to `3847`; if unavailable, ShoTest tries the next 9 ports)

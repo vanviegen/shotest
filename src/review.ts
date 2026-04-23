@@ -15,13 +15,14 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
-import type { TestManifest } from './fixture.ts';
+import type { ConsoleMessageInfo, TestManifest } from './fixture.ts';
 
 // ── Configuration ──────────────────────────────────────────────────
 
 const outputDir = process.env.SHOTEST_OUTPUT_DIR || 'test-results';
 const acceptedDir = process.env.SHOTEST_ACCEPTED_DIR || 'test-accepted';
-const port = parseInt(process.env.SHOTEST_PORT || '3847');
+const preferredPort = parseInt(process.env.SHOTEST_PORT || '3847');
+const maxPortAttempts = 10;
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const reviewUiPath = path.join(thisDir, '..', 'build', 'review-ui.html');
 
@@ -40,6 +41,7 @@ interface ImageEntry {
     source: string;
     duration: number | undefined;
     role: string | undefined;
+    consoleMessages: ConsoleMessageInfo[] | undefined;
 }
 
 interface AlignedPair {
@@ -48,6 +50,7 @@ interface AlignedPair {
     location: string;
     duration: number | undefined;
     role: string | undefined;
+    consoleMessages: ConsoleMessageInfo[] | undefined;
     changed: boolean;
 }
 
@@ -67,6 +70,7 @@ function alignImages(accepted: ImageEntry[], current: ImageEntry[]): AlignedPair
             location: imageEntry.source,
             duration: imageEntry.duration,
             role: currentEntry?.role ?? acceptedEntry?.role,
+            consoleMessages: currentEntry?.consoleMessages ?? acceptedEntry?.consoleMessages,
             changed,
         };
     }
@@ -217,6 +221,7 @@ function getTestDetails(testName: string): {
             source: s.source,
             duration: s.duration,
             role: s.role,
+            consoleMessages: s.consoleMessages,
         }));
 
     // Build accepted image entries
@@ -234,6 +239,7 @@ function getTestDetails(testName: string): {
                         source: s.source,
                         duration: s.duration,
                         role: s.role,
+                        consoleMessages: s.consoleMessages,
                     }));
             } catch { }
         } else {
@@ -249,6 +255,7 @@ function getTestDetails(testName: string): {
                         source: name,
                         duration: undefined,
                         role: undefined,
+                        consoleMessages: undefined,
                     };
                 });
         }
@@ -300,8 +307,10 @@ function serveJson(res: http.ServerResponse, data: any) {
     res.end(JSON.stringify(data));
 }
 
+let currentPort = preferredPort;
+
 const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
-    const url = new URL(req.url || '/', `http://localhost:${port}`);
+    const url = new URL(req.url || '/', `http://localhost:${currentPort}`);
     const pathname = url.pathname;
 
     // CORS for dev
@@ -365,7 +374,7 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
     res.end('Not found');
 });
 
-server.listen(port, () => {
+function announceServer(port: number) {
     const url = `http://localhost:${port}`;
     console.log(`\nShoTest Review: ${url}\n`);
 
@@ -376,4 +385,23 @@ server.listen(port, () => {
         else if (platform === 'darwin') execSync(`open ${url}`, { stdio: 'ignore' });
         else if (platform === 'win32') execSync(`start ${url}`, { stdio: 'ignore' });
     } catch { }
+}
+
+server.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code !== 'EADDRINUSE') {
+        throw error;
+    }
+
+    const nextPort = currentPort + 1;
+    if (nextPort >= preferredPort + maxPortAttempts) {
+        console.error(`ShoTest Review: could not bind to a port between ${preferredPort} and ${preferredPort + maxPortAttempts - 1}`);
+        process.exit(1);
+    }
+
+    currentPort = nextPort;
+    server.listen(currentPort);
+});
+
+server.listen(currentPort, () => {
+    announceServer(currentPort);
 });

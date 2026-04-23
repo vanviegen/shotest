@@ -303,6 +303,14 @@ export interface StepInfo {
     duration: number;
     /** Role name assigned via splitIntoRoles(page, ...) */
     role: string | undefined;
+    /** Console messages emitted since the previous screenshot step */
+    consoleMessages?: ConsoleMessageInfo[];
+}
+
+export interface ConsoleMessageInfo {
+    type: string;
+    text: string;
+    source?: string;
 }
 
 export interface TestManifest {
@@ -324,6 +332,7 @@ let lastScreenshotSeq = 0;
 let lastStepLocation: SourceLocation | null = null;
 let pendingFailureText = '';
 let pendingOverlayNotices: OverlayNotice[] = [];
+let pendingConsoleMessages: ConsoleMessageInfo[] = [];
 let failureCaptured = false;
 
 function setPageRole(page: Page, role: string): void {
@@ -333,6 +342,28 @@ function setPageRole(page: Page, role: string): void {
 
 function getPageRole(page: Page): string | undefined {
     return (page as any)._shotestRole;
+}
+
+function normalizeConsoleSource(source: { url?: string; lineNumber?: number; columnNumber?: number } | undefined): string | undefined {
+    const url = source?.url?.trim();
+    if (!url) return undefined;
+    const lineNumber = typeof source?.lineNumber === 'number' ? source.lineNumber + 1 : undefined;
+    const columnNumber = typeof source?.columnNumber === 'number' ? source.columnNumber + 1 : undefined;
+    const normalizedUrl = url.startsWith(process.cwd()) ? path.relative(process.cwd(), url) : url;
+    if (lineNumber && columnNumber) return `${normalizedUrl}:${lineNumber}:${columnNumber}`;
+    if (lineNumber) return `${normalizedUrl}:${lineNumber}`;
+    return normalizedUrl;
+}
+
+function drainPendingConsoleMessages(): ConsoleMessageInfo[] | undefined {
+    if (pendingConsoleMessages.length === 0) return undefined;
+    const messages = pendingConsoleMessages;
+    pendingConsoleMessages = [];
+    return messages;
+}
+
+function recordConsoleMessage(message: ConsoleMessageInfo): void {
+    pendingConsoleMessages.push(message);
 }
 
 async function takeScreenshot(
@@ -372,6 +403,7 @@ async function takeScreenshot(
         source: `${relFile}:${loc.line}`,
         duration: Math.max(0, Date.now() - stepStartTimeMs),
         role: getPageRole(actualPage),
+        consoleMessages: drainPendingConsoleMessages(),
     };
     currentSteps.push(step);
     return step;
@@ -394,6 +426,7 @@ export async function screenshot(page: Page, name: string): Promise<void> {
         source: `${relFile}:${loc.line}`,
         duration: Math.max(0, Date.now() - stepStartTimeMs),
         role: getPageRole(page),
+        consoleMessages: drainPendingConsoleMessages(),
     });
 }
 
@@ -590,6 +623,7 @@ export const test = baseTest.extend({
         lastStepLocation = null;
         pendingFailureText = '';
         pendingOverlayNotices = [];
+        pendingConsoleMessages = [];
         failureCaptured = false;
 
         fs.mkdirSync(outDir, { recursive: true });
@@ -608,14 +642,33 @@ export const test = baseTest.extend({
             else document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
         }, { isVideoMode: videoMode, videoCss: VIDEO_INIT_CSS, overlayCss: OVERLAY_STYLE });
 
-        actualPage.on('console', (...args: any[]) => console.log('Browser:', ...args));
-        actualPage.on('pageerror', err => console.error('BROWSER ERROR:', err.message));
+        actualPage.on('console', (msg) => {
+            const text = stripAnsi(msg.text());
+            const type = msg.type();
+            recordConsoleMessage({
+                type,
+                text,
+                source: normalizeConsoleSource(msg.location()),
+            });
+            console.log(`Browser ${type}: ${text}`);
+        });
+        actualPage.on('pageerror', (err) => {
+            const text = stripAnsi(String(err.stack || err.message || err));
+            recordConsoleMessage({ type: 'error', text });
+            console.error('BROWSER ERROR:', text);
+        });
 
         if (videoMode) {
             await use(actualPage);
         } else {
             const wrappedPage = wrapPage(actualPage);
             await use(wrappedPage);
+        }
+
+        if (pendingConsoleMessages.length > 0 && !videoMode) {
+            const pendingLoc = lastStepLocation || { file: testInfo.file, line: testInfo.line };
+            await hideOverlay(actualPage);
+            await takeScreenshot(actualPage, false, pendingLoc).catch(() => {});
         }
 
         // Determine error info

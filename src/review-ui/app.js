@@ -103,6 +103,30 @@ function renderRoleChrome(step) {
     });
 }
 
+function consoleTone(type) {
+    if (type === 'error' || type === 'assert') return 'error';
+    if (type === 'warning' || type === 'warn') return 'warning';
+    if (type === 'info') return 'info';
+    if (type === 'debug' || type === 'trace') return 'debug';
+    return 'log';
+}
+
+function renderConsoleMessages(step) {
+    if (!step.consoleMessages || step.consoleMessages.length === 0) return;
+    A('div.console-messages', () => {
+        for (const message of step.consoleMessages) {
+            const tone = consoleTone(message.type);
+            A('div.console-message.' + tone, () => {
+                A('span.console-type #' + String(message.type || 'log'));
+                A('span.console-text #' + String(message.text || ''));
+                if (message.source) {
+                    A('div.console-source #' + message.source);
+                }
+            });
+        }
+    });
+}
+
 A(() => {
     const wanted = routeTestName();
     if (!wanted) {
@@ -183,44 +207,48 @@ A(detailEl, () => {
                 const change = step.acceptedImage ? (step.currentImage ? (step.changed ? 'changed' : 'unchanged') : 'removed') : 'new';
                 A(`div.step.${change}`, () => {
                     renderRoleChrome(step);
-                    if (change === 'changed') {
-                        let mouseShowNew = A.proxy();
-                        function onMouseMove(event) {
-                            const box = event.currentTarget.getBoundingClientRect();
-                            mouseShowNew.value = event.clientX - box.left > box.width / 2;
-                        }
-                        function onMouseLeave() {
-                            mouseShowNew.value = undefined;
-                        }
-                        A(() => {
-                            console.log('showNew', mouseShowNew.value, state.showNew);
-                        });
-                        const showNew = A.derive(() => mouseShowNew.value ?? state.showNew);
-                        A('div.image-stage.compare-view', '$zoom=', state.scale, 'mousemove=', onMouseMove, 'mouseleave=', onMouseLeave, () => {
-                            A('img.compare-layer .visible', 'src=', '/image/accepted/' + encodeURIComponent(state.selected) + '/' + step.acceptedImage);
-                            A('img.compare-layer .visible=', showNew, 'src=', '/image/current/' + encodeURIComponent(state.selected) + '/' + step.currentImage);
-                        });
-                        A('div.label', () => {
-                            A('span #line ' + line + ' ');
-                            A('span #' + String.fromCharCode(8226) + ' ');
-                            A('span.duration.' + durationSeverity + ' #' + durationText + ' ');
-                            A('span #' + String.fromCharCode(8226) + ' ' + change + ' ' + String.fromCharCode(8226) + ' showing ' + (showNew.value ? 'current' : 'accepted'));
-                        });
-                    } else {
-                        const img = step.currentImage || step.acceptedImage;
-                        if (img) {
-                            const src = '/image/' + (step.currentImage ? 'current' : 'accepted') + '/' + encodeURIComponent(state.selected) + '/' + img;
-                            A('div.image-stage', '$zoom=', state.scale, () => {
-                                A('img src=', src);
+                    A('div.step-body', () => {
+                        if (change === 'changed') {
+                            let mouseShowNew = A.proxy();
+                            function onMouseMove(event) {
+                                const box = event.currentTarget.getBoundingClientRect();
+                                mouseShowNew.value = event.clientX - box.left > box.width / 2;
+                            }
+                            function onMouseLeave() {
+                                mouseShowNew.value = undefined;
+                            }
+                            A(() => {
+                                console.log('showNew', mouseShowNew.value, state.showNew);
                             });
+                            const showNew = A.derive(() => mouseShowNew.value ?? state.showNew);
+                            A('div.image-stage.compare-view', '$zoom=', state.scale, 'mousemove=', onMouseMove, 'mouseleave=', onMouseLeave, () => {
+                                A('img.compare-layer .visible', 'src=', '/image/accepted/' + encodeURIComponent(state.selected) + '/' + step.acceptedImage);
+                                A('img.compare-layer .visible=', showNew, 'src=', '/image/current/' + encodeURIComponent(state.selected) + '/' + step.currentImage);
+                            });
+                            A('div.label', () => {
+                                A('span #line ' + line + ' ');
+                                A('span #' + String.fromCharCode(8226) + ' ');
+                                A('span.duration.' + durationSeverity + ' #' + durationText + ' ');
+                                A('span #' + String.fromCharCode(8226) + ' ' + change + ' ' + String.fromCharCode(8226) + ' showing ' + (showNew.value ? 'current' : 'accepted'));
+                            });
+                            renderConsoleMessages(step);
+                        } else {
+                            const img = step.currentImage || step.acceptedImage;
+                            if (img) {
+                                const src = '/image/' + (step.currentImage ? 'current' : 'accepted') + '/' + encodeURIComponent(state.selected) + '/' + img;
+                                A('div.image-stage', '$zoom=', state.scale, () => {
+                                    A('img src=', src);
+                                });
+                            }
+                            A('div.label', () => {
+                                A('span #line ' + line + ' ');
+                                A('span #' + String.fromCharCode(8226) + ' ');
+                                A('span.duration.' + durationSeverity + ' #' + durationText + ' ');
+                                A('span #' + String.fromCharCode(8226) + ' ' + change);
+                            });
+                            renderConsoleMessages(step);
                         }
-                        A('div.label', () => {
-                            A('span #line ' + line + ' ');
-                            A('span #' + String.fromCharCode(8226) + ' ');
-                            A('span.duration.' + durationSeverity + ' #' + durationText + ' ');
-                            A('span #' + String.fromCharCode(8226) + ' ' + change);
-                        });
-                    }
+                    });
                 });
             }
         });

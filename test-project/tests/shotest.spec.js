@@ -91,3 +91,20 @@ test('passes without screenshots when only using plain page methods', async ({ p
     throw new Error(`Expected page title to be "ShoTest Test Project", got ${JSON.stringify(title)}`);
   }
 });
+
+test('captures browser console messages', async ({ page }) => {
+  await page.goto('/');
+
+  await page.evaluate(() => {
+    console.info('console info before increment');
+    console.warn('console warning before increment - this text is very long and should not cause the step box to grow beyond the width of the screenshot');
+  });
+
+  await page.getByRole('button', { name: 'Increment' }).click();
+
+  await page.evaluate(() => {
+    console.error('console error before final screenshot');
+  });
+
+  await screenshot(page, 'console-final');
+});
