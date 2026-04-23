@@ -127,6 +127,64 @@ interface TestSummary {
     hasChanges: boolean;
 }
 
+function loadCurrentImageEntries(testDir: string, manifest: TestManifest): ImageEntry[] {
+    return manifest.steps
+        .filter((step) => fs.existsSync(path.join(testDir, step.name + '.png')))
+        .map((step) => ({
+            name: step.name,
+            hash: hashFile(path.join(testDir, step.name + '.png')),
+            source: step.source,
+            duration: step.duration,
+            role: step.role,
+            consoleMessages: step.consoleMessages,
+        }));
+}
+
+function loadAcceptedImageEntries(expDir: string): ImageEntry[] {
+    if (!fs.existsSync(expDir)) {
+        return [];
+    }
+
+    const acceptedManifestPath = path.join(expDir, 'manifest.json');
+    if (fs.existsSync(acceptedManifestPath)) {
+        try {
+            const acceptedManifest: TestManifest = JSON.parse(fs.readFileSync(acceptedManifestPath, 'utf-8'));
+            return acceptedManifest.steps
+                .filter((step) => fs.existsSync(path.join(expDir, step.name + '.png')))
+                .map((step) => ({
+                    name: step.name,
+                    hash: hashFile(path.join(expDir, step.name + '.png')),
+                    source: step.source,
+                    duration: step.duration,
+                    role: step.role,
+                    consoleMessages: step.consoleMessages,
+                }));
+        } catch {
+            return [];
+        }
+    }
+
+    return fs.readdirSync(expDir)
+        .filter((file: string) => file.endsWith('.png') && file !== 'error.png')
+        .sort()
+        .map((file: string) => {
+            const name = file.replace('.png', '');
+            return {
+                name,
+                hash: hashFile(path.join(expDir, file)),
+                source: name,
+                duration: undefined,
+                role: undefined,
+                consoleMessages: undefined,
+            };
+        });
+}
+
+function hasVisualChanges(acceptedEntries: ImageEntry[], currentEntries: ImageEntry[]): boolean {
+    return alignImages(acceptedEntries, currentEntries)
+        .some((step) => step.changed || (!step.acceptedImage && step.currentImage) || (step.acceptedImage && !step.currentImage));
+}
+
 function getTests(): TestSummary[] {
     if (!fs.existsSync(outputDir)) return [];
 
@@ -140,7 +198,7 @@ function getTests(): TestSummary[] {
         let line = 0;
         let title = name;
         let status = 'unknown';
-        let steps: { name: string; source: string }[] = [];
+        let hasChanges = false;
 
         if (fs.existsSync(manifestPath)) {
             try {
@@ -149,43 +207,14 @@ function getTests(): TestSummary[] {
                 line = manifest.line;
                 title = manifest.title;
                 status = manifest.status;
-                steps = manifest.steps;
+
+                const testDir = path.join(outputDir, name);
+                const expDir = path.join(acceptedDir, name);
+                hasChanges = hasVisualChanges(
+                    loadAcceptedImageEntries(expDir),
+                    loadCurrentImageEntries(testDir, manifest),
+                );
             } catch { }
-        }
-
-        // Check for visual changes
-        const expDir = path.join(acceptedDir, name);
-        let hasChanges = false;
-
-        if (!fs.existsSync(expDir)) {
-            // No accepted dir = all images are new
-            hasChanges = steps.some((step) => fs.existsSync(path.join(outputDir, name, step.name + '.png')));
-        } else {
-            // Compare current and accepted images
-            const currentPngs = Array.from(new Set(steps
-                .filter((s) => fs.existsSync(path.join(outputDir, name, s.name + '.png')))
-                .map((s) => s.name)));
-            const acceptedPngs = fs.readdirSync(expDir)
-                .filter((f: string) => f.endsWith('.png') && f !== 'error.png')
-                .map((f: string) => f.replace('.png', ''))
-                .sort();
-
-            if (currentPngs.length !== acceptedPngs.length) {
-                hasChanges = true;
-            } else {
-                for (const pngName of currentPngs) {
-                    const currentFile = path.join(outputDir, name, pngName + '.png');
-                    const acceptedFile = path.join(expDir, pngName + '.png');
-                    if (!fs.existsSync(acceptedFile)) {
-                        hasChanges = true;
-                        break;
-                    }
-                    if (hashFile(currentFile) !== hashFile(acceptedFile)) {
-                        hasChanges = true;
-                        break;
-                    }
-                }
-            }
         }
 
         return { name, file, line, title, status, hasChanges };
@@ -212,54 +241,8 @@ function getTestDetails(testName: string): {
     const manifest: TestManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
     const expDir = path.join(acceptedDir, testName);
 
-    // Build current image entries
-    const currentEntries: ImageEntry[] = manifest.steps
-        .filter(s => fs.existsSync(path.join(testDir, s.name + '.png')))
-        .map(s => ({
-            name: s.name,
-            hash: hashFile(path.join(testDir, s.name + '.png')),
-            source: s.source,
-            duration: s.duration,
-            role: s.role,
-            consoleMessages: s.consoleMessages,
-        }));
-
-    // Build accepted image entries
-    let acceptedEntries: ImageEntry[] = [];
-    if (fs.existsSync(expDir)) {
-        const acceptedManifestPath = path.join(expDir, 'manifest.json');
-        if (fs.existsSync(acceptedManifestPath)) {
-            try {
-                const acceptedManifest: TestManifest = JSON.parse(fs.readFileSync(acceptedManifestPath, 'utf-8'));
-                acceptedEntries = acceptedManifest.steps
-                    .filter(s => fs.existsSync(path.join(expDir, s.name + '.png')))
-                    .map(s => ({
-                        name: s.name,
-                        hash: hashFile(path.join(expDir, s.name + '.png')),
-                        source: s.source,
-                        duration: s.duration,
-                        role: s.role,
-                        consoleMessages: s.consoleMessages,
-                    }));
-            } catch { }
-        } else {
-            // No manifest in accepted dir — build from files
-            acceptedEntries = fs.readdirSync(expDir)
-                .filter((f: string) => f.endsWith('.png') && f !== 'error.png')
-                .sort()
-                .map((f: string) => {
-                    const name = f.replace('.png', '');
-                    return {
-                        name,
-                        hash: hashFile(path.join(expDir, f)),
-                        source: name,
-                        duration: undefined,
-                        role: undefined,
-                        consoleMessages: undefined,
-                    };
-                });
-        }
-    }
+    const currentEntries = loadCurrentImageEntries(testDir, manifest);
+    const acceptedEntries = loadAcceptedImageEntries(expDir);
 
     const steps = alignImages(acceptedEntries, currentEntries);
     return { manifest, steps };
@@ -277,12 +260,9 @@ function acceptTest(testName: string): void {
     }
     fs.mkdirSync(expDir, { recursive: true });
 
-    // Copy current PNGs and manifest
-    const manifestPath = path.join(testDir, 'manifest.json');
-    if (fs.existsSync(manifestPath)) {
-        fs.copyFileSync(manifestPath, path.join(expDir, 'manifest.json'));
-    }
-
+    // Accepted baselines only need image files. Legacy accepted manifests are
+    // still supported when present, but we do not write them anymore because
+    // volatile metadata like durations causes unnecessary churn in git.
     const files = fs.readdirSync(testDir).filter((f: string) => f.endsWith('.png') && f !== 'error.png');
     for (const file of files) {
         fs.copyFileSync(path.join(testDir, file), path.join(expDir, file));
