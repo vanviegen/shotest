@@ -6,8 +6,7 @@
   "scripts": {
     "test": "npm run test:run",
     "test:run": "rm -rf test-results && SHOTEST_CAPTURE_HTML=false SHOTEST_DEMO=off shotest test",
-    "accept": "rm -rf test-accepted && node scripts/copy-accepted.mjs",
-    "postinstall": "node scripts/link-shotest.mjs"
+    "accept": "rm -rf test-accepted && node scripts/copy-accepted.mjs"
   },
   "devDependencies": {
     "shotest": "file:.."

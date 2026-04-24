@@ -179,16 +179,36 @@ function durationClass(duration?: number): 'unknown' | 'danger' | 'warn' | 'ok' 
   return 'ok';
 }
 
-function renderRoleChrome(step: ReviewStep): void {
-  if (!step.role) {
-    return;
+function roleToneClass(role: string): string {
+  let hash = 0;
+  for (let i = 0; i < role.length; i += 1) {
+    hash = ((hash << 5) - hash + role.charCodeAt(i)) | 0;
   }
+  return `tone-${Math.abs(hash) % 4}`;
+}
 
-  A('div.step-topbar', () => {
-    A('span.step-role-badge', () => {
-      A('span.role-label #role');
-      A(`span.role-name #${step.role}`);
-    });
+function renderStepMeta(
+  step: ReviewStep,
+  line: string,
+  durationText: string,
+  durationSeverity: ReturnType<typeof durationClass>,
+  change: StepChange,
+  showing?: 'accepted' | 'current',
+): void {
+  A('div.step-meta', () => {
+    A(`span.meta-fragment #line ${line}`);
+    A('span.meta-separator #•');
+    A(`span.meta-fragment.duration.${durationSeverity} #${durationText}`);
+    A('span.meta-separator #•');
+    A(`span.meta-fragment.change.${change} #${change}`);
+    if (showing) {
+      A('span.meta-separator #•');
+      A(`span.meta-fragment #showing ${showing}`);
+    }
+    if (step.role) {
+      A('span.meta-separator #•');
+      A(`span.step-role-inline.${roleToneClass(step.role)} #${step.role}`);
+    }
   });
 }
 
@@ -394,7 +414,6 @@ A(detailEl, () => {
         const change = getStepChange(step);
 
         A(`div.step.${change}`, () => {
-          renderRoleChrome(step);
           A('div.step-body', () => {
             if (change === 'changed') {
               const mouseShowNew = A.proxy<{ value?: boolean }>({ value: undefined });
@@ -413,19 +432,15 @@ A(detailEl, () => {
               }
 
               const showNew = A.derive(() => mouseShowNew.value ?? state.showNew);
+              renderStepMeta(step, line, durationText, durationSeverity, change, showNew.value ? 'current' : 'accepted');
               A('div.image-stage.compare-view', '$zoom=', state.scale, 'mousemove=', onMouseMove, 'mouseleave=', onMouseLeave, () => {
                 A('img.compare-layer .visible', 'src=', `/image/accepted/${encodeURIComponent(state.selected!)}${`/${step.acceptedImage!}`}`);
                 A('img.compare-layer .visible=', showNew, 'src=', `/image/current/${encodeURIComponent(state.selected!)}${`/${step.currentImage!}`}`);
               });
-              A('div.label', () => {
-                A(`span #line ${line} `);
-                A(`span #${String.fromCharCode(8226)} `);
-                A(`span.duration.${durationSeverity} #${durationText} `);
-                A(`span #${String.fromCharCode(8226)} ${change} ${String.fromCharCode(8226)} showing ${showNew.value ? 'current' : 'accepted'}`);
-              });
               renderConsoleMessages(step);
             } else {
               const imageName = step.currentImage || step.acceptedImage;
+              renderStepMeta(step, line, durationText, durationSeverity, change);
               if (imageName) {
                 const imageKind = step.currentImage ? 'current' : 'accepted';
                 const imageSrc = `/image/${imageKind}/${encodeURIComponent(state.selected!)}${`/${imageName}`}`;
@@ -433,12 +448,6 @@ A(detailEl, () => {
                   A('img src=', imageSrc);
                 });
               }
-              A('div.label', () => {
-                A(`span #line ${line} `);
-                A(`span #${String.fromCharCode(8226)} `);
-                A(`span.duration.${durationSeverity} #${durationText} `);
-                A(`span #${String.fromCharCode(8226)} ${change}`);
-              });
               renderConsoleMessages(step);
             }
           });
