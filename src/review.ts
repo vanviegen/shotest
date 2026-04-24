@@ -3,41 +3,35 @@
  *
  * A simple Node.js HTTP server that serves a review UI for comparing
  * test screenshots against accepted baselines.
- *
- * Usage:
- *   npx shotest
- *   node --experimental-strip-types shotest/src/review.ts [--port 3847]
  */
 
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
-import type { ConsoleMessageInfo, TestManifest } from './fixture.ts';
+import { areImagesEquivalent } from './visual-compare.js';
+import type { ConsoleMessageInfo, TestManifest } from './fixture.js';
 
 // ── Configuration ──────────────────────────────────────────────────
 
 const outputDir = process.env.SHOTEST_OUTPUT_DIR || 'test-results';
 const acceptedDir = process.env.SHOTEST_ACCEPTED_DIR || 'test-accepted';
-const preferredPort = parseInt(process.env.SHOTEST_PORT || '3847');
+const defaultPreferredPort = Number.parseInt(process.env.SHOTEST_PORT || '3847', 10);
 const maxPortAttempts = 10;
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
-const reviewUiPath = path.join(thisDir, '..', 'build', 'review-ui.html');
+const reviewUiPath = path.join(thisDir, '..', 'build.frontend', 'index.html');
 
-// ── Image hashing ──────────────────────────────────────────────────
-
-function hashFile(filePath: string): string {
-    const data = fs.readFileSync(filePath);
-    return crypto.createHash('sha256').update(data).digest('hex').slice(0, 16);
+export interface StartReviewServerOptions {
+    port?: number;
+    openBrowser?: boolean;
 }
 
 // ── Sequence alignment (Needleman-Wunsch) ──────────────────────────
 
 interface ImageEntry {
     name: string;
-    hash: string;
+    filePath: string;
     source: string;
     duration: number | undefined;
     role: string | undefined;
@@ -54,10 +48,9 @@ interface AlignedPair {
     changed: boolean;
 }
 
-function alignImages(accepted: ImageEntry[], current: ImageEntry[]): AlignedPair[] {
-    const m = accepted.length;
-    const n = current.length;
+const alignmentResyncLookahead = 12;
 
+async function alignImages(accepted: ImageEntry[], current: ImageEntry[]): Promise<AlignedPair[]> {
     function makeAlignedPair(
         acceptedEntry: ImageEntry | undefined,
         currentEntry: ImageEntry | undefined,
@@ -75,56 +68,72 @@ function alignImages(accepted: ImageEntry[], current: ImageEntry[]): AlignedPair
         };
     }
 
-    // DP table for edit distance
-    const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-    for (let i = 0; i <= m; i++) dp[i][0] = i;
-    for (let j = 0; j <= n; j++) dp[0][j] = j;
-
-    for (let i = 1; i <= m; i++) {
-        for (let j = 1; j <= n; j++) {
-            if (accepted[i - 1].hash === current[j - 1].hash) {
-                dp[i][j] = dp[i - 1][j - 1];
-            } else {
-                dp[i][j] = Math.min(
-                    dp[i - 1][j - 1] + 1, // substitute
-                    dp[i - 1][j] + 1,      // delete from accepted
-                    dp[i][j - 1] + 1,      // insert from current
-                );
+    function findNameAhead(entries: ImageEntry[], startIndex: number, name: string): number {
+        const endIndex = Math.min(entries.length, startIndex + alignmentResyncLookahead + 1);
+        for (let index = startIndex + 1; index < endIndex; index++) {
+            if (entries[index].name === name) {
+                return index;
             }
         }
+        return -1;
     }
 
-    // Traceback
     const result: AlignedPair[] = [];
-    let i = m, j = n;
-    while (i > 0 || j > 0) {
-        if (i > 0 && j > 0 && accepted[i - 1].hash === current[j - 1].hash) {
-            result.unshift(makeAlignedPair(accepted[i - 1], current[j - 1], false));
-            i--; j--;
-        } else if (i > 0 && j > 0 && dp[i][j] === dp[i - 1][j - 1] + 1) {
-            result.unshift(makeAlignedPair(accepted[i - 1], current[j - 1], true));
-            i--; j--;
-        } else if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
-            result.unshift(makeAlignedPair(accepted[i - 1], undefined, true));
-            i--;
-        } else {
-            result.unshift(makeAlignedPair(undefined, current[j - 1], true));
-            j--;
+    let acceptedIndex = 0;
+    let currentIndex = 0;
+
+    while (acceptedIndex < accepted.length || currentIndex < current.length) {
+        const acceptedEntry = accepted[acceptedIndex];
+        const currentEntry = current[currentIndex];
+
+        if (!acceptedEntry) {
+            result.push(makeAlignedPair(undefined, currentEntry, true));
+            currentIndex++;
+            continue;
+        }
+
+        if (!currentEntry) {
+            result.push(makeAlignedPair(acceptedEntry, undefined, true));
+            acceptedIndex++;
+            continue;
+        }
+
+        if (acceptedEntry.name === currentEntry.name) {
+            result.push(makeAlignedPair(
+                acceptedEntry,
+                currentEntry,
+                !(await areImagesEquivalent(acceptedEntry.filePath, currentEntry.filePath)),
+            ));
+            acceptedIndex++;
+            currentIndex++;
+            continue;
+        }
+
+        const nextCurrentMatch = findNameAhead(current, currentIndex, acceptedEntry.name);
+        const nextAcceptedMatch = findNameAhead(accepted, acceptedIndex, currentEntry.name);
+
+        if (nextCurrentMatch === -1 && nextAcceptedMatch === -1) {
+            result.push(makeAlignedPair(acceptedEntry, currentEntry, true));
+            acceptedIndex++;
+            currentIndex++;
+            continue;
+        }
+
+        if (nextCurrentMatch !== -1 && (nextAcceptedMatch === -1 || nextCurrentMatch - currentIndex <= nextAcceptedMatch - acceptedIndex)) {
+            while (currentIndex < nextCurrentMatch) {
+                result.push(makeAlignedPair(undefined, current[currentIndex], true));
+                currentIndex++;
+            }
+            continue;
+        }
+
+        while (acceptedIndex < nextAcceptedMatch) {
+            result.push(makeAlignedPair(accepted[acceptedIndex], undefined, true));
+            acceptedIndex++;
         }
     }
 
     return result;
-}
-
-// ── API handlers ───────────────────────────────────────────────────
-
-interface TestSummary {
-    name: string;
-    file: string;
-    line: number;
-    title: string;
-    status: string;
-    hasChanges: boolean;
 }
 
 function loadCurrentImageEntries(testDir: string, manifest: TestManifest): ImageEntry[] {
@@ -132,7 +141,7 @@ function loadCurrentImageEntries(testDir: string, manifest: TestManifest): Image
         .filter((step) => fs.existsSync(path.join(testDir, step.name + '.png')))
         .map((step) => ({
             name: step.name,
-            hash: hashFile(path.join(testDir, step.name + '.png')),
+            filePath: path.join(testDir, step.name + '.png'),
             source: step.source,
             duration: step.duration,
             role: step.role,
@@ -153,7 +162,7 @@ function loadAcceptedImageEntries(expDir: string): ImageEntry[] {
                 .filter((step) => fs.existsSync(path.join(expDir, step.name + '.png')))
                 .map((step) => ({
                     name: step.name,
-                    hash: hashFile(path.join(expDir, step.name + '.png')),
+                    filePath: path.join(expDir, step.name + '.png'),
                     source: step.source,
                     duration: step.duration,
                     role: step.role,
@@ -171,7 +180,7 @@ function loadAcceptedImageEntries(expDir: string): ImageEntry[] {
             const name = file.replace('.png', '');
             return {
                 name,
-                hash: hashFile(path.join(expDir, file)),
+                filePath: path.join(expDir, file),
                 source: name,
                 duration: undefined,
                 role: undefined,
@@ -180,19 +189,44 @@ function loadAcceptedImageEntries(expDir: string): ImageEntry[] {
         });
 }
 
-function hasVisualChanges(acceptedEntries: ImageEntry[], currentEntries: ImageEntry[]): boolean {
-    return alignImages(acceptedEntries, currentEntries)
-        .some((step) => step.changed || (!step.acceptedImage && step.currentImage) || (step.acceptedImage && !step.currentImage));
+async function hasVisualChanges(acceptedEntries: ImageEntry[], currentEntries: ImageEntry[]): Promise<boolean> {
+    if (acceptedEntries.length !== currentEntries.length) {
+        return true;
+    }
+
+    for (let index = 0; index < acceptedEntries.length; index++) {
+        const acceptedEntry = acceptedEntries[index];
+        const currentEntry = currentEntries[index];
+
+        if (acceptedEntry.name !== currentEntry.name) {
+            return true;
+        }
+
+        if (!(await areImagesEquivalent(acceptedEntry.filePath, currentEntry.filePath))) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
-function getTests(): TestSummary[] {
+interface TestSummary {
+    name: string;
+    file: string;
+    line: number;
+    title: string;
+    status: string;
+    hasChanges: boolean;
+}
+
+async function getTests(): Promise<TestSummary[]> {
     if (!fs.existsSync(outputDir)) return [];
 
     const dirs = fs.readdirSync(outputDir, { withFileTypes: true })
         .filter((d: fs.Dirent) => d.isDirectory())
         .map((d: fs.Dirent) => d.name);
 
-    const tests = dirs.map((name: string) => {
+    const tests = await Promise.all(dirs.map(async (name: string) => {
         const manifestPath = path.join(outputDir, name, 'manifest.json');
         let file = name;
         let line = 0;
@@ -210,7 +244,7 @@ function getTests(): TestSummary[] {
 
                 const testDir = path.join(outputDir, name);
                 const expDir = path.join(acceptedDir, name);
-                hasChanges = hasVisualChanges(
+                hasChanges = await hasVisualChanges(
                     loadAcceptedImageEntries(expDir),
                     loadCurrentImageEntries(testDir, manifest),
                 );
@@ -218,7 +252,7 @@ function getTests(): TestSummary[] {
         }
 
         return { name, file, line, title, status, hasChanges };
-    });
+    }));
 
     return tests.sort((a, b) =>
         a.file.localeCompare(b.file) ||
@@ -227,10 +261,10 @@ function getTests(): TestSummary[] {
     );
 }
 
-function getTestDetails(testName: string): {
+async function getTestDetails(testName: string): Promise<{
     manifest: TestManifest | null;
     steps: AlignedPair[];
-} {
+}> {
     const testDir = path.join(outputDir, testName);
     const manifestPath = path.join(testDir, 'manifest.json');
 
@@ -244,7 +278,7 @@ function getTestDetails(testName: string): {
     const currentEntries = loadCurrentImageEntries(testDir, manifest);
     const acceptedEntries = loadAcceptedImageEntries(expDir);
 
-    const steps = alignImages(acceptedEntries, currentEntries);
+    const steps = await alignImages(acceptedEntries, currentEntries);
     return { manifest, steps };
 }
 
@@ -287,76 +321,27 @@ function serveJson(res: http.ServerResponse, data: any) {
     res.end(JSON.stringify(data));
 }
 
-let currentPort = preferredPort;
+function resolveReviewDirectory(dirPath: string): string {
+    return path.resolve(process.cwd(), dirPath);
+}
 
-const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
-    const url = new URL(req.url || '/', `http://localhost:${currentPort}`);
-    const pathname = url.pathname;
-
-    // CORS for dev
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    if (req.method === 'OPTIONS') {
-        res.writeHead(204);
-        res.end();
-        return;
+function assertReviewOutputDirExists(dirPath: string): void {
+    if (!fs.existsSync(dirPath)) {
+        throw new Error(`ShoTest Review: test-dir does not exist: ${dirPath}`);
     }
 
-    if (req.method === 'GET' && !pathname.startsWith('/api/') && !pathname.startsWith('/image/')) {
-        serveFile(res, reviewUiPath, 'text/html; charset=utf-8');
-        return;
+    if (!fs.statSync(dirPath).isDirectory()) {
+        throw new Error(`ShoTest Review: test-dir is not a directory: ${dirPath}`);
     }
+}
 
-    // API routes
-    if (pathname === '/api/tests') {
-        serveJson(res, getTests());
-        return;
-    }
-
-    const testDetailMatch = pathname.match(/^\/api\/test\/(.+)/);
-    if (testDetailMatch && req.method === 'GET') {
-        serveJson(res, getTestDetails(decodeURIComponent(testDetailMatch[1])));
-        return;
-    }
-
-    const acceptMatch = pathname.match(/^\/api\/accept\/(.+)/);
-    if (acceptMatch && req.method === 'POST') {
-        acceptTest(decodeURIComponent(acceptMatch[1]));
-        serveJson(res, { ok: true });
-        return;
-    }
-
-    // Serve images from test-results/ and test-accepted/
-    const imageMatch = pathname.match(/^\/image\/(current|accepted)\/(.+)/);
-    if (imageMatch) {
-        const baseDir = imageMatch[1] === 'current' ? outputDir : acceptedDir;
-        const filePath = path.join(baseDir, imageMatch[2]);
-        // Prevent directory traversal
-        const resolved = path.resolve(filePath);
-        const resolvedBase = path.resolve(baseDir);
-        if (!resolved.startsWith(resolvedBase)) {
-            res.writeHead(403);
-            res.end('Forbidden');
-            return;
-        }
-        const ext = path.extname(filePath).toLowerCase();
-        const mimeTypes: Record<string, string> = {
-            '.png': 'image/png',
-            '.html': 'text/html; charset=utf-8',
-            '.txt': 'text/plain; charset=utf-8',
-            '.json': 'application/json',
-        };
-        serveFile(res, filePath, mimeTypes[ext] || 'application/octet-stream');
-        return;
-    }
-
-    res.writeHead(404);
-    res.end('Not found');
-});
-
-function announceServer(port: number) {
+function announceServer(port: number, openBrowser: boolean) {
     const url = `http://localhost:${port}`;
     console.log(`\nShoTest Review: ${url}\n`);
+
+    if (!openBrowser) {
+        return;
+    }
 
     // Try to open browser
     try {
@@ -367,21 +352,115 @@ function announceServer(port: number) {
     } catch { }
 }
 
-server.on('error', (error: NodeJS.ErrnoException) => {
-    if (error.code !== 'EADDRINUSE') {
-        throw error;
-    }
+export function startReviewServer(options: StartReviewServerOptions = {}): Promise<http.Server> {
+    const preferredPort = options.port ?? defaultPreferredPort;
+    const openBrowser = options.openBrowser ?? true;
+    const resolvedOutputDir = resolveReviewDirectory(outputDir);
+    const resolvedAcceptedDir = resolveReviewDirectory(acceptedDir);
 
-    const nextPort = currentPort + 1;
-    if (nextPort >= preferredPort + maxPortAttempts) {
-        console.error(`ShoTest Review: could not bind to a port between ${preferredPort} and ${preferredPort + maxPortAttempts - 1}`);
-        process.exit(1);
-    }
+    assertReviewOutputDirExists(resolvedOutputDir);
 
-    currentPort = nextPort;
-    server.listen(currentPort);
-});
+    console.log(`ShoTest Review test-dir: ${resolvedOutputDir}`);
+    console.log(`ShoTest Review accepted-dir: ${resolvedAcceptedDir}`);
 
-server.listen(currentPort, () => {
-    announceServer(currentPort);
-});
+    let currentPort = preferredPort;
+
+    const server = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '/', `http://localhost:${currentPort}`);
+        const pathname = url.pathname;
+
+        try {
+            // CORS for dev
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+            if (req.method === 'OPTIONS') {
+                res.writeHead(204);
+                res.end();
+                return;
+            }
+
+            if (req.method === 'GET' && !pathname.startsWith('/api/') && !pathname.startsWith('/image/')) {
+                serveFile(res, reviewUiPath, 'text/html; charset=utf-8');
+                return;
+            }
+
+            if (pathname === '/api/tests') {
+                serveJson(res, await getTests());
+                return;
+            }
+
+            const testDetailMatch = pathname.match(/^\/api\/test\/(.+)/);
+            if (testDetailMatch && req.method === 'GET') {
+                serveJson(res, await getTestDetails(decodeURIComponent(testDetailMatch[1])));
+                return;
+            }
+
+            const acceptMatch = pathname.match(/^\/api\/accept\/(.+)/);
+            if (acceptMatch && req.method === 'POST') {
+                acceptTest(decodeURIComponent(acceptMatch[1]));
+                serveJson(res, { ok: true });
+                return;
+            }
+
+            const imageMatch = pathname.match(/^\/image\/(current|accepted)\/(.+)/);
+            if (imageMatch) {
+                const baseDir = imageMatch[1] === 'current' ? outputDir : acceptedDir;
+                const filePath = path.join(baseDir, imageMatch[2]);
+                const resolved = path.resolve(filePath);
+                const resolvedBase = path.resolve(baseDir);
+                if (!resolved.startsWith(resolvedBase)) {
+                    res.writeHead(403);
+                    res.end('Forbidden');
+                    return;
+                }
+                const ext = path.extname(filePath).toLowerCase();
+                const mimeTypes: Record<string, string> = {
+                    '.png': 'image/png',
+                    '.html': 'text/html; charset=utf-8',
+                    '.txt': 'text/plain; charset=utf-8',
+                    '.json': 'application/json',
+                };
+                serveFile(res, filePath, mimeTypes[ext] || 'application/octet-stream');
+                return;
+            }
+
+            res.writeHead(404);
+            res.end('Not found');
+        } catch (error) {
+            if (!res.headersSent) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+            }
+            res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+        }
+    });
+
+    return new Promise((resolve, reject) => {
+        function onListening() {
+            server.off('error', onError);
+            announceServer(currentPort, openBrowser);
+            resolve(server);
+        }
+
+        function onError(error: NodeJS.ErrnoException) {
+            if (error.code !== 'EADDRINUSE') {
+                server.off('listening', onListening);
+                reject(error);
+                return;
+            }
+
+            const nextPort = currentPort + 1;
+            if (nextPort >= preferredPort + maxPortAttempts) {
+                server.off('listening', onListening);
+                reject(new Error(`ShoTest Review: could not bind to a port between ${preferredPort} and ${preferredPort + maxPortAttempts - 1}`));
+                return;
+            }
+
+            currentPort = nextPort;
+            server.listen(currentPort);
+        }
+
+        server.on('error', onError);
+        server.once('listening', onListening);
+        server.listen(currentPort);
+    });
+}
