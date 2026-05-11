@@ -325,19 +325,9 @@ function resolveReviewDirectory(dirPath: string): string {
     return path.resolve(process.cwd(), dirPath);
 }
 
-function assertReviewOutputDirExists(dirPath: string): void {
-    if (!fs.existsSync(dirPath)) {
-        throw new Error(`ShoTest Review: test-dir does not exist: ${dirPath}`);
-    }
-
-    if (!fs.statSync(dirPath).isDirectory()) {
-        throw new Error(`ShoTest Review: test-dir is not a directory: ${dirPath}`);
-    }
-}
-
 function announceServer(port: number, openBrowser: boolean) {
     const url = `http://localhost:${port}`;
-    console.log(`\nShoTest Review: ${url}\n`);
+    console.log(`- uri: ${url}\n`);
 
     if (!openBrowser) {
         return;
@@ -358,10 +348,13 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
     const resolvedOutputDir = resolveReviewDirectory(outputDir);
     const resolvedAcceptedDir = resolveReviewDirectory(acceptedDir);
 
-    assertReviewOutputDirExists(resolvedOutputDir);
+    console.log('ShoTest review');
+    console.log(`- output-dir: ${resolvedOutputDir}`);
+    console.log(`- accepted-dir: ${resolvedAcceptedDir}`);
 
-    console.log(`ShoTest Review test-dir: ${resolvedOutputDir}`);
-    console.log(`ShoTest Review accepted-dir: ${resolvedAcceptedDir}`);
+    if (!fs.existsSync(resolvedOutputDir) || !fs.statSync(resolvedOutputDir).isDirectory()) {
+        throw new Error(`ShoTest Review: output-dir does not exist`);
+    }
 
     let currentPort = preferredPort;
 
