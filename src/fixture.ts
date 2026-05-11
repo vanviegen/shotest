@@ -292,6 +292,30 @@ function describeExpectation(method: string): string {
     return 'expect';
 }
 
+function describeLocatorInspection(method: string, args: any[]): string {
+    if (method === 'getAttribute' && typeof args[0] === 'string') {
+        return `getAttribute ${JSON.stringify(args[0])}`;
+    }
+    return method;
+}
+
+async function showLocatorStepOverlay(
+    actualLocator: Locator,
+    actualPage: Page,
+    text: string,
+    kind: 'check' | 'assert' = 'check',
+    fallbackType: OverlayBannerType = 'info',
+): Promise<void> {
+    await hideOverlay(actualPage);
+    await actualLocator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+    const box = await actualLocator.boundingBox().catch(() => null);
+    if (box) {
+        await showOverlayCheck(actualPage, box, text, kind);
+    } else {
+        await showOverlayBanner(actualPage, text, fallbackType);
+    }
+}
+
 // ── Screenshot capture ─────────────────────────────────────────────
 
 export interface StepInfo {
@@ -530,26 +554,12 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         pendingFailureText = failureText;
         try {
             const result = await (actualLocator as any)._expect(method, options);
-            await hideOverlay(actualPage);
-            await actualLocator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
-            const box = await actualLocator.boundingBox().catch(() => null);
-            if (box) {
-                await showOverlayCheck(actualPage, box, label, 'assert');
-            } else {
-                await showOverlayBanner(actualPage, label, 'info');
-            }
+            await showLocatorStepOverlay(actualLocator, actualPage, label, 'assert', 'info');
             await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
             pendingFailureText = '';
             return result;
         } catch (error: any) {
-            await hideOverlay(actualPage);
-            await actualLocator.scrollIntoViewIfNeeded({ timeout: 500 }).catch(() => {});
-            const box = await actualLocator.boundingBox().catch(() => null);
-            if (box) {
-                await showOverlayCheck(actualPage, box, failureText, 'assert');
-            } else {
-                await showOverlayBanner(actualPage, failureText, 'error');
-            }
+            await showLocatorStepOverlay(actualLocator, actualPage, failureText, 'assert', 'error');
             await takeScreenshot(actualPage, false, loc, stepStartTimeMs).catch(() => {});
             failureCaptured = true;
             throw error;
@@ -561,16 +571,33 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         const stepStartTimeMs = Date.now();
         lastStepLocation = loc;
         await (actualLocator as any).waitFor(options);
-        await hideOverlay(actualPage);
-        await actualLocator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
-        const box = await actualLocator.boundingBox().catch(() => null);
-        if (box) {
-            await showOverlayCheck(actualPage, box, 'waitFor');
-        } else {
-            await showOverlayBanner(actualPage, 'waitFor', 'info');
-        }
+        await showLocatorStepOverlay(actualLocator, actualPage, 'waitFor');
         await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
     };
+
+    const inspectionMethods = ['textContent', 'innerText', 'innerHTML', 'inputValue', 'getAttribute', 'isVisible', 'isHidden', 'isEnabled', 'isDisabled', 'isChecked', 'isEditable'];
+    for (const method of inspectionMethods) {
+        wrapped[method] = async function (...args: any[]) {
+            const loc = getCallerLocation();
+            const stepStartTimeMs = Date.now();
+            lastStepLocation = loc;
+            const label = describeLocatorInspection(method, args);
+            const failureText = `Locator ${actualLocator} failed ${label}`;
+            pendingFailureText = failureText;
+            try {
+                const result = await (actualLocator as any)[method](...args);
+                await showLocatorStepOverlay(actualLocator, actualPage, label);
+                await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+                pendingFailureText = '';
+                return result;
+            } catch (error) {
+                await showLocatorStepOverlay(actualLocator, actualPage, failureText, 'check', 'error');
+                await takeScreenshot(actualPage, false, loc, stepStartTimeMs).catch(() => {});
+                failureCaptured = true;
+                throw error;
+            }
+        };
+    }
 
     const locatorReturning = ['locator', 'filter', 'nth', 'first', 'last', 'getByText', 'getByRole', 'getByPlaceholder', 'getByLabel', 'getByTestId', 'getByAltText', 'getByTitle'];
     for (const method of locatorReturning) {
@@ -602,6 +629,16 @@ function wrapPage(actualPage: Page): Page {
         lastStepLocation = loc;
         await actualPage.goto(url, options);
         queueOverlayBanner('goto ' + url, 'info');
+    };
+
+    wrapped.waitForTimeout = async function (timeout: number) {
+        const loc = getCallerLocation();
+        const stepStartTimeMs = Date.now();
+        lastStepLocation = loc;
+        await actualPage.waitForTimeout(timeout);
+        await hideOverlay(actualPage);
+        await showOverlayBanner(actualPage, `waitForTimeout ${timeout}ms`, 'info');
+        await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
     };
 
     return wrapped;

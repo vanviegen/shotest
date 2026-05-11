@@ -27,7 +27,7 @@ export interface StartReviewServerOptions {
     openBrowser?: boolean;
 }
 
-// ── Sequence alignment (Needleman-Wunsch) ──────────────────────────
+// ── Image alignment ────────────────────────────────────────────────
 
 interface ImageEntry {
     name: string;
@@ -48,8 +48,6 @@ interface AlignedPair {
     changed: boolean;
 }
 
-const alignmentResyncLookahead = 12;
-
 async function alignImages(accepted: ImageEntry[], current: ImageEntry[]): Promise<AlignedPair[]> {
     function makeAlignedPair(
         acceptedEntry: ImageEntry | undefined,
@@ -68,71 +66,47 @@ async function alignImages(accepted: ImageEntry[], current: ImageEntry[]): Promi
         };
     }
 
-    function findNameAhead(entries: ImageEntry[], startIndex: number, name: string): number {
-        const endIndex = Math.min(entries.length, startIndex + alignmentResyncLookahead + 1);
-        for (let index = startIndex + 1; index < endIndex; index++) {
-            if (entries[index].name === name) {
-                return index;
-            }
-        }
-        return -1;
-    }
-
     const result: AlignedPair[] = [];
-    let acceptedIndex = 0;
-    let currentIndex = 0;
 
-    while (acceptedIndex < accepted.length || currentIndex < current.length) {
-        const acceptedEntry = accepted[acceptedIndex];
-        const currentEntry = current[currentIndex];
-
-        if (!acceptedEntry) {
-            result.push(makeAlignedPair(undefined, currentEntry, true));
-            currentIndex++;
-            continue;
+    let prefixLength = 0;
+    const sharedLength = Math.min(accepted.length, current.length);
+    while (prefixLength < sharedLength) {
+        if (!(await areImagesEquivalent(accepted[prefixLength].filePath, current[prefixLength].filePath))) {
+            break;
         }
-
-        if (!currentEntry) {
-            result.push(makeAlignedPair(acceptedEntry, undefined, true));
-            acceptedIndex++;
-            continue;
-        }
-
-        if (acceptedEntry.name === currentEntry.name) {
-            result.push(makeAlignedPair(
-                acceptedEntry,
-                currentEntry,
-                !(await areImagesEquivalent(acceptedEntry.filePath, currentEntry.filePath)),
-            ));
-            acceptedIndex++;
-            currentIndex++;
-            continue;
-        }
-
-        const nextCurrentMatch = findNameAhead(current, currentIndex, acceptedEntry.name);
-        const nextAcceptedMatch = findNameAhead(accepted, acceptedIndex, currentEntry.name);
-
-        if (nextCurrentMatch === -1 && nextAcceptedMatch === -1) {
-            result.push(makeAlignedPair(acceptedEntry, currentEntry, true));
-            acceptedIndex++;
-            currentIndex++;
-            continue;
-        }
-
-        if (nextCurrentMatch !== -1 && (nextAcceptedMatch === -1 || nextCurrentMatch - currentIndex <= nextAcceptedMatch - acceptedIndex)) {
-            while (currentIndex < nextCurrentMatch) {
-                result.push(makeAlignedPair(undefined, current[currentIndex], true));
-                currentIndex++;
-            }
-            continue;
-        }
-
-        while (acceptedIndex < nextAcceptedMatch) {
-            result.push(makeAlignedPair(accepted[acceptedIndex], undefined, true));
-            acceptedIndex++;
-        }
+        result.push(makeAlignedPair(accepted[prefixLength], current[prefixLength], false));
+        prefixLength++;
     }
 
+    let acceptedTail = accepted.length - 1;
+    let currentTail = current.length - 1;
+    const suffix: AlignedPair[] = [];
+    while (acceptedTail >= prefixLength && currentTail >= prefixLength) {
+        if (!(await areImagesEquivalent(accepted[acceptedTail].filePath, current[currentTail].filePath))) {
+            break;
+        }
+        suffix.push(makeAlignedPair(accepted[acceptedTail], current[currentTail], false));
+        acceptedTail--;
+        currentTail--;
+    }
+
+    const acceptedMiddle = accepted.slice(prefixLength, acceptedTail + 1);
+    const currentMiddle = current.slice(prefixLength, currentTail + 1);
+    const changedPairs = Math.min(acceptedMiddle.length, currentMiddle.length);
+
+    for (let index = 0; index < changedPairs; index++) {
+        result.push(makeAlignedPair(acceptedMiddle[index], currentMiddle[index], true));
+    }
+
+    for (let index = changedPairs; index < acceptedMiddle.length; index++) {
+        result.push(makeAlignedPair(acceptedMiddle[index], undefined, true));
+    }
+
+    for (let index = changedPairs; index < currentMiddle.length; index++) {
+        result.push(makeAlignedPair(undefined, currentMiddle[index], true));
+    }
+
+    result.push(...suffix.reverse());
     return result;
 }
 
@@ -154,60 +128,25 @@ function loadAcceptedImageEntries(expDir: string): ImageEntry[] {
         return [];
     }
 
-    const acceptedManifestPath = path.join(expDir, 'manifest.json');
-    if (fs.existsSync(acceptedManifestPath)) {
-        try {
-            const acceptedManifest: TestManifest = JSON.parse(fs.readFileSync(acceptedManifestPath, 'utf-8'));
-            return acceptedManifest.steps
-                .filter((step) => fs.existsSync(path.join(expDir, step.name + '.png')))
-                .map((step) => ({
-                    name: step.name,
-                    filePath: path.join(expDir, step.name + '.png'),
-                    source: step.source,
-                    duration: step.duration,
-                    role: step.role,
-                    consoleMessages: step.consoleMessages,
-                }));
-        } catch {
-            return [];
-        }
-    }
-
     return fs.readdirSync(expDir)
         .filter((file: string) => file.endsWith('.png') && file !== 'error.png')
         .sort()
         .map((file: string) => {
             const name = file.replace('.png', '');
             return {
-                name,
-                filePath: path.join(expDir, file),
-                source: name,
-                duration: undefined,
-                role: undefined,
-                consoleMessages: undefined,
+            name,
+            filePath: path.join(expDir, file),
+            source: name,
+            duration: undefined,
+            role: undefined,
+            consoleMessages: undefined,
             };
         });
 }
 
 async function hasVisualChanges(acceptedEntries: ImageEntry[], currentEntries: ImageEntry[]): Promise<boolean> {
-    if (acceptedEntries.length !== currentEntries.length) {
-        return true;
-    }
-
-    for (let index = 0; index < acceptedEntries.length; index++) {
-        const acceptedEntry = acceptedEntries[index];
-        const currentEntry = currentEntries[index];
-
-        if (acceptedEntry.name !== currentEntry.name) {
-            return true;
-        }
-
-        if (!(await areImagesEquivalent(acceptedEntry.filePath, currentEntry.filePath))) {
-            return true;
-        }
-    }
-
-    return false;
+    const steps = await alignImages(acceptedEntries, currentEntries);
+    return steps.some((step) => step.changed || !step.acceptedImage || !step.currentImage);
 }
 
 interface TestSummary {
@@ -295,9 +234,6 @@ function acceptTest(testName: string): void {
     }
     fs.mkdirSync(expDir, { recursive: true });
 
-    // Accepted baselines only need image files. Legacy accepted manifests are
-    // still supported when present, but we do not write them anymore because
-    // volatile metadata like durations causes unnecessary churn in git.
     const files = fs.readdirSync(testDir).filter((f: string) => f.endsWith('.png') && f !== 'error.png');
     for (const file of files) {
         fs.copyFileSync(path.join(testDir, file), path.join(expDir, file));

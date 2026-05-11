@@ -108,3 +108,26 @@ test('captures browser console messages', async ({ page }) => {
 
   await screenshot(page, 'console-final');
 });
+
+test('captures screenshots for locator reads and timed waits', async ({ page }) => {
+  await page.goto('/');
+
+  await page.evaluate(() => {
+    const countValue = document.getElementById('count-value');
+    if (!countValue) {
+      throw new Error('Missing #count-value test element');
+    }
+    countValue.textContent = 'before';
+    window.setTimeout(() => {
+      countValue.textContent = 'after';
+    }, 50);
+  });
+
+  const value = page.locator('#count-value').first();
+  const before = (await value.textContent())?.trim() ?? '';
+  await page.waitForTimeout(120);
+  const after = (await value.textContent())?.trim() ?? '';
+
+  expect(before).toBe('before');
+  expect(after).toBe('after');
+});
