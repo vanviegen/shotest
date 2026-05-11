@@ -3,6 +3,7 @@ import * as route from 'aberdeen/route';
 
 type ConsoleTone = 'error' | 'warning' | 'info' | 'debug' | 'log';
 type StepChange = 'changed' | 'unchanged' | 'removed' | 'new';
+type CompareMode = 'accepted' | 'current' | 'toggle';
 
 interface ConsoleMessageInfo {
   type?: string;
@@ -40,6 +41,7 @@ interface ReviewStep {
 interface TestDetail {
   manifest: TestManifest | null;
   steps: ReviewStep[];
+  canRevert: boolean;
 }
 
 interface ReviewState {
@@ -49,7 +51,8 @@ interface ReviewState {
   loadingTests: boolean;
   loadingDetail: boolean;
   scale: number;
-  showNew: boolean;
+  compareMode: CompareMode;
+  toggleShowNew: boolean;
 }
 
 const state = A.proxy<ReviewState>({
@@ -59,15 +62,16 @@ const state = A.proxy<ReviewState>({
   loadingTests: true,
   loadingDetail: false,
   scale: 0.8,
-  showNew: true,
+  compareMode: 'toggle',
+  toggleShowNew: true,
 });
 
 let pendingSelectionToken = 0;
 
 setInterval(() => {
-  state.showNew = false;
+  state.toggleShowNew = false;
   setTimeout(() => {
-    state.showNew = true;
+    state.toggleShowNew = true;
   }, 500);
 }, 1500);
 
@@ -113,6 +117,26 @@ async function fetchTests(): Promise<void> {
   }
 }
 
+function findNextUnacceptedTestName(startIndex: number): string | null {
+  if (state.tests.length === 0) {
+    return null;
+  }
+
+  for (let index = startIndex; index < state.tests.length; index += 1) {
+    if (state.tests[index].hasChanges) {
+      return state.tests[index].name;
+    }
+  }
+
+  for (let index = 0; index < Math.min(startIndex, state.tests.length); index += 1) {
+    if (state.tests[index].hasChanges) {
+      return state.tests[index].name;
+    }
+  }
+
+  return null;
+}
+
 async function selectTest(name: string, updateRoute = true): Promise<void> {
   if (updateRoute && route.current.path !== pathForTest(name)) {
     route.go(pathForTest(name));
@@ -134,13 +158,29 @@ async function selectTest(name: string, updateRoute = true): Promise<void> {
   } finally {
     if (token === pendingSelectionToken && state.selected === name) {
       state.loadingDetail = false;
+      requestAnimationFrame(() => {
+        reviewDetailEl.focus();
+      });
     }
   }
 }
 
 async function acceptChanges(name: string): Promise<void> {
+  const acceptedIndex = state.tests.findIndex((test) => test.name === name);
   await fetch(`/api/accept/${encodeURIComponent(name)}`, { method: 'POST' });
   deselectTest();
+  await fetchTests();
+
+  const nextTestName = findNextUnacceptedTestName(Math.max(0, acceptedIndex));
+  if (nextTestName) {
+    await selectTest(nextTestName);
+  }
+}
+
+async function revertChanges(name: string): Promise<void> {
+  state.detail = null;
+  state.loadingDetail = true;
+  await fetch(`/api/revert/${encodeURIComponent(name)}`, { method: 'POST' });
   await fetchTests();
 }
 
@@ -165,6 +205,100 @@ function formatDuration(duration?: number): string {
   }
   return `${Math.max(0, Math.round(duration))}ms`;
 }
+
+function selectedTestHasChanges(): boolean {
+  const steps = state.detail?.steps ?? [];
+  return steps.some((step) => step.changed || (!step.acceptedImage && step.currentImage) || (step.acceptedImage && !step.currentImage));
+}
+
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (target.isContentEditable) {
+    return true;
+  }
+
+  if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+    return true;
+  }
+
+  if (target instanceof HTMLInputElement) {
+    return !['button', 'checkbox', 'color', 'file', 'radio', 'range', 'reset', 'submit'].includes(target.type);
+  }
+
+  return false;
+}
+
+async function selectRelativeTest(offset: number): Promise<void> {
+  if (state.tests.length === 0) {
+    return;
+  }
+
+  const currentIndex = state.selected
+    ? state.tests.findIndex((test) => test.name === state.selected)
+    : (offset > 0 ? -1 : state.tests.length);
+  const nextIndex = Math.min(state.tests.length - 1, Math.max(0, currentIndex + offset));
+
+  if (nextIndex === currentIndex) {
+    return;
+  }
+
+  await selectTest(state.tests[nextIndex].name);
+}
+
+document.addEventListener('keydown', (event) => {
+  if (isTextEntryTarget(event.target)) {
+    return;
+  }
+
+  if (event.ctrlKey && !event.altKey && !event.metaKey) {
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      void selectRelativeTest(-1);
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      void selectRelativeTest(1);
+    }
+    return;
+  }
+
+  if (event.altKey || event.metaKey || event.ctrlKey) {
+    return;
+  }
+
+  const key = event.key.toLowerCase();
+
+  if (key === 'o') {
+    event.preventDefault();
+    state.compareMode = 'accepted';
+    return;
+  }
+
+  if (key === 'n') {
+    event.preventDefault();
+    state.compareMode = 'current';
+    return;
+  }
+
+  if (key === 't') {
+    event.preventDefault();
+    state.compareMode = 'toggle';
+    return;
+  }
+
+  if (key === 'a' && state.selected && selectedTestHasChanges()) {
+    event.preventDefault();
+    void acceptChanges(state.selected);
+    return;
+  }
+
+  if (key === 'r' && state.selected && state.detail?.canRevert) {
+    event.preventDefault();
+    void revertChanges(state.selected);
+  }
+});
 
 function durationClass(duration?: number): 'unknown' | 'danger' | 'warn' | 'ok' {
   if (typeof duration !== 'number' || !Number.isFinite(duration)) {
@@ -315,7 +449,12 @@ if (!listEl || !detailEl) {
   throw new Error('Review UI root elements are missing.');
 }
 
-A(listEl, () => {
+const testListEl = listEl;
+const reviewDetailEl = detailEl;
+
+reviewDetailEl.tabIndex = 0;
+
+A(testListEl, () => {
   A('div.list-toolbar display:flex', () => {
     A('h2 flex:1 #ShoTest');
     A(() => {
@@ -326,11 +465,30 @@ A(listEl, () => {
         });
       }
     });
-    A('label.scale-control', () => {
-      A('span #scale');
-      A('input type=range min=0.1 max=1 step=0.01 bind=', A.ref(state, 'scale'));
-      A('span.scale-value', () => {
-        A('#', `${Math.round(state.scale * 100)}%`);
+    A('div.toolbar-controls', () => {
+      A('label.scale-control', () => {
+        A('span #scale');
+        A('input type=range min=0.1 max=1 step=0.01 bind=', A.ref(state, 'scale'));
+        A('span.scale-value', () => {
+          A('#', `${Math.round(state.scale * 100)}%`);
+        });
+      });
+      A('div.view-mode-control', () => {
+        A('span.view-mode-label #image');
+        A('div.view-mode-buttons', () => {
+          const modeButtons: Array<{ mode: CompareMode; label: string; title: string }> = [
+            { mode: 'accepted', label: 'old', title: 'Show accepted image (o)' },
+            { mode: 'current', label: 'new', title: 'Show current image (n)' },
+            { mode: 'toggle', label: 'toggle', title: 'Toggle between accepted and current images (t)' },
+          ];
+
+          for (const button of modeButtons) {
+            const isActive = state.compareMode === button.mode;
+            A(`button.mode-btn${isActive ? '.active' : ''} type=button`, 'title=', button.title, 'aria-pressed=', String(isActive), 'click=', () => {
+              state.compareMode = button.mode;
+            }, `#${button.label}`);
+          }
+        });
       });
     });
   });
@@ -376,16 +534,16 @@ A(listEl, () => {
   });
 });
 
-A(detailEl, () => {
+A(reviewDetailEl, () => {
   A(() => {
     if (!state.selected) {
-      detailEl.className = 'empty';
+      reviewDetailEl.className = 'empty';
       A('span #Select a test from the list');
       return;
     }
 
     if (state.loadingDetail || !state.detail) {
-      detailEl.className = 'empty';
+      reviewDetailEl.className = 'empty';
       A('div.loading-panel', () => {
         A('span.loading-spinner.large');
         A('span #Loading test…');
@@ -393,7 +551,7 @@ A(detailEl, () => {
       return;
     }
 
-    detailEl.className = '';
+    reviewDetailEl.className = '';
 
     const detail = state.detail;
     const manifest = detail.manifest;
@@ -416,26 +574,13 @@ A(detailEl, () => {
         A(`div.step.${change}`, () => {
           A('div.step-body', () => {
             if (change === 'changed') {
-              const mouseShowNew = A.proxy<{ value?: boolean }>({ value: undefined });
-
-              function onMouseMove(event: MouseEvent): void {
-                const target = event.currentTarget;
-                if (!(target instanceof HTMLElement)) {
-                  return;
-                }
-                const box = target.getBoundingClientRect();
-                mouseShowNew.value = event.clientX - box.left > box.width / 2;
-              }
-
-              function onMouseLeave(): void {
-                mouseShowNew.value = undefined;
-              }
-
-              const showNew = A.derive(() => mouseShowNew.value ?? state.showNew);
-              renderStepMeta(step, line, durationText, durationSeverity, change, showNew.value ? 'current' : 'accepted');
-              A('div.image-stage.compare-view', '$zoom=', state.scale, 'mousemove=', onMouseMove, 'mouseleave=', onMouseLeave, () => {
-                A('img.compare-layer .visible', 'src=', `/image/accepted/${encodeURIComponent(state.selected!)}${`/${step.acceptedImage!}`}`);
-                A('img.compare-layer .visible=', showNew, 'src=', `/image/current/${encodeURIComponent(state.selected!)}${`/${step.currentImage!}`}`);
+              const showing = state.compareMode === 'toggle'
+                ? (state.toggleShowNew ? 'current' : 'accepted')
+                : state.compareMode;
+              renderStepMeta(step, line, durationText, durationSeverity, change, showing);
+              A('div.image-stage.compare-view', '$zoom=', state.scale, () => {
+                A(`img.compare-layer${showing === 'accepted' ? '.visible' : ''}`, 'src=', `/image/accepted/${encodeURIComponent(state.selected!)}${`/${step.acceptedImage!}`}`);
+                A(`img.compare-layer${showing === 'current' ? '.visible' : ''}`, 'src=', `/image/current/${encodeURIComponent(state.selected!)}${`/${step.currentImage!}`}`);
               });
               renderConsoleMessages(step);
             } else {
@@ -471,10 +616,19 @@ A(detailEl, () => {
       });
     }
 
-    const hasAnyChanges = steps.some((step) => step.changed || (!step.acceptedImage && step.currentImage) || (step.acceptedImage && !step.currentImage));
-    if (hasAnyChanges) {
-      A('button.accept-btn #Accept visuals', 'click=', () => {
-        void acceptChanges(state.selected!);
+    const hasAnyChanges = selectedTestHasChanges();
+    if (hasAnyChanges || detail.canRevert) {
+      A('div.detail-actions', () => {
+        if (hasAnyChanges) {
+          A('button.accept-btn type=button', 'title=', 'Accept visuals (a)', 'click=', () => {
+            void acceptChanges(state.selected!);
+          }, '#Accept visuals');
+        }
+        if (detail.canRevert) {
+          A('button.revert-btn type=button', 'title=', 'Revert accepted visuals from git (r)', 'click=', () => {
+            void revertChanges(state.selected!);
+          }, '#Revert accepted');
+        }
       });
     }
   });

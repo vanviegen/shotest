@@ -8,7 +8,7 @@
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { areImagesEquivalent } from './visual-compare.js';
 import type { ConsoleMessageInfo, TestManifest } from './fixture.js';
@@ -264,12 +264,13 @@ async function getTests(): Promise<TestSummary[]> {
 async function getTestDetails(testName: string): Promise<{
     manifest: TestManifest | null;
     steps: AlignedPair[];
+    canRevert: boolean;
 }> {
     const testDir = path.join(outputDir, testName);
     const manifestPath = path.join(testDir, 'manifest.json');
 
     if (!fs.existsSync(manifestPath)) {
-        return { manifest: null, steps: [] };
+        return { manifest: null, steps: [], canRevert: false };
     }
 
     const manifest: TestManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
@@ -279,7 +280,7 @@ async function getTestDetails(testName: string): Promise<{
     const acceptedEntries = loadAcceptedImageEntries(expDir);
 
     const steps = await alignImages(acceptedEntries, currentEntries);
-    return { manifest, steps };
+    return { manifest, steps, canRevert: hasAcceptedWorktreeChanges(testName) };
 }
 
 function acceptTest(testName: string): void {
@@ -300,6 +301,68 @@ function acceptTest(testName: string): void {
     const files = fs.readdirSync(testDir).filter((f: string) => f.endsWith('.png') && f !== 'error.png');
     for (const file of files) {
         fs.copyFileSync(path.join(testDir, file), path.join(expDir, file));
+    }
+}
+
+function getAcceptedGitPathspec(testName: string): string {
+    return path.relative(process.cwd(), path.resolve(path.join(acceptedDir, testName))).split(path.sep).join('/');
+}
+
+function acceptedPathExistsAtHead(pathspec: string): boolean {
+    try {
+        return execFileSync('git', ['ls-tree', '--name-only', 'HEAD', '--', pathspec], {
+            encoding: 'utf-8',
+        }).trim().length > 0;
+    } catch {
+        return false;
+    }
+}
+
+function listUntrackedAcceptedPaths(pathspec: string): string[] {
+    try {
+        return execFileSync('git', ['ls-files', '--others', '--exclude-standard', '--', pathspec], {
+            encoding: 'utf-8',
+        })
+            .split('\n')
+            .map((entry) => entry.trim())
+            .filter(Boolean);
+    } catch {
+        return [];
+    }
+}
+
+function hasAcceptedWorktreeChanges(testName: string): boolean {
+    const pathspec = getAcceptedGitPathspec(testName);
+
+    try {
+        return execFileSync('git', ['status', '--porcelain', '--', pathspec], {
+            encoding: 'utf-8',
+        }).trim().length > 0;
+    } catch {
+        return false;
+    }
+}
+
+function revertAcceptedTest(testName: string): void {
+    const expDir = path.join(acceptedDir, testName);
+    const pathspec = getAcceptedGitPathspec(testName);
+    const existsAtHead = acceptedPathExistsAtHead(pathspec);
+
+    try {
+        execFileSync('git', ['checkout', '--', pathspec], { stdio: 'ignore' });
+    } catch (error) {
+        if (existsAtHead) {
+            throw error;
+        }
+    }
+
+    if (!existsAtHead) {
+        fs.rmSync(expDir, { recursive: true, force: true });
+        return;
+    }
+
+    for (const untrackedPath of listUntrackedAcceptedPaths(pathspec)) {
+        fs.rmSync(path.resolve(process.cwd(), untrackedPath), { recursive: true, force: true });
     }
 }
 
@@ -391,6 +454,13 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
             const acceptMatch = pathname.match(/^\/api\/accept\/(.+)/);
             if (acceptMatch && req.method === 'POST') {
                 acceptTest(decodeURIComponent(acceptMatch[1]));
+                serveJson(res, { ok: true });
+                return;
+            }
+
+            const revertMatch = pathname.match(/^\/api\/revert\/(.+)/);
+            if (revertMatch && req.method === 'POST') {
+                revertAcceptedTest(decodeURIComponent(revertMatch[1]));
                 serveJson(res, { ok: true });
                 return;
             }
