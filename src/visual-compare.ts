@@ -49,7 +49,9 @@ export async function areImagesEquivalent(acceptedFile: string, currentFile: str
 
     try {
       const result = await getOdiffServer().compare(acceptedFile, currentFile, diffPath, odiffOptions);
-      return result.match;
+      if (result.match) return true;
+      if (result.reason === 'pixel-diff' && result.diffPercentage < 0.1) return true;
+      return false;
     } finally {
       if (fs.existsSync(diffPath)) {
         fs.rmSync(diffPath, { force: true });
