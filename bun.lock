@@ -11,8 +11,9 @@
       "devDependencies": {
         "@types/bun": "^1.3.12",
         "@types/node": "^25.0.3",
-        "aberdeen": "^1.9.0",
+        "aberdeen": "^1.18.1",
         "readme-tsdoc": "^1.1.7",
+        "staffa": "^0.7.0",
         "typescript": "^5.8.3",
         "vite": "^7.3.1",
         "vite-plugin-singlefile": "^2.3.0",
@@ -130,7 +131,7 @@
 
     "@types/node": ["@types/node@25.6.0", "", { "dependencies": { "undici-types": "~7.19.0" } }, "sha512-+qIYRKdNYJwY3vRCZMdJbPLJAtGjQBudzZzdzwQYkEPQd+PJGixUL5QfvCLDaULoLv+RhT3LDkwEfKaAkgSmNQ=="],
 
-    "aberdeen": ["aberdeen@1.10.1", "", { "bin": { "html-to-aberdeen": "html-to-aberdeen" } }, "sha512-8qpMEGgTl52fDCKIKfPkLDpUwtV8XnIKesl11KaaAxEvJgscQcVLY1EusivyKZ4PtS/TsQj9LjjC8R4zhh6n8Q=="],
+    "aberdeen": ["aberdeen@1.18.1", "", { "bin": { "html-to-aberdeen": "html-to-aberdeen" } }, "sha512-X1x0En9nrAopkL8NSUe8kcUyw4Rjsh+f7vLKJLjZkX9worwb0Brl3DKVHPQCjf7NO3RNTuW2TMnWr0WTAHnFRQ=="],
 
     "braces": ["braces@3.0.3", "", { "dependencies": { "fill-range": "^7.1.1" } }, "sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA=="],
 
@@ -166,7 +167,11 @@
 
     "rollup": ["rollup@4.60.1", "", { "dependencies": { "@types/estree": "1.0.8" }, "optionalDependencies": { "@rollup/rollup-android-arm-eabi": "4.60.1", "@rollup/rollup-android-arm64": "4.60.1", "@rollup/rollup-darwin-arm64": "4.60.1", "@rollup/rollup-darwin-x64": "4.60.1", "@rollup/rollup-freebsd-arm64": "4.60.1", "@rollup/rollup-freebsd-x64": "4.60.1", "@rollup/rollup-linux-arm-gnueabihf": "4.60.1", "@rollup/rollup-linux-arm-musleabihf": "4.60.1", "@rollup/rollup-linux-arm64-gnu": "4.60.1", "@rollup/rollup-linux-arm64-musl": "4.60.1", "@rollup/rollup-linux-loong64-gnu": "4.60.1", "@rollup/rollup-linux-loong64-musl": "4.60.1", "@rollup/rollup-linux-ppc64-gnu": "4.60.1", "@rollup/rollup-linux-ppc64-musl": "4.60.1", "@rollup/rollup-linux-riscv64-gnu": "4.60.1", "@rollup/rollup-linux-riscv64-musl": "4.60.1", "@rollup/rollup-linux-s390x-gnu": "4.60.1", "@rollup/rollup-linux-x64-gnu": "4.60.1", "@rollup/rollup-linux-x64-musl": "4.60.1", "@rollup/rollup-openbsd-x64": "4.60.1", "@rollup/rollup-openharmony-arm64": "4.60.1", "@rollup/rollup-win32-arm64-msvc": "4.60.1", "@rollup/rollup-win32-ia32-msvc": "4.60.1", "@rollup/rollup-win32-x64-gnu": "4.60.1", "@rollup/rollup-win32-x64-msvc": "4.60.1", "fsevents": "~2.3.2" }, "bin": "dist/bin/rollup" }, "sha512-VmtB2rFU/GroZ4oL8+ZqXgSA38O6GR8KSIvWmEFv63pQ0G6KaBH9s07PO8XTXP4vI+3UJUEypOfjkGfmSBBR0w=="],
 
+    "shotest": ["shotest@1.6.1", "", { "dependencies": { "@playwright/test": "^1.59.1", "odiff-bin": "^4.3.8" }, "bin": { "shotest": "build/cli.js" } }, "sha512-La9e9eZ9+w0csFbjHNkw5jBIGkg5kEmA1+PJ07gCXjfsEqOVoQmt8366Buixg1aQtZBA4hlabtClaYVHi4hdnQ=="],
+
     "source-map-js": ["source-map-js@1.2.1", "", {}, "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA=="],
+
+    "staffa": ["staffa@0.7.0", "", { "dependencies": { "shotest": "^1.6.1" }, "peerDependencies": { "aberdeen": "^1.18.1" } }, "sha512-dKGkz/n6FJQYJkZO4eGJv40rEE8UBmqaPqqHLbsS7EYlNCZp0pO6fbx8EUjqu/OITgvs03rZPfTa7HO4s5cjeQ=="],
 
     "tinyglobby": ["tinyglobby@0.2.16", "", { "dependencies": { "fdir": "^6.5.0", "picomatch": "^4.0.4" } }, "sha512-pn99VhoACYR8nFHhxqix+uvsbXineAasWm5ojXoN8xEwK5Kd3/TrhNn1wByuD52UxWRLy8pu+kRMniEi6Eq9Zg=="],
 
