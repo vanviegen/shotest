@@ -308,7 +308,11 @@ async function showLocatorStepOverlay(
 ): Promise<void> {
     await hideOverlay(actualPage);
     await actualLocator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
-    const box = await actualLocator.boundingBox().catch(() => null);
+    // The underlying operation has already completed here, so the element is
+    // either present now or never will be (e.g. after a successful negative
+    // assertion like not.toBeVisible). A bounded wait keeps the absent case
+    // from stalling for the full default timeout; we then fall back to a banner.
+    const box = await actualLocator.boundingBox({ timeout: 1000 }).catch(() => null);
     if (box) {
         await showOverlayCheck(actualPage, box, text, kind);
     } else {
@@ -702,10 +706,16 @@ export const test = baseTest.extend({
             await use(wrappedPage);
         }
 
-        if (pendingConsoleMessages.length > 0 && !videoMode) {
-            const pendingLoc = lastStepLocation || { file: testInfo.file, line: testInfo.line };
-            await hideOverlay(actualPage);
-            await takeScreenshot(actualPage, false, pendingLoc).catch(() => {});
+        // Console messages never trigger a screenshot. The screenshot set must be a
+        // function of the test's actions alone: a console message can arrive at any
+        // moment (e.g. a framework's perf-timing debug log fired by the last action's
+        // reactive update — more likely under load), so screenshotting on one would
+        // make the frame set flaky. Any messages still pending after the final action
+        // are folded into the last step's metadata so they aren't lost from the report.
+        const trailingMessages = drainPendingConsoleMessages();
+        if (trailingMessages && currentSteps.length > 0) {
+            const lastStep = currentSteps[currentSteps.length - 1];
+            lastStep.consoleMessages = [...(lastStep.consoleMessages ?? []), ...trailingMessages];
         }
 
         // Determine error info

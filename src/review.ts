@@ -110,7 +110,7 @@ async function alignImages(accepted: ImageEntry[], current: ImageEntry[]): Promi
     return result;
 }
 
-function loadCurrentImageEntries(testDir: string, manifest: TestManifest): ImageEntry[] {
+export function loadCurrentImageEntries(testDir: string, manifest: TestManifest): ImageEntry[] {
     return manifest.steps
         .filter((step) => fs.existsSync(path.join(testDir, step.name + '.png')))
         .map((step) => ({
@@ -123,7 +123,7 @@ function loadCurrentImageEntries(testDir: string, manifest: TestManifest): Image
         }));
 }
 
-function loadAcceptedImageEntries(expDir: string): ImageEntry[] {
+export function loadAcceptedImageEntries(expDir: string): ImageEntry[] {
     if (!fs.existsSync(expDir)) {
         return [];
     }
@@ -144,7 +144,7 @@ function loadAcceptedImageEntries(expDir: string): ImageEntry[] {
         });
 }
 
-async function hasVisualChanges(acceptedEntries: ImageEntry[], currentEntries: ImageEntry[]): Promise<boolean> {
+export async function hasVisualChanges(acceptedEntries: ImageEntry[], currentEntries: ImageEntry[]): Promise<boolean> {
     const steps = await alignImages(acceptedEntries, currentEntries);
     return steps.some((step) => step.changed || !step.acceptedImage || !step.currentImage);
 }

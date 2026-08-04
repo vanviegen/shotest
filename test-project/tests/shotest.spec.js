@@ -131,3 +131,17 @@ test('captures screenshots for locator reads and timed waits', async ({ page }) 
   expect(before).toBe('before');
   expect(after).toBe('after');
 });
+
+test('negative assertions on absent elements complete quickly', async ({ page }) => {
+  await page.goto('/');
+
+  // Each of these goes through the step-overlay path after the underlying
+  // operation succeeds. Since the element does not exist, the overlay must
+  // not wait the full default timeout for it (a regression here blows the
+  // 10s test timeout many times over).
+  const start = Date.now();
+  await expect(page.getByText('this text exists nowhere on the page')).not.toBeVisible();
+  await page.getByText('no such element either').waitFor({ state: 'hidden' });
+  expect(await page.getByText('still nothing').isHidden()).toBe(true);
+  expect(Date.now() - start).toBeLessThan(8000);
+});

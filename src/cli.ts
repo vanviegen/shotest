@@ -3,9 +3,13 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { startReviewServer } from './review.js';
+import {
+  startReviewServer,
+  loadCurrentImageEntries,
+  loadAcceptedImageEntries,
+  hasVisualChanges,
+} from './review.js';
 import type { TestManifest } from './fixture.js';
-import { areImagesEquivalent } from './visual-compare.js';
 
 interface VisualSummary {
   passed: number;
@@ -50,45 +54,22 @@ async function getVisualSummary(outputDir: string, acceptedDir: string): Promise
       continue;
     }
 
-    const currentSteps = Array.from(new Set(
-      (manifest.steps ?? [])
-        .filter((step) => existsSync(join(outputDir, testName, `${step.name}.png`)))
-        .map((step) => step.name),
-    ));
+    const currentEntries = loadCurrentImageEntries(join(outputDir, testName), manifest);
 
-    if (currentSteps.length === 0) {
+    if (currentEntries.length === 0) {
       noScreenshots++;
       continue;
     }
 
     passed++;
 
-    const acceptedTestDir = join(acceptedDir, testName);
-    let hasChanges = false;
-
-    if (!existsSync(acceptedTestDir)) {
-      hasChanges = true;
-    } else {
-      const acceptedSteps = readdirSync(acceptedTestDir)
-        .filter((fileName) => fileName.endsWith('.png') && fileName !== 'error.png')
-        .map((fileName) => fileName.slice(0, -4))
-        .sort();
-
-      if (currentSteps.length !== acceptedSteps.length) {
-        hasChanges = true;
-      } else {
-        for (const stepName of currentSteps) {
-          const acceptedFile = join(acceptedTestDir, `${stepName}.png`);
-          const currentFile = join(outputDir, testName, `${stepName}.png`);
-          if (!existsSync(acceptedFile) || !(await areImagesEquivalent(acceptedFile, currentFile))) {
-            hasChanges = true;
-            break;
-          }
-        }
-      }
-    }
-
-    if (hasChanges) {
+    // Reuse the review app's sequence-based alignment (match frames by position
+    // and compare their content) rather than matching by filename. The two used
+    // to diverge: renaming a step — e.g. when a source line shifts — left the
+    // image identical but changed its filename, which the filename match counted
+    // as a change while the review UI (correctly) did not.
+    const acceptedEntries = loadAcceptedImageEntries(join(acceptedDir, testName));
+    if (await hasVisualChanges(acceptedEntries, currentEntries)) {
       changed++;
     } else {
       unchanged++;
