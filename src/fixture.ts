@@ -394,6 +394,12 @@ function recordConsoleMessage(message: ConsoleMessageInfo): void {
     pendingConsoleMessages.push(message);
 }
 
+// 0→'a' … 25→'z', 26→'za' … 51→'zz', 52→'zza', … so that any number of
+// screenshots from a single source line keeps sorting lexicographically.
+function screenshotSuffix(seq: number): string {
+    return 'z'.repeat(Math.floor(seq / 26)) + String.fromCharCode(97 + (seq % 26));
+}
+
 async function takeScreenshot(
     actualPage: Page,
     alreadyStable: boolean = false,
@@ -417,7 +423,7 @@ async function takeScreenshot(
         flushedPendingNotices = await showOverlayBanners(actualPage, pendingOverlayNotices, 'prepend');
     }
 
-    const name = `${loc.line.toString().padStart(4, '0')}${String.fromCharCode(97 + lastScreenshotSeq)}`;
+    const name = `${loc.line.toString().padStart(4, '0')}${screenshotSuffix(lastScreenshotSeq)}`;
     const basePath = path.join(currentOutDir, name);
     const relFile = path.relative(process.cwd(), loc.file);
 

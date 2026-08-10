@@ -146,7 +146,9 @@ async function fetchTests(): Promise<void> {
       || a.line - b.line
       || a.title.localeCompare(b.title),
     );
-    state.tests = tests;
+    // Update in place (instead of replacing the array) so only tests that
+    // actually changed redraw — keeping the nav pane's DOM and scroll intact.
+    A.copy(state, 'tests', tests);
   } finally {
     state.loadingTests = false;
   }
@@ -199,6 +201,8 @@ function findNextUnacceptedTestName(startIndex: number): string | null {
 // React to URL changes: (re)load the selected test's detail.
 A(() => {
   const name = routeTestName();
+  // The shell isn't rebuilt on navigation, so reset the content scroll ourselves.
+  document.querySelector('.s-main main')?.scrollTo(0, 0);
   if (name) {
     void loadDetail(name);
   } else {
@@ -304,21 +308,23 @@ function statusIcon(test: TestSummary): () => void {
   return () => circleCheck({ size: '1.1em', color: 'var(--s-success)' });
 }
 
-function buildNavItems(): S.MenuEntry[] {
-  const items: S.MenuEntry[] = [];
-  let currentFile: string | null = null;
-  for (const test of state.tests) {
-    if (test.file !== currentFile) {
-      currentFile = test.file;
-      items.push(() => A('div font-size:0.8em font-weight:600 color:$s-muted mt:0.5rem mb:0.1rem #', test.file));
-    }
-    items.push({
-      label: test.title,
-      icon: statusIcon(test),
-      href: hrefForTest(test.name),
+// The whole test list is a single stable nav slot rendered with A.onEach, so a
+// tests refresh (e.g. after accepting) updates items in place instead of
+// rebuilding the sidebar — which would reset its scroll position.
+function drawNavEntries(): void {
+  A.onEach(state.tests, (test, index) => {
+    A(() => {
+      if (test.file !== (index > 0 ? state.tests[index - 1]?.file : undefined)) {
+        A('div font-size:0.8em font-weight:600 color:$s-muted mt:0.5rem mb:0.1rem #', test.file);
+      }
     });
-  }
-  return items;
+    const href = hrefForTest(test.name);
+    A('a.s-menu-item href=', href, () => {
+      A(() => { if (route.matchCurrent(href)) A('aria-current=page'); });
+      A('span.s-menu-icon', () => statusIcon(test)());
+      A('span rich=', test.title);
+    });
+  });
 }
 
 function renderStepMeta(step: ReviewStep, change: StepChange, showing?: 'accepted' | 'current'): void {
@@ -360,6 +366,27 @@ function imageSrc(kind: 'accepted' | 'current', name: string, image: string): st
   return `/image/${kind}/${encodeURIComponent(name)}/${image}`;
 }
 
+// Each browser window (role) gets its own subtle surface tint, so it's obvious
+// at a glance which window a screenshot came from. The first role keeps the
+// default surface; the others override the box's `--s-bg` (the derived tokens —
+// border, muted ink, gradient — follow automatically). Equal oklch lightness
+// and chroma keep all tints at the same visual weight. We're always in light
+// mode, so hard-coded light values are fine.
+const roleTints = [
+  '',
+  A.insertCss({ '&.s-s.neutral': '--s-bg: oklch(0.97 0.025 250);' }), // blue
+  A.insertCss({ '&.s-s.neutral': '--s-bg: oklch(0.97 0.025 80);' }), // amber
+  A.insertCss({ '&.s-s.neutral': '--s-bg: oklch(0.97 0.025 320);' }), // violet
+];
+
+function buildRoleTintMap(steps: ReviewStep[]): Map<string | undefined, string> {
+  const tints = new Map<string | undefined, string>();
+  for (const step of steps) {
+    if (!tints.has(step.role)) tints.set(step.role, roleTints[tints.size % roleTints.length]);
+  }
+  return tints;
+}
+
 // Status is shown as a token-coloured border on the neutral card surface.
 const borderForChange: Record<StepChange, string> = {
   changed: A.insertCss('border: 2px solid $s-warning;'),
@@ -368,10 +395,10 @@ const borderForChange: Record<StepChange, string> = {
   unchanged: '',
 };
 
-function renderStep(step: ReviewStep, name: string): void {
+function renderStep(step: ReviewStep, name: string, tint: string): void {
   const change = getStepChange(step);
   S.box({
-    attrs: `${borderForChange[change]} width:max-content max-width:100% mt:0`,
+    attrs: `${borderForChange[change]} ${tint} width:max-content max-width:100% mt:0`,
     contentAttrs: 'display:flex flex-direction:column align-items:stretch gap:0.5rem',
     content: () => {
       if (change === 'changed') {
@@ -423,8 +450,9 @@ function renderContent(): void {
     if (steps.length === 0) {
       A('div color:$s-muted #No screenshots taken');
     } else {
+      const roleTintMap = buildRoleTintMap(steps);
       A('div display:flex flex-wrap:wrap gap:1rem align-items:flex-start', () => {
-        for (const step of steps) renderStep(step, name);
+        for (const step of steps) renderStep(step, name, roleTintMap.get(step.role)!);
       });
     }
 
@@ -491,7 +519,7 @@ A(() => {
     icon: () => camera({ color: 'var(--s-primary)' }),
     title: 'ShoTest',
     subtitle: 'Screenshot review',
-    nav: { items: buildNavItems() },
+    nav: { items: [drawNavEntries] },
     navPosition: 'left',
     menu: renderToolbar,
     content: renderContent,
