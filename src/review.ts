@@ -11,6 +11,7 @@ import * as path from 'path';
 import { execFileSync, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { areImagesEquivalent } from './visual-compare.js';
+import { compressDirectoryToWebp } from './webp.js';
 import type { ConsoleMessageInfo, TestManifest } from './fixture.js';
 
 // ── Configuration ──────────────────────────────────────────────────
@@ -27,10 +28,30 @@ export interface StartReviewServerOptions {
     openBrowser?: boolean;
 }
 
+// ── Screenshot files ───────────────────────────────────────────────
+
+// Tests write PNGs (that is what Playwright hands us), accepted baselines are
+// recompressed to lossless WebP afterwards. Both are read back. A name exists in
+// both formats only while a background conversion is still working on it, and
+// there the PNG is the copy to trust: the WebP is written first and the PNG only
+// removed once it is on disk, so a PNG that is still around either predates its
+// WebP or outlived a conversion that a newer accept cancelled.
+const imageExtensions = ['.png', '.webp'];
+
+function isScreenshotFile(file: string): boolean {
+    const ext = path.extname(file).toLowerCase();
+    return imageExtensions.includes(ext) && path.basename(file, ext) !== 'error';
+}
+
+function findScreenshotFile(dir: string, name: string): string | undefined {
+    return imageExtensions.map((ext) => name + ext).find((file) => fs.existsSync(path.join(dir, file)));
+}
+
 // ── Image alignment ────────────────────────────────────────────────
 
 interface ImageEntry {
     name: string;
+    file: string;
     filePath: string;
     source: string;
     duration: number | undefined;
@@ -56,8 +77,8 @@ async function alignImages(accepted: ImageEntry[], current: ImageEntry[]): Promi
     ): AlignedPair {
         const imageEntry = currentEntry ?? acceptedEntry!;
         return {
-            acceptedImage: acceptedEntry ? acceptedEntry.name + '.png' : undefined,
-            currentImage: currentEntry ? currentEntry.name + '.png' : undefined,
+            acceptedImage: acceptedEntry?.file,
+            currentImage: currentEntry?.file,
             location: imageEntry.source,
             duration: imageEntry.duration,
             role: currentEntry?.role ?? acceptedEntry?.role,
@@ -111,16 +132,24 @@ async function alignImages(accepted: ImageEntry[], current: ImageEntry[]): Promi
 }
 
 export function loadCurrentImageEntries(testDir: string, manifest: TestManifest): ImageEntry[] {
-    return manifest.steps
-        .filter((step) => fs.existsSync(path.join(testDir, step.name + '.png')))
-        .map((step) => ({
+    const entries: ImageEntry[] = [];
+
+    for (const step of manifest.steps) {
+        const file = findScreenshotFile(testDir, step.name);
+        if (!file) continue;
+
+        entries.push({
             name: step.name,
-            filePath: path.join(testDir, step.name + '.png'),
+            file,
+            filePath: path.join(testDir, file),
             source: step.source,
             duration: step.duration,
             role: step.role,
             consoleMessages: step.consoleMessages,
-        }));
+        });
+    }
+
+    return entries;
 }
 
 export function loadAcceptedImageEntries(expDir: string): ImageEntry[] {
@@ -128,20 +157,27 @@ export function loadAcceptedImageEntries(expDir: string): ImageEntry[] {
         return [];
     }
 
-    return fs.readdirSync(expDir)
-        .filter((file: string) => file.endsWith('.png') && file !== 'error.png')
-        .sort()
-        .map((file: string) => {
-            const name = file.replace('.png', '');
-            return {
+    // A name can briefly exist as both .png and .webp, while a background
+    // conversion is running; collect names and let findScreenshotFile pick.
+    const names = new Set<string>();
+    for (const file of fs.readdirSync(expDir)) {
+        if (isScreenshotFile(file)) {
+            names.add(file.slice(0, -path.extname(file).length));
+        }
+    }
+
+    return [...names].sort().map((name: string) => {
+        const file = findScreenshotFile(expDir, name)!;
+        return {
             name,
+            file,
             filePath: path.join(expDir, file),
             source: name,
             duration: undefined,
             role: undefined,
             consoleMessages: undefined,
-            };
-        });
+        };
+    });
 }
 
 export async function hasVisualChanges(acceptedEntries: ImageEntry[], currentEntries: ImageEntry[]): Promise<boolean> {
@@ -222,11 +258,18 @@ async function getTestDetails(testName: string): Promise<{
     return { manifest, steps, canRevert: hasAcceptedWorktreeChanges(testName) };
 }
 
+// Bumped on every accept, so a conversion still running for an earlier accept of
+// the same test stops touching a directory that has since been replaced.
+const acceptGenerations = new Map<string, number>();
+
 function acceptTest(testName: string): void {
     const testDir = path.join(outputDir, testName);
     const expDir = path.join(acceptedDir, testName);
 
     if (!fs.existsSync(testDir)) return;
+
+    const generation = (acceptGenerations.get(expDir) ?? 0) + 1;
+    acceptGenerations.set(expDir, generation);
 
     // Clear existing accepted dir
     if (fs.existsSync(expDir)) {
@@ -234,10 +277,15 @@ function acceptTest(testName: string): void {
     }
     fs.mkdirSync(expDir, { recursive: true });
 
-    const files = fs.readdirSync(testDir).filter((f: string) => f.endsWith('.png') && f !== 'error.png');
+    const files = fs.readdirSync(testDir).filter(isScreenshotFile);
     for (const file of files) {
         fs.copyFileSync(path.join(testDir, file), path.join(expDir, file));
     }
+
+    // Baselines get committed, so shrink them — lossless, but slow enough that
+    // the review UI should not wait for it. Until a file is converted, the PNG
+    // copy above is what gets served and compared.
+    void compressDirectoryToWebp(expDir, () => acceptGenerations.get(expDir) !== generation);
 }
 
 function getAcceptedGitPathspec(testName: string): string {
@@ -412,14 +460,25 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
                     res.end('Forbidden');
                     return;
                 }
-                const ext = path.extname(filePath).toLowerCase();
+                // A background conversion may have replaced the file with its
+                // other format between listing and loading it; serve that instead
+                // of a 404.
+                let servePath = resolved;
+                if (!fs.existsSync(servePath) && isScreenshotFile(servePath)) {
+                    const dir = path.dirname(servePath);
+                    const alternate = findScreenshotFile(dir, path.basename(servePath, path.extname(servePath)));
+                    if (alternate) servePath = path.join(dir, alternate);
+                }
+
+                const ext = path.extname(servePath).toLowerCase();
                 const mimeTypes: Record<string, string> = {
                     '.png': 'image/png',
+                    '.webp': 'image/webp',
                     '.html': 'text/html; charset=utf-8',
                     '.txt': 'text/plain; charset=utf-8',
                     '.json': 'application/json',
                 };
-                serveFile(res, filePath, mimeTypes[ext] || 'application/octet-stream');
+                serveFile(res, servePath, mimeTypes[ext] || 'application/octet-stream');
                 return;
             }
 

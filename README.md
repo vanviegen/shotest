@@ -101,6 +101,8 @@ It serves a web app on localhost and attempts to open it in your default browser
 
 When you press the 'Accept visuals' button for a test, its output screenshots are copied to the `test-accepted` directory (configurable through `SHOTEST_ACCEPTED_DIR`), and become the new accepted baseline. It is recommended to commit changes to this directory to version control (unlike `test-results/`).
 
+Because baselines are committed, they are recompressed to lossless WebP (about half the size of the PNG, pixel for pixel identical) in the background right after accepting. Existing PNG baselines keep working, so there is no need to convert anything by hand.
+
 ## Multi-user tests
 
 ShoTest can label screenshots per browser page, which makes multi-user interaction tests practical to script and review.
