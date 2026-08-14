@@ -10,17 +10,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-
-type Sharp = (typeof import('sharp'))['default'];
-
-let sharpLoader: Promise<Sharp | null> | undefined;
-
-function loadSharp(): Promise<Sharp | null> {
-    return sharpLoader ??= import('sharp').then((module) => module.default).catch((error) => {
-        console.warn(`ShoTest: sharp is unavailable (${error instanceof Error ? error.message : String(error)}); accepted baselines stay PNG`);
-        return null;
-    });
-}
+import sharp from 'sharp';
 
 /**
  * Rewrite every PNG in `dir` as a lossless WebP, dropping the PNG once its WebP
@@ -34,11 +24,6 @@ export async function compressDirectoryToWebp(dir: string, isCancelled: () => bo
     } catch {
         return;
     }
-    if (pngFiles.length === 0) return;
-
-    const sharp = await loadSharp();
-    if (!sharp) return;
-
     for (const file of pngFiles) {
         if (isCancelled()) return;
 
