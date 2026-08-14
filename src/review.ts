@@ -192,16 +192,25 @@ interface TestSummary {
     title: string;
     status: string;
     hasChanges: boolean;
+    orphaned: boolean;
+}
+
+// Stands in for the source file of an orphaned baseline (which we have no way of
+// knowing), grouping them together at the bottom of the review app's test list.
+const orphanedGroupLabel = 'not in test-results/';
+
+function listTestDirectories(dir: string): string[] {
+    if (!fs.existsSync(dir)) return [];
+
+    return fs.readdirSync(dir, { withFileTypes: true })
+        .filter((d: fs.Dirent) => d.isDirectory())
+        .map((d: fs.Dirent) => d.name);
 }
 
 async function getTests(): Promise<TestSummary[]> {
-    if (!fs.existsSync(outputDir)) return [];
+    const currentNames = listTestDirectories(outputDir);
 
-    const dirs = fs.readdirSync(outputDir, { withFileTypes: true })
-        .filter((d: fs.Dirent) => d.isDirectory())
-        .map((d: fs.Dirent) => d.name);
-
-    const tests = await Promise.all(dirs.map(async (name: string) => {
+    const tests = await Promise.all(currentNames.map(async (name: string) => {
         const manifestPath = path.join(outputDir, name, 'manifest.json');
         let file = name;
         let line = 0;
@@ -226,10 +235,33 @@ async function getTests(): Promise<TestSummary[]> {
             } catch { }
         }
 
-        return { name, file, line, title, status, hasChanges };
+        return { name, file, line, title, status, hasChanges, orphaned: false };
     }));
 
+    // Baselines without a matching test-results directory: the test was renamed
+    // or deleted — or it simply wasn't part of this run. Listing them (last) is
+    // what makes them deletable from the review app; nothing else ever cleans
+    // them up, so otherwise they linger in version control forever.
+    const currentNameSet = new Set(currentNames);
+    for (const name of listTestDirectories(acceptedDir)) {
+        if (currentNameSet.has(name)) continue;
+        if (loadAcceptedImageEntries(path.join(acceptedDir, name)).length === 0) continue;
+
+        tests.push({
+            name,
+            file: orphanedGroupLabel,
+            line: 0,
+            // The directory name is all we have: the title it was derived from
+            // lives in a manifest that only test-results carries.
+            title: name,
+            status: 'orphaned',
+            hasChanges: true,
+            orphaned: true,
+        });
+    }
+
     return tests.sort((a, b) =>
+        Number(a.orphaned) - Number(b.orphaned) ||
         a.file.localeCompare(b.file) ||
         a.line - b.line ||
         a.name.localeCompare(b.name)
@@ -240,22 +272,33 @@ async function getTestDetails(testName: string): Promise<{
     manifest: TestManifest | null;
     steps: AlignedPair[];
     canRevert: boolean;
+    orphaned: boolean;
 }> {
     const testDir = path.join(outputDir, testName);
     const manifestPath = path.join(testDir, 'manifest.json');
+    const expDir = path.join(acceptedDir, testName);
 
     if (!fs.existsSync(manifestPath)) {
-        return { manifest: null, steps: [], canRevert: false };
+        // No test ran under this name. If a baseline is still there, align it
+        // against nothing: every step comes out as removed, so the review app
+        // can show what the stale baseline holds before it is dropped.
+        const acceptedEntries = fs.existsSync(testDir) ? [] : loadAcceptedImageEntries(expDir);
+        const orphaned = acceptedEntries.length > 0;
+        return {
+            manifest: null,
+            steps: await alignImages(acceptedEntries, []),
+            canRevert: orphaned && hasAcceptedWorktreeChanges(testName),
+            orphaned,
+        };
     }
 
     const manifest: TestManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-    const expDir = path.join(acceptedDir, testName);
 
     const currentEntries = loadCurrentImageEntries(testDir, manifest);
     const acceptedEntries = loadAcceptedImageEntries(expDir);
 
     const steps = await alignImages(acceptedEntries, currentEntries);
-    return { manifest, steps, canRevert: hasAcceptedWorktreeChanges(testName) };
+    return { manifest, steps, canRevert: hasAcceptedWorktreeChanges(testName), orphaned: false };
 }
 
 // Bumped on every accept, so a conversion still running for an earlier accept of
@@ -266,10 +309,18 @@ function acceptTest(testName: string): void {
     const testDir = path.join(outputDir, testName);
     const expDir = path.join(acceptedDir, testName);
 
-    if (!fs.existsSync(testDir)) return;
+    if (!fs.existsSync(testDir) && !fs.existsSync(expDir)) return;
 
     const generation = (acceptGenerations.get(expDir) ?? 0) + 1;
     acceptGenerations.set(expDir, generation);
+
+    // The test produced no output at all: accepting that state means dropping the
+    // baseline it left behind. Nothing prunes these otherwise, and the review app
+    // only offers this once it has shown what is about to go.
+    if (!fs.existsSync(testDir)) {
+        fs.rmSync(expDir, { recursive: true, force: true });
+        return;
+    }
 
     // Clear existing accepted dir
     if (fs.existsSync(expDir)) {
@@ -363,6 +414,20 @@ function serveFile(res: http.ServerResponse, filePath: string, contentType: stri
     }
 }
 
+// Test names name a single directory below the output/accepted dirs, so anything
+// that could climb out of them is a malformed request — worth rejecting up front,
+// since accepting an orphan deletes a directory outright.
+function readTestName(res: http.ServerResponse, encoded: string): string | null {
+    const name = decodeURIComponent(encoded);
+    if (name && name !== '.' && name !== '..' && !name.includes('/') && !name.includes('\\')) {
+        return name;
+    }
+
+    res.writeHead(400);
+    res.end('Invalid test name');
+    return null;
+}
+
 function serveJson(res: http.ServerResponse, data: any) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(data));
@@ -431,20 +496,26 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
 
             const testDetailMatch = pathname.match(/^\/api\/test\/(.+)/);
             if (testDetailMatch && req.method === 'GET') {
-                serveJson(res, await getTestDetails(decodeURIComponent(testDetailMatch[1])));
+                const testName = readTestName(res, testDetailMatch[1]);
+                if (!testName) return;
+                serveJson(res, await getTestDetails(testName));
                 return;
             }
 
             const acceptMatch = pathname.match(/^\/api\/accept\/(.+)/);
             if (acceptMatch && req.method === 'POST') {
-                acceptTest(decodeURIComponent(acceptMatch[1]));
+                const testName = readTestName(res, acceptMatch[1]);
+                if (!testName) return;
+                acceptTest(testName);
                 serveJson(res, { ok: true });
                 return;
             }
 
             const revertMatch = pathname.match(/^\/api\/revert\/(.+)/);
             if (revertMatch && req.method === 'POST') {
-                revertAcceptedTest(decodeURIComponent(revertMatch[1]));
+                const testName = readTestName(res, revertMatch[1]);
+                if (!testName) return;
+                revertAcceptedTest(testName);
                 serveJson(res, { ok: true });
                 return;
             }

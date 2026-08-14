@@ -103,6 +103,8 @@ When you press the 'Accept visuals' button for a test, its output screenshots ar
 
 Because baselines are committed, they are recompressed to lossless WebP (about half the size of the PNG, pixel for pixel identical) in the background right after accepting. Existing PNG baselines keep working, so there is no need to convert anything by hand.
 
+Baselines for tests that produced no results at all are listed separately at the bottom, under *not in test-results/*. Usually their test was renamed or deleted, in which case the baseline is stale and should go — but the same thing happens when a test simply didn't run, so ShoTest never removes one on its own. Selecting such an entry shows the baseline screenshots it would delete, and 'Delete baseline' removes the whole directory.
+
 ## Multi-user tests
 
 ShoTest can label screenshots per browser page, which makes multi-user interaction tests practical to script and review.

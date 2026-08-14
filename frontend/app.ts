@@ -6,6 +6,7 @@ import {
   check,
   circleAlert,
   circleCheck,
+  trash2,
   triangleAlert,
   undo2,
 } from 'staffa/icons.js';
@@ -27,6 +28,8 @@ interface TestSummary {
   title: string;
   status: string;
   hasChanges: boolean;
+  // An accepted baseline with no matching test in test-results.
+  orphaned: boolean;
 }
 
 interface TestManifest {
@@ -51,6 +54,7 @@ interface TestDetail {
   manifest: TestManifest | null;
   steps: ReviewStep[];
   canRevert: boolean;
+  orphaned: boolean;
 }
 
 interface ReviewState {
@@ -142,7 +146,9 @@ async function fetchTests(): Promise<void> {
   try {
     const tests = await fetchJson<TestSummary[]>('/api/tests');
     tests.sort((a, b) =>
-      a.file.localeCompare(b.file)
+      // Orphaned baselines have no source file to sort by; they go last.
+      Number(a.orphaned) - Number(b.orphaned)
+      || a.file.localeCompare(b.file)
       || a.line - b.line
       || a.title.localeCompare(b.title),
     );
@@ -170,7 +176,7 @@ async function loadDetail(name: string): Promise<void> {
   }
 }
 
-async function acceptChanges(name: string): Promise<void> {
+async function acceptChanges(name: string, orphaned = false): Promise<void> {
   const acceptedIndex = state.tests.findIndex((test) => test.name === name);
   await fetch(`/api/accept/${encodeURIComponent(name)}`, { method: 'POST' });
   await fetchTests();
@@ -292,7 +298,7 @@ document.addEventListener('keydown', (event) => {
   else if (key === 't') { event.preventDefault(); state.compareMode = 'toggle'; }
   else if (key === 'a' && selected && selectedTestHasChanges()) {
     event.preventDefault();
-    void acceptChanges(selected);
+    void acceptChanges(selected, state.detail?.orphaned);
   } else if (key === 'r' && selected && state.detail?.canRevert) {
     event.preventDefault();
     void revertChanges(selected);
@@ -303,6 +309,7 @@ document.addEventListener('keydown', (event) => {
 
 function statusIcon(test: TestSummary): () => void {
   const failed = test.status === 'failed' || test.status === 'timedOut';
+  if (test.orphaned) return () => trash2({ size: '1.1em', color: 'var(--s-danger)' });
   if (test.hasChanges) return () => circleAlert({ size: '1.1em', color: 'var(--s-warning)' });
   if (failed) return () => triangleAlert({ size: '1.1em', color: 'var(--s-danger)' });
   return () => circleCheck({ size: '1.1em', color: 'var(--s-success)' });
@@ -322,15 +329,19 @@ function drawNavEntries(): void {
     A('a.s-menu-item href=', href, () => {
       A(() => { if (route.matchCurrent(href)) A('aria-current=page'); });
       A('span.s-menu-icon', () => statusIcon(test)());
-      A('span rich=', test.title);
+      // Orphans are named after their directory, not a test title — muted, to
+      // set them apart from the tests this run actually produced.
+      A(test.orphaned ? 'span color:$s-muted rich=' : 'span rich=', test.title);
     });
   });
 }
 
-function renderStepMeta(step: ReviewStep, change: StepChange, showing?: 'accepted' | 'current'): void {
+function renderStepMeta(step: ReviewStep, change: StepChange, showing?: 'accepted' | 'current', orphaned = false): void {
   A('div display:flex flex-wrap:wrap gap:0.4rem align-items:center font-size:0.8em color:$s-muted', () => {
-    A('span #', `line ${parseLine(step.location)}`);
-    A('span #', `· ${formatDuration(step.duration)}`);
+    // Source line and duration come from the manifest, which only test-results
+    // carries: for an orphaned baseline all we can name is the frame itself.
+    A('span #', orphaned ? step.location : `line ${parseLine(step.location)}`);
+    if (!orphaned) A('span #', `· ${formatDuration(step.duration)}`);
     A('span #', `· ${change}`);
     if (showing) A('span #', `· showing ${showing}`);
     if (step.role) A('span font-weight:600 color:$s-accent #', `· ${step.role}`);
@@ -387,15 +398,19 @@ function buildRoleTintMap(steps: ReviewStep[]): Map<string | undefined, string> 
   return tints;
 }
 
+// Also marks the orphaned-baseline notice. A surface class (`.warning`) can't do
+// that job: `.neutral` from S.box wins over it.
+const warningBorder = A.insertCss('border: 2px solid $s-warning;');
+
 // Status is shown as a token-coloured border on the neutral card surface.
 const borderForChange: Record<StepChange, string> = {
-  changed: A.insertCss('border: 2px solid $s-warning;'),
+  changed: warningBorder,
   new: A.insertCss('border: 2px solid $s-success;'),
   removed: A.insertCss('border: 2px solid $s-danger;'),
   unchanged: '',
 };
 
-function renderStep(step: ReviewStep, name: string, tint: string): void {
+function renderStep(step: ReviewStep, name: string, tint: string, orphaned: boolean): void {
   const change = getStepChange(step);
   S.box({
     attrs: `${borderForChange[change]} ${tint} width:max-content max-width:100% mt:0`,
@@ -411,7 +426,7 @@ function renderStep(step: ReviewStep, name: string, tint: string): void {
           A(`img.layer${showing === 'current' ? '.visible' : ''} src=`, imageSrc('current', name, step.currentImage!));
         });
       } else {
-        renderStepMeta(step, change);
+        renderStepMeta(step, change, undefined, orphaned);
         const image = step.currentImage || step.acceptedImage;
         if (image) {
           const kind = step.currentImage ? 'current' : 'accepted';
@@ -438,7 +453,7 @@ function renderContent(): void {
       return;
     }
 
-    const { manifest, steps, canRevert } = state.detail;
+    const { manifest, steps, canRevert, orphaned } = state.detail;
 
     if (manifest) {
       A('div font-size:0.85em color:$s-muted margin-bottom:0.75rem', () => {
@@ -447,12 +462,22 @@ function renderContent(): void {
       });
     }
 
+    if (orphaned) {
+      A('div margin-bottom:1rem', () => {
+        S.box({
+          attrs: warningBorder,
+          header: () => A('span color:$s-warning #Baseline without a test'),
+          content: `\`test-accepted/${name}\` has no matching directory in \`test-results/\`, so no test of that name ran. It was most likely renamed or deleted — but a filtered run (\`-g\`, a file argument, \`--shard\`), a skipped test, or an interrupted run looks exactly the same from here. Accepting deletes the baseline shown below.`,
+        });
+      });
+    }
+
     if (steps.length === 0) {
       A('div color:$s-muted #No screenshots taken');
     } else {
       const roleTintMap = buildRoleTintMap(steps);
       A('div display:flex flex-wrap:wrap gap:1rem align-items:flex-start', () => {
-        for (const step of steps) renderStep(step, name, roleTintMap.get(step.role)!);
+        for (const step of steps) renderStep(step, name, roleTintMap.get(step.role)!, orphaned);
       });
     }
 
@@ -475,9 +500,13 @@ function renderContent(): void {
       A('div display:flex gap:0.75rem flex-wrap:wrap margin-top:1rem', () => {
         if (hasChanges) {
           S.button({
-            content: () => { A('#Accept visuals'); S.addTooltip({ tip: 'Accept visuals (a)' }); },
-            icon: check,
-            click: () => void acceptChanges(name),
+            content: () => {
+              A(orphaned ? '#Delete baseline' : '#Accept visuals');
+              S.addTooltip({ tip: orphaned ? 'Delete this stale baseline (a)' : 'Accept visuals (a)' });
+            },
+            icon: orphaned ? trash2 : check,
+            attrs: orphaned ? '.danger' : undefined,
+            click: () => void acceptChanges(name, orphaned),
           });
         }
         if (canRevert) {
