@@ -145,3 +145,35 @@ test('negative assertions on absent elements complete quickly', async ({ page })
   expect(await page.getByText('still nothing').isHidden()).toBe(true);
   expect(Date.now() - start).toBeLessThan(8000);
 });
+
+test('scripted smooth scrolling lands instantly', async ({ page }) => {
+  await page.goto('/');
+
+  // A smooth scroll keeps animating under the assertion that follows it, so the
+  // screenshot catches the scroller wherever the animation had got to. The
+  // injected `scroll-behavior: auto !important` only covers scrolls that leave the
+  // behavior to the CSS; these three name it themselves, and used to slip past.
+  const offsets = await page.evaluate(() => {
+    const box = document.createElement('div');
+    box.style.cssText = 'width:200px;overflow:auto;scroll-behavior:smooth;white-space:nowrap';
+    box.innerHTML = '<div style="width:2000px;height:2000px"></div>';
+    document.body.appendChild(box);
+    try {
+      box.scrollBy({ left: 300, behavior: 'smooth' });
+      const scrollBy = box.scrollLeft;
+      box.scrollTo({ left: 600, behavior: 'smooth' });
+      const scrollTo = box.scrollLeft;
+      box.firstElementChild.scrollIntoView({ behavior: 'smooth', inline: 'start' });
+      const scrollIntoView = box.scrollLeft;
+      return { scrollBy, scrollTo, scrollIntoView };
+    } finally {
+      box.remove();
+    }
+  });
+
+  // Read back the instant a scroll is requested: mid-animation these would still
+  // be at their previous offsets.
+  expect(offsets.scrollBy).toBe(300);
+  expect(offsets.scrollTo).toBe(600);
+  expect(offsets.scrollIntoView).toBe(0);
+});

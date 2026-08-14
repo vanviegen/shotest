@@ -684,6 +684,31 @@ export const test = baseTest.extend({
                 style.textContent = videoCss;
             } else {
                 style.textContent = overlayCss;
+
+                // The `scroll-behavior: auto !important` in that CSS only governs
+                // scrolls that don't name a behavior themselves — an explicit
+                // `el.scrollBy({behavior: 'smooth'})` beats the stylesheet and
+                // animates anyway. Such a scroll keeps running under the assertion
+                // that follows it, so the screenshot catches the scroller wherever
+                // the animation had got to. Rewrite the request to an instant one.
+                const instant = (options: unknown) =>
+                    options && typeof options === 'object' ? { ...options, behavior: 'instant' } : options;
+                for (const target of [Element.prototype, window] as any[]) {
+                    for (const name of ['scroll', 'scrollTo', 'scrollBy']) {
+                        const original = target[name];
+                        if (typeof original !== 'function') continue;
+                        target[name] = function (this: unknown, ...args: unknown[]) {
+                            // Only the options form carries a behavior; `scrollTo(x, y)`
+                            // takes its cue from the CSS, which is already instant.
+                            return original.apply(this, args.length === 1 ? [instant(args[0])] : args);
+                        };
+                    }
+                }
+                const scrollIntoView = Element.prototype.scrollIntoView;
+                Element.prototype.scrollIntoView = function (this: Element, arg?: unknown) {
+                    // `scrollIntoView(true|false|undefined)` defers to the CSS too.
+                    return scrollIntoView.call(this, instant(arg) as ScrollIntoViewOptions);
+                };
             }
             if (document.head) document.head.appendChild(style);
             else document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
