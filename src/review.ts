@@ -39,8 +39,7 @@ export interface StartReviewServerOptions {
 const imageExtensions = ['.png', '.webp'];
 
 function isScreenshotFile(file: string): boolean {
-    const ext = path.extname(file).toLowerCase();
-    return imageExtensions.includes(ext) && path.basename(file, ext) !== 'error';
+    return imageExtensions.includes(path.extname(file).toLowerCase());
 }
 
 function findScreenshotFile(dir: string, name: string): string | undefined {
@@ -48,6 +47,20 @@ function findScreenshotFile(dir: string, name: string): string | undefined {
 }
 
 // ── Image alignment ────────────────────────────────────────────────
+
+// A comparison that cannot be made is reported as a difference. The alternative —
+// letting the error escape — has the caller decide what a missing answer means,
+// and the summary view answers "unchanged": a test whose baseline is unreadable
+// then shows a green check, which is exactly how a real regression goes unseen.
+// Reporting it as changed puts the step in front of the reviewer instead.
+async function imagesEquivalent(acceptedPath: string, currentPath: string): Promise<boolean> {
+    try {
+        return await areImagesEquivalent(acceptedPath, currentPath);
+    } catch (error) {
+        console.warn(`ShoTest: could not compare ${acceptedPath} with ${currentPath}: ${error instanceof Error ? error.message : String(error)}`);
+        return false;
+    }
+}
 
 interface ImageEntry {
     name: string;
@@ -69,7 +82,13 @@ interface AlignedPair {
     changed: boolean;
 }
 
-async function alignImages(accepted: ImageEntry[], current: ImageEntry[]): Promise<AlignedPair[]> {
+// `refineMiddle` decides whether the steps between the outermost differences are
+// compared or simply assumed to differ — see the middle-section comment below.
+async function alignImages(
+    accepted: ImageEntry[],
+    current: ImageEntry[],
+    refineMiddle = false,
+): Promise<AlignedPair[]> {
     function makeAlignedPair(
         acceptedEntry: ImageEntry | undefined,
         currentEntry: ImageEntry | undefined,
@@ -92,7 +111,7 @@ async function alignImages(accepted: ImageEntry[], current: ImageEntry[]): Promi
     let prefixLength = 0;
     const sharedLength = Math.min(accepted.length, current.length);
     while (prefixLength < sharedLength) {
-        if (!(await areImagesEquivalent(accepted[prefixLength].filePath, current[prefixLength].filePath))) {
+        if (!(await imagesEquivalent(accepted[prefixLength].filePath, current[prefixLength].filePath))) {
             break;
         }
         result.push(makeAlignedPair(accepted[prefixLength], current[prefixLength], false));
@@ -103,7 +122,7 @@ async function alignImages(accepted: ImageEntry[], current: ImageEntry[]): Promi
     let currentTail = current.length - 1;
     const suffix: AlignedPair[] = [];
     while (acceptedTail >= prefixLength && currentTail >= prefixLength) {
-        if (!(await areImagesEquivalent(accepted[acceptedTail].filePath, current[currentTail].filePath))) {
+        if (!(await imagesEquivalent(accepted[acceptedTail].filePath, current[currentTail].filePath))) {
             break;
         }
         suffix.push(makeAlignedPair(accepted[acceptedTail], current[currentTail], false));
@@ -115,8 +134,23 @@ async function alignImages(accepted: ImageEntry[], current: ImageEntry[]): Promi
     const currentMiddle = current.slice(prefixLength, currentTail + 1);
     const changedPairs = Math.min(acceptedMiddle.length, currentMiddle.length);
 
+    // Trimming an equal prefix and suffix locates the region that changed, but says
+    // nothing about the steps inside it: a run that alters the first and last
+    // screenshot leaves every screenshot between them in here, unchanged. Pairing
+    // them by index and calling them all changed is fine for a yes/no verdict and
+    // free, which is why the summary keeps doing it — the first middle pair is the
+    // one that broke the prefix walk, so the verdict cannot come out differently.
+    // A reviewer needs better: flipping between two identical screenshots looking
+    // for a difference that was never there is worse than the comparison it saves.
+    // Refining costs one comparison per middle step, only on tests already known to
+    // have changed, and it corrects index-paired steps either side of an inserted
+    // or deleted screenshot too.
     for (let index = 0; index < changedPairs; index++) {
-        result.push(makeAlignedPair(acceptedMiddle[index], currentMiddle[index], true));
+        const changed = !refineMiddle || !(await imagesEquivalent(
+            acceptedMiddle[index].filePath,
+            currentMiddle[index].filePath,
+        ));
+        result.push(makeAlignedPair(acceptedMiddle[index], currentMiddle[index], changed));
     }
 
     for (let index = changedPairs; index < acceptedMiddle.length; index++) {
@@ -218,21 +252,30 @@ async function getTests(): Promise<TestSummary[]> {
         let status = 'unknown';
         let hasChanges = false;
 
+        // Only the manifest read is guarded: a directory without a readable one
+        // still belongs in the list, under the little that can be inferred from its
+        // name. Comparison failures used to land in here too, which quietly turned
+        // "this could not be checked" into "this is unchanged"; imagesEquivalent
+        // now reports them as differences instead.
+        let manifest: TestManifest | undefined;
         if (fs.existsSync(manifestPath)) {
             try {
-                const manifest: TestManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-                file = manifest.file;
-                line = manifest.line;
-                title = manifest.title;
-                status = manifest.status;
-
-                const testDir = path.join(outputDir, name);
-                const expDir = path.join(acceptedDir, name);
-                hasChanges = await hasVisualChanges(
-                    loadAcceptedImageEntries(expDir),
-                    loadCurrentImageEntries(testDir, manifest),
-                );
+                manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
             } catch { }
+        }
+
+        if (manifest) {
+            file = manifest.file;
+            line = manifest.line;
+            title = manifest.title;
+            status = manifest.status;
+
+            const testDir = path.join(outputDir, name);
+            const expDir = path.join(acceptedDir, name);
+            hasChanges = await hasVisualChanges(
+                loadAcceptedImageEntries(expDir),
+                loadCurrentImageEntries(testDir, manifest),
+            );
         }
 
         return { name, file, line, title, status, hasChanges, orphaned: false };
@@ -297,8 +340,30 @@ async function getTestDetails(testName: string): Promise<{
     const currentEntries = loadCurrentImageEntries(testDir, manifest);
     const acceptedEntries = loadAcceptedImageEntries(expDir);
 
-    const steps = await alignImages(acceptedEntries, currentEntries);
+    // Worth the extra comparisons here: this is the view where a step marked
+    // changed sends someone looking for the difference.
+    const steps = await alignImages(acceptedEntries, currentEntries, true);
     return { manifest, steps, canRevert: hasAcceptedWorktreeChanges(testName), orphaned: false };
+}
+
+// The screenshots a test lays claim to, which is what the manifest lists — not
+// whatever images happen to sit in its output directory. Playwright writes its own
+// failure screenshot next to ours, and a step that has since been renamed leaves
+// its old file behind; copying either one into the baseline creates a screenshot no
+// run can reproduce. It shows up as permanently removed, and because the next
+// accept copies it again, accepting never clears it. Reviewing against the same
+// list the comparison uses keeps the two from drifting apart.
+function listAcceptableFiles(testDir: string): string[] {
+    const manifestPath = path.join(testDir, 'manifest.json');
+    if (fs.existsSync(manifestPath)) {
+        try {
+            const manifest: TestManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+            return loadCurrentImageEntries(testDir, manifest).map((entry) => entry.file);
+        } catch { }
+    }
+
+    // No readable manifest, so there is nothing to check the directory against.
+    return fs.readdirSync(testDir).filter(isScreenshotFile);
 }
 
 // Bumped on every accept, so a conversion still running for an earlier accept of
@@ -328,8 +393,7 @@ function acceptTest(testName: string): void {
     }
     fs.mkdirSync(expDir, { recursive: true });
 
-    const files = fs.readdirSync(testDir).filter(isScreenshotFile);
-    for (const file of files) {
+    for (const file of listAcceptableFiles(testDir)) {
         fs.copyFileSync(path.join(testDir, file), path.join(expDir, file));
     }
 
@@ -406,7 +470,11 @@ function revertAcceptedTest(testName: string): void {
 function serveFile(res: http.ServerResponse, filePath: string, contentType: string) {
     try {
         const data = fs.readFileSync(filePath);
-        res.writeHead(200, { 'Content-Type': contentType });
+        // Accepting rewrites a baseline in place, and the URL it is served from does
+        // not change with it. A cached copy would leave the reviewer toggling
+        // between two renderings of the same image, which reads as "nothing
+        // changed" — the one conclusion this app must never invent.
+        res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store' });
         res.end(data);
     } catch {
         res.writeHead(404);
