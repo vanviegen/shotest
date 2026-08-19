@@ -4,6 +4,7 @@ import {
   screenshot,
   splitIntoRoles,
   waitForVisualStability,
+  withoutScreenshots,
   demoTap,
   demoType,
   demoPause,
@@ -81,6 +82,19 @@ test('covers demo helpers in non-video mode', async ({ page }) => {
   await expect(swipeZone).toBeVisible();
 
   await screenshot(page, 'demo-final');
+});
+
+test('supports describe hints and screenshot suppression', async ({ page }) => {
+  await page.goto('/');
+
+  await withoutScreenshots('Prepare the counter (2x increment)', async () => {
+    await page.getByRole('button', { name: 'Increment' }).click();
+    await page.getByRole('button', { name: 'Increment' }).click();
+    await expect(page.locator('#count-value')).toHaveText('2');
+  });
+
+  page.describe('Verify the prepared counter');
+  await expect(page.locator('#count-value')).toHaveText('2');
 });
 
 test('passes without screenshots when only using plain page methods', async ({ page }) => {

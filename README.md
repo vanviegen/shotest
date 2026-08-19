@@ -81,13 +81,39 @@ Run the tests using:
 npx shotest test
 ```
 
-This should output screenshots and HTML snapshots for each step to the default Playwright per-test output directory under `test-results/`.
+This writes results to `test-results/`: one `<spec-base>.json` per spec file (listing its tests, steps and metadata), plus the screenshots and HTML snapshots themselves. Screenshot files are named by a hash of their pixel content, so identical frames — within a test or across tests — share a single file, and names don't change when line numbers shift.
 
 The `shotest` command forwards arguments to Playwright, so `npx shotest test --ui` maps to `playwright test --ui`.
 
 When the `--fail-on-visual-changes` flag is passed, ShoTest exits with a non-zero code if any visual changes compared to the accepted baseline in `test-accepted/` (or `$SHOTEST_ACCEPTED_DIR`) are detected, even if the test assertions pass. This allows you to enforce visual consistency in your CI pipeline.
 
-ShoTest compares screenshots with `odiff-bin` and relies on it to decide whether a visual change is significant.
+ShoTest compares screenshots with `odiff-bin` and relies on it to decide whether a visual change is significant. (Screenshots with equal content hashes are pixel-identical and skip the comparison entirely.)
+
+## Step descriptions and skipping screenshots
+
+Attach a one-line hint to the next screenshot; it shows up in the header of that screenshot in the review tool:
+
+```ts
+page.describe('Create lunch talk event');
+await page.getByRole('button', { name: 'New event' }).click();
+```
+
+Routine flows that reoccur in many tests (logging in, seeding data) would otherwise produce countless screenshots. Wrap them in `withoutScreenshots(description, fn)` to skip capture — the review tool shows a subtle placeholder with your description instead, and the wrapped part also runs faster because the overlay and stability work is skipped too:
+
+```ts
+import { test, withoutScreenshots } from 'shotest';
+
+test('create event', async ({ page }) => {
+  await withoutScreenshots('Log in as admin', async () => {
+    await page.goto('/login');
+    await page.getByLabel('Email').fill('admin@example.com');
+    await page.getByRole('button', { name: 'Log in' }).click();
+  });
+  // ...the part this test is actually about, with screenshots as usual
+});
+```
+
+A failure inside the block still captures an error screenshot, and explicit `screenshot(page, name)` calls still capture.
 
 ## Reviewing and accepting visual changes
 
@@ -99,11 +125,15 @@ npx shotest review
 
 It serves a web app on localhost and attempts to open it in your default browser.
 
-When you press the 'Accept visuals' button for a test, its output screenshots are copied to the `test-accepted` directory (configurable through `SHOTEST_ACCEPTED_DIR`), and become the new accepted baseline. It is recommended to commit changes to this directory to version control (unlike `test-results/`).
+When you press the 'Accept visuals' button for a test, its screenshots are copied into the `test-accepted` directory (configurable through `SHOTEST_ACCEPTED_DIR`) and become the new accepted baseline. Like `test-results/`, it holds a flat pool of content-hashed images plus one JSON per spec file; images shared between tests are stored once. It is recommended to commit this directory to version control (unlike `test-results/`).
 
-Because baselines are committed, they are recompressed to lossless WebP (about half the size of the PNG, pixel for pixel identical) in the background right after accepting. Existing PNG baselines keep working, so there is no need to convert anything by hand.
+Because baselines are committed, the pool is recompressed to lossless WebP (about half the size of the PNG, pixel for pixel identical) by a background job — up to 8 images at a time — right after accepting. Content hashes are computed from pixels, not file bytes, so recompression doesn't change any names.
 
-Baselines for tests that produced no results at all are listed separately at the bottom, under *not in test-results/*. Usually their test was renamed or deleted, in which case the baseline is stale and should go — but the same thing happens when a test simply didn't run, so ShoTest never removes one on its own. Selecting such an entry shows the baseline screenshots it would delete, and 'Delete baseline' removes the whole directory.
+Baselines for tests that produced no results at all are listed separately at the bottom, under *not in test-results/*. Usually their test was renamed or deleted, in which case the baseline is stale and should go — but the same thing happens when a test simply didn't run (e.g. a filtered run), so ShoTest never removes one on its own. Selecting such an entry shows the baseline screenshots it would delete, and 'Delete baseline' removes it.
+
+## Garbage collection
+
+`npx shotest gc` deletes pool images (and HTML snapshots) in `test-results/` and `test-accepted/` that are no longer referenced by any of the JSON files there. It runs automatically after `npx shotest test` when the run was fully green and had no further arguments (extra arguments could mean a filtered run, which sees only part of the picture).
 
 ## Multi-user tests
 
@@ -246,3 +276,7 @@ For the review server:
 - `SHOTEST_OUTPUT_DIR`: Where to read test results (defaults to `test-results`)
 - `SHOTEST_ACCEPTED_DIR`: Where to store accepted baseline images (defaults to `test-accepted`)
 - `SHOTEST_PORT`: Preferred web server TCP port (defaults to `3847`; if unavailable, ShoTest tries the next 9 ports)
+
+## Migrating from 1.x
+
+ShoTest 2.0 changed the on-disk format: screenshots are content-hashed files in a flat pool with one JSON per spec file, instead of line-number-based files in one directory per test. Your tests run unchanged, but old baselines cannot be read (the review tool refuses to start on a 1.x `test-accepted/`): delete `test-accepted/`, rerun your tests, and re-accept the baselines with `npx shotest review`.

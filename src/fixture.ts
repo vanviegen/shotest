@@ -2,9 +2,18 @@ import { test as baseTest, expect, type Locator, type Page, type TestInfo } from
 import * as path from 'path';
 import * as fs from 'fs';
 import { stripPngMetadata } from './png.js';
+import { hashImagePixels } from './hash.js';
+import { mergeTestRecord, type ConsoleMessageInfo, type StepRecord, type TestRecord } from './manifest.js';
 
 export { expect };
 export type { Page };
+export type { ConsoleMessageInfo, StepRecord, TestRecord };
+
+/** The page handed to tests: Playwright's Page plus ShoTest's describe(). */
+export interface ShotestPage extends Page {
+    /** Attach a one-line hint to the next screenshot, shown in the review tool. */
+    describe(text: string): void;
+}
 
 // ── Configuration ──────────────────────────────────────────────────
 
@@ -322,51 +331,19 @@ async function showLocatorStepOverlay(
 
 // ── Screenshot capture ─────────────────────────────────────────────
 
-export interface StepInfo {
-    /** Filename without extension (e.g. "0010a") */
-    name: string;
-    /** Source location like "my-test.spec.ts:10" */
-    source: string;
-    /** Time spent producing this step screenshot in milliseconds */
-    duration: number;
-    /** Role name assigned via splitIntoRoles(page, ...) */
-    role: string | undefined;
-    /** Console messages emitted since the previous screenshot step */
-    consoleMessages?: ConsoleMessageInfo[];
-}
-
-export interface ConsoleMessageInfo {
-    type: string;
-    text: string;
-    source?: string;
-}
-
-export interface TestManifest {
-    file: string;
-    title: string;
-    line: number;
-    status: string;
-    duration: number;
-    error: string | null;
-    errorSource?: string | null;
-    errorStack?: string | null;
-    steps: StepInfo[];
-}
-
-let currentOutDir = '';
-let currentSteps: StepInfo[] = [];
-// How many screenshots each source line has produced in the current test. Per
-// line, because a test does not walk its source top to bottom: a loop comes back
-// around and helpers are called from wherever they are needed. A single counter
-// that resets whenever the line changes hands the same name out twice in those
-// tests, and the second screenshot overwrites the first — leaving the manifest
-// listing more steps than there are files.
-let screenshotSeqByLine = new Map<string, number>();
+let currentPoolDir = '';
+let currentSteps: StepRecord[] = [];
 let lastStepLocation: SourceLocation | null = null;
 let pendingFailureText = '';
 let pendingOverlayNotices: OverlayNotice[] = [];
 let pendingConsoleMessages: ConsoleMessageInfo[] = [];
+let pendingDescription: string | undefined;
+let suppressDepth = 0;
 let failureCaptured = false;
+
+function screenshotsSuppressed(): boolean {
+    return suppressDepth > 0;
+}
 
 function setPageRole(page: Page, role: string): void {
     const actualPage = (page as any)._shotestActualPage ?? page;
@@ -375,6 +352,10 @@ function setPageRole(page: Page, role: string): void {
 
 function getPageRole(page: Page): string | undefined {
     return (page as any)._shotestRole;
+}
+
+function setPendingDescription(text: string): void {
+    pendingDescription = String(text);
 }
 
 function normalizeConsoleSource(source: { url?: string; lineNumber?: number; columnNumber?: number } | undefined): string | undefined {
@@ -399,10 +380,26 @@ function recordConsoleMessage(message: ConsoleMessageInfo): void {
     pendingConsoleMessages.push(message);
 }
 
-// 0→'a' … 25→'z', 26→'za' … 51→'zz', 52→'zza', … so that any number of
-// screenshots from a single source line keeps sorting lexicographically.
-function screenshotSuffix(seq: number): string {
-    return 'z'.repeat(Math.floor(seq / 26)) + String.fromCharCode(97 + (seq % 26));
+/**
+ * Run `fn` without producing screenshots for the wrapped actions and
+ * assertions, recording a single placeholder ("gap") step with the given
+ * one-line description instead. Use it for routine flows that reoccur across
+ * many tests (logging in, seeding data) to keep reviews focused — it also
+ * skips the overlay and stability work, so the wrapped part runs faster.
+ *
+ * A failure inside the block still captures an error screenshot, and explicit
+ * `screenshot(page, name)` calls still capture.
+ */
+export async function withoutScreenshots<T>(description: string, fn: () => Promise<T> | T): Promise<T> {
+    if (suppressDepth === 0) {
+        currentSteps.push({ gap: String(description) });
+    }
+    suppressDepth++;
+    try {
+        return await fn();
+    } finally {
+        suppressDepth--;
+    }
 }
 
 async function takeScreenshot(
@@ -410,10 +407,9 @@ async function takeScreenshot(
     alreadyStable: boolean = false,
     loc: SourceLocation = getCallerLocation(),
     stepStartTimeMs: number = Date.now(),
-): Promise<StepInfo> {
-    const key = currentOutDir + ':' + loc.line;
-    const seq = screenshotSeqByLine.get(key) ?? 0;
-    screenshotSeqByLine.set(key, seq + 1);
+    force: boolean = false,
+): Promise<void> {
+    if (screenshotsSuppressed() && !force) return;
 
     if (!alreadyStable) {
         await waitForVisualStability(actualPage);
@@ -424,54 +420,61 @@ async function takeScreenshot(
         flushedPendingNotices = await showOverlayBanners(actualPage, pendingOverlayNotices, 'prepend');
     }
 
-    const name = `${loc.line.toString().padStart(4, '0')}${screenshotSuffix(seq)}`;
-    const basePath = path.join(currentOutDir, name);
     const relFile = path.relative(process.cwd(), loc.file);
 
-    const captured = await captureStep(basePath, actualPage);
-    if (captured && flushedPendingNotices) {
+    const hash = await captureStep(actualPage);
+    if (hash && flushedPendingNotices) {
         pendingOverlayNotices = [];
     }
+    if (!hash) return; // page closed (e.g. test timed out)
 
-    const step = {
-        name,
+    currentSteps.push({
+        image: hash,
         source: `${relFile}:${loc.line}`,
+        description: consumePendingDescription(),
         duration: Math.max(0, Date.now() - stepStartTimeMs),
         role: getPageRole(actualPage),
         consoleMessages: drainPendingConsoleMessages(),
-    };
-    currentSteps.push(step);
-    return step;
+    });
+}
+
+function consumePendingDescription(): string | undefined {
+    const description = pendingDescription;
+    pendingDescription = undefined;
+    return description;
 }
 
 /**
  * Take a named screenshot (clean, no overlay). Useful for promotional material.
+ * Captures even inside a withoutScreenshots() block.
  */
 export async function screenshot(page: Page, name: string): Promise<void> {
     const loc = getCallerLocation();
     const stepStartTimeMs = Date.now();
     await waitForVisualStability(page);
-    const basePath = path.join(currentOutDir, name);
     const relFile = path.relative(process.cwd(), loc.file);
 
     await hideOverlay(page);
-    await captureStep(basePath, page);
+    const hash = await captureStep(page);
+    if (!hash) return;
     currentSteps.push({
+        image: hash,
         name,
         source: `${relFile}:${loc.line}`,
+        description: consumePendingDescription(),
         duration: Math.max(0, Date.now() - stepStartTimeMs),
         role: getPageRole(page),
         consoleMessages: drainPendingConsoleMessages(),
     });
 }
 
-export async function splitIntoRoles<const Names extends readonly string[]>(page: Page, ...names: Names): Promise<{ [K in Names[number]]: Page }> {
+export async function splitIntoRoles<const Names extends readonly string[]>(page: Page, ...names: Names): Promise<{ [K in Names[number]]: ShotestPage }> {
     if (names.length === 0) throw new Error('splitIntoRoles(page, ...) requires at least one role name');
     const browser = page.context().browser();
     if (!browser) throw new Error('ShoTest could not access a browser instance for splitIntoRoles(page, ...)');
     let currentUrl = 'about:blank';
     try { currentUrl = page.url(); } catch { }
-    const result: Partial<Record<Names[number], Page>> = {};
+    const result: Partial<Record<Names[number], ShotestPage>> = {};
     const splitPages = new Map<string, Page>();
     for (let i = 0; i < names.length; i++) {
         const role = String(names[i]).trim() as Names[number];
@@ -485,24 +488,39 @@ export async function splitIntoRoles<const Names extends readonly string[]>(page
         }
         const rolePage = splitPages.get(role)!;
         setPageRole(rolePage, role);
-        result[role] = rolePage;
+        result[role] = rolePage as ShotestPage;
     }
-    return result as { [K in Names[number]]: Page };
+    return result as { [K in Names[number]]: ShotestPage };
 }
 
-async function captureStep(basePath: string, page: Page): Promise<boolean> {
+/**
+ * Screenshot the page, write it to the pool under its pixel-content hash, and
+ * return the hash. Identical frames — within this test or across tests — end
+ * up as one file. HTML snapshots are keyed by the same hash.
+ */
+async function captureStep(page: Page): Promise<string | null> {
     let pngBuffer: Buffer;
     try {
         pngBuffer = await page.screenshot({ fullPage: false });
     } catch {
-        return false; // page closed (e.g. test timed out)
+        return null; // page closed (e.g. test timed out)
     }
     pngBuffer = stripPngMetadata(pngBuffer);
-    fs.writeFileSync(basePath + '.png', pngBuffer);
+    const hash = await hashImagePixels(pngBuffer);
+
+    const basePath = path.join(currentPoolDir, hash);
+    if (!fs.existsSync(basePath + '.png')) {
+        // Write-then-rename: a concurrent worker producing the same hash is
+        // writing the same bytes, and rename keeps readers from seeing either
+        // copy half-done.
+        const tmpPath = basePath + '.tmp' + process.pid;
+        fs.writeFileSync(tmpPath, pngBuffer);
+        fs.renameSync(tmpPath, basePath + '.png');
+    }
 
     await hideOverlay(page);
 
-    if (captureHtml) {
+    if (captureHtml && !fs.existsSync(basePath + '.body.html')) {
         try {
             const { body, head } = await page.evaluate(() => ({
                 body: document.body.outerHTML.replace(/<path .*?<\/path>/g, ''),
@@ -513,7 +531,7 @@ async function captureStep(basePath: string, page: Page): Promise<boolean> {
         } catch { }
     }
 
-    return true;
+    return hash;
 }
 
 // ── Locator wrapping ───────────────────────────────────────────────
@@ -531,20 +549,22 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             const failureText = `Locator ${actualLocator} failed ${short}`;
             pendingFailureText = failureText;
             try {
-                await hideOverlay(actualPage);
-                await actualLocator.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
-                const box = await actualLocator.boundingBox().catch(() => null);
-                if (!box) {
-                    throw new Error(failureText);
+                if (!screenshotsSuppressed()) {
+                    await hideOverlay(actualPage);
+                    await actualLocator.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+                    const box = await actualLocator.boundingBox().catch(() => null);
+                    if (!box) {
+                        throw new Error(failureText);
+                    }
+                    await showOverlayCheck(actualPage, box, short);
+                    await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
                 }
-                await showOverlayCheck(actualPage, box, short);
-                await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
                 const result = await (actualLocator as any)[method](...args);
                 pendingFailureText = '';
                 return result;
             } catch (error: any) {
                 await showOverlayBanner(actualPage, failureText, 'error');
-                await takeScreenshot(actualPage, false, loc, stepStartTimeMs).catch(() => {});
+                await takeScreenshot(actualPage, false, loc, stepStartTimeMs, true).catch(() => {});
                 failureCaptured = true;
                 if (error.stack) {
                     error.stack = error.stack.split('\n')
@@ -565,13 +585,15 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         pendingFailureText = failureText;
         try {
             const result = await (actualLocator as any)._expect(method, options);
-            await showLocatorStepOverlay(actualLocator, actualPage, label, 'assert', 'info');
-            await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+            if (!screenshotsSuppressed()) {
+                await showLocatorStepOverlay(actualLocator, actualPage, label, 'assert', 'info');
+                await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+            }
             pendingFailureText = '';
             return result;
         } catch (error: any) {
             await showLocatorStepOverlay(actualLocator, actualPage, failureText, 'assert', 'error');
-            await takeScreenshot(actualPage, false, loc, stepStartTimeMs).catch(() => {});
+            await takeScreenshot(actualPage, false, loc, stepStartTimeMs, true).catch(() => {});
             failureCaptured = true;
             throw error;
         }
@@ -582,8 +604,10 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         const stepStartTimeMs = Date.now();
         lastStepLocation = loc;
         await (actualLocator as any).waitFor(options);
-        await showLocatorStepOverlay(actualLocator, actualPage, 'waitFor');
-        await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+        if (!screenshotsSuppressed()) {
+            await showLocatorStepOverlay(actualLocator, actualPage, 'waitFor');
+            await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+        }
     };
 
     const inspectionMethods = ['textContent', 'innerText', 'innerHTML', 'inputValue', 'getAttribute', 'isVisible', 'isHidden', 'isEnabled', 'isDisabled', 'isChecked', 'isEditable'];
@@ -597,13 +621,15 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             pendingFailureText = failureText;
             try {
                 const result = await (actualLocator as any)[method](...args);
-                await showLocatorStepOverlay(actualLocator, actualPage, label);
-                await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+                if (!screenshotsSuppressed()) {
+                    await showLocatorStepOverlay(actualLocator, actualPage, label);
+                    await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+                }
                 pendingFailureText = '';
                 return result;
             } catch (error) {
                 await showLocatorStepOverlay(actualLocator, actualPage, failureText, 'check', 'error');
-                await takeScreenshot(actualPage, false, loc, stepStartTimeMs).catch(() => {});
+                await takeScreenshot(actualPage, false, loc, stepStartTimeMs, true).catch(() => {});
                 failureCaptured = true;
                 throw error;
             }
@@ -623,7 +649,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
 
 // ── Page wrapping ──────────────────────────────────────────────────
 
-function wrapPage(actualPage: Page): Page {
+function wrapPage(actualPage: Page): ShotestPage {
     const wrapped = Object.create(actualPage) as any;
     wrapped._shotestActualPage = actualPage;
 
@@ -635,11 +661,17 @@ function wrapPage(actualPage: Page): Page {
         };
     }
 
+    wrapped.describe = function (text: string) {
+        setPendingDescription(text);
+    };
+
     wrapped.goto = async function (url: string, options: any) {
         const loc = getCallerLocation();
         lastStepLocation = loc;
         await actualPage.goto(url, options);
-        queueOverlayBanner('goto ' + url, 'info');
+        if (!screenshotsSuppressed()) {
+            queueOverlayBanner('goto ' + url, 'info');
+        }
     };
 
     wrapped.waitForTimeout = async function (timeout: number) {
@@ -647,33 +679,50 @@ function wrapPage(actualPage: Page): Page {
         const stepStartTimeMs = Date.now();
         lastStepLocation = loc;
         await actualPage.waitForTimeout(timeout);
-        await hideOverlay(actualPage);
-        await showOverlayBanner(actualPage, `waitForTimeout ${timeout}ms`, 'info');
-        await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+        if (!screenshotsSuppressed()) {
+            await hideOverlay(actualPage);
+            await showOverlayBanner(actualPage, `waitForTimeout ${timeout}ms`, 'info');
+            await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+        }
     };
 
-    return wrapped;
+    return wrapped as ShotestPage;
 }
 
 // ── Test fixture ───────────────────────────────────────────────────
 
-export const test = baseTest.extend({
+function getTestTitle(testInfo: TestInfo): string {
+    // titlePath leads with the file name and (if set) project name — in an
+    // order that has varied between Playwright versions — followed by the
+    // describe blocks and the test title. Keep the describe blocks, so two
+    // same-named tests in different describes stay distinct.
+    const parts = testInfo.titlePath.filter(Boolean);
+    while (parts.length > 1 && (parts[0] === testInfo.project.name || parts[0].endsWith(path.basename(testInfo.file)))) {
+        parts.shift();
+    }
+    return parts.join(' › ') || testInfo.title;
+}
+
+export const test = baseTest.extend<{ page: ShotestPage }>({
     page: async ({ page }, use, testInfo) => {
         const actualPage = page;
         const videoMode = detectVideoMode(testInfo);
 
-        // Use Playwright's own per-test output directory
+        // Playwright's per-test output dir sits directly under the root results
+        // dir; the flat screenshot pool and spec JSONs live in that root.
         const outDir = testInfo.outputDir;
-        currentOutDir = outDir;
+        const poolDir = path.dirname(outDir);
+        currentPoolDir = poolDir;
         currentSteps = [];
-        screenshotSeqByLine = new Map();
         lastStepLocation = null;
         pendingFailureText = '';
         pendingOverlayNotices = [];
         pendingConsoleMessages = [];
+        pendingDescription = undefined;
+        suppressDepth = 0;
         failureCaptured = false;
 
-        fs.mkdirSync(outDir, { recursive: true });
+        fs.mkdirSync(poolDir, { recursive: true });
 
         // Set video mode flag and inject appropriate CSS
         await actualPage.addInitScript(({ isVideoMode, videoCss, overlayCss }: { isVideoMode: boolean; videoCss: string; overlayCss: string }) => {
@@ -731,7 +780,11 @@ export const test = baseTest.extend({
         });
 
         if (videoMode) {
-            await use(actualPage);
+            // No wrapping in video mode, but page.describe() must still exist
+            // (as a no-op) so scripts run unchanged.
+            const veneer = Object.create(actualPage) as any;
+            veneer.describe = () => { };
+            await use(veneer as ShotestPage);
         } else {
             const wrappedPage = wrapPage(actualPage);
             await use(wrappedPage);
@@ -744,9 +797,9 @@ export const test = baseTest.extend({
         // make the frame set flaky. Any messages still pending after the final action
         // are folded into the last step's metadata so they aren't lost from the report.
         const trailingMessages = drainPendingConsoleMessages();
-        if (trailingMessages && currentSteps.length > 0) {
-            const lastStep = currentSteps[currentSteps.length - 1];
-            lastStep.consoleMessages = [...(lastStep.consoleMessages ?? []), ...trailingMessages];
+        const lastImageStep = [...currentSteps].reverse().find((step) => !('gap' in step));
+        if (trailingMessages && lastImageStep && 'image' in lastImageStep) {
+            lastImageStep.consoleMessages = [...(lastImageStep.consoleMessages ?? []), ...trailingMessages];
         }
 
         // Determine error info
@@ -767,12 +820,13 @@ export const test = baseTest.extend({
             if (!videoMode && !failureCaptured) {
                 await hideOverlay(actualPage);
                 await showOverlayBanner(actualPage, errorMessage, 'error');
-                await takeScreenshot(actualPage, true, failureLoc).catch(() => {});
+                await takeScreenshot(actualPage, true, failureLoc, Date.now(), true).catch(() => {});
             }
 
             let currentUrl = '';
             try { currentUrl = actualPage.url(); } catch { currentUrl = 'unavailable'; }
 
+            fs.mkdirSync(outDir, { recursive: true });
             fs.writeFileSync(path.join(outDir, 'error.txt'), [
                 `Test: ${testInfo.title}`,
                 `Status: ${testInfo.status}`,
@@ -784,10 +838,9 @@ export const test = baseTest.extend({
             ].filter(Boolean).join('\n') + '\n', 'utf-8');
         }
 
-        // Write manifest
-        const manifest: TestManifest = {
+        const record: TestRecord = {
             file: path.relative(process.cwd(), testInfo.file),
-            title: testInfo.title,
+            title: getTestTitle(testInfo),
             line: testInfo.line,
             status: testInfo.status || 'unknown',
             duration: testInfo.duration,
@@ -796,6 +849,6 @@ export const test = baseTest.extend({
             errorStack: errorStack,
             steps: currentSteps,
         };
-        fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8');
+        mergeTestRecord(poolDir, record);
     },
 });

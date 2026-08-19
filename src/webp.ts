@@ -1,57 +1,109 @@
 /**
- * Lossless WebP compression for accepted baselines.
+ * Lossless WebP compression for the accepted baseline pool.
  *
  * Test runs keep writing PNGs: Playwright emits those natively, so capture stays
  * as cheap as it can be. Accepted baselines are a different trade-off — they get
  * committed to version control and rewritten rarely, so it pays to spend real CPU
  * on them once. libwebp's slowest lossless setting roughly halves the size of a
  * typical UI screenshot, pixel for pixel identical.
+ *
+ * Baselines are content-addressed pool files shared by many tests, so
+ * compression runs as one central background job over the whole pool: up to
+ * 8 images at a time, one CPU core each. Pool files are immutable (their name
+ * is a hash of their pixels, and lossless recompression preserves those), so
+ * there is nothing to cancel — a file deleted by gc mid-conversion at worst
+ * leaves a stray WebP for the next gc to sweep up.
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import sharp from 'sharp';
+import { POOL_FILE_RE } from './hash.js';
+
+// One core per concurrent encode; concurrency provides the parallelism.
+sharp.concurrency(1);
+
+const MAX_CORES = 8;
+
+// PNGs that came out smaller than their WebP encoding — no point re-encoding
+// them on every pass for the lifetime of this process.
+const keepAsPng = new Set<string>();
+
+let running = false;
+let rescanRequested = false;
 
 /**
- * Rewrite every PNG in `dir` as a lossless WebP, dropping the PNG once its WebP
- * replacement is on disk. Runs in the background, so `isCancelled` is checked
- * before each write: a newer accept for the same directory wins.
+ * Compress every hash-named PNG in the accepted pool to lossless WebP,
+ * deleting the PNG once its replacement is on disk. Runs in the background;
+ * calling it while a pass is active schedules a rescan after that pass, so
+ * images from a fresh accept are always picked up.
  */
-export async function compressDirectoryToWebp(dir: string, isCancelled: () => boolean = () => false): Promise<void> {
+export async function compressAcceptedPool(dir: string): Promise<void> {
+    if (running) {
+        rescanRequested = true;
+        return;
+    }
+    running = true;
+    try {
+        do {
+            rescanRequested = false;
+            await compressOnce(dir);
+        } while (rescanRequested);
+    } finally {
+        running = false;
+    }
+}
+
+async function compressOnce(dir: string): Promise<void> {
     let pngFiles: string[];
     try {
-        pngFiles = fs.readdirSync(dir).filter((file) => file.endsWith('.png'));
+        pngFiles = fs.readdirSync(dir).filter((file) => {
+            const match = POOL_FILE_RE.exec(file);
+            return match?.[2] === 'png' && !keepAsPng.has(path.join(dir, file));
+        });
     } catch {
         return;
     }
-    for (const file of pngFiles) {
-        if (isCancelled()) return;
 
-        const pngPath = path.join(dir, file);
-        const webpPath = pngPath.slice(0, -'.png'.length) + '.webp';
-        const partialPath = webpPath + '.partial';
+    const queue = [...pngFiles];
+    const workerCount = Math.min(MAX_CORES, os.availableParallelism?.() ?? os.cpus().length, queue.length);
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+        for (let file = queue.shift(); file !== undefined; file = queue.shift()) {
+            await compressFile(path.join(dir, file));
+        }
+    }));
+}
 
-        try {
-            const stat = fs.statSync(pngPath);
-            // In lossless mode `quality` is not image quality but how hard libwebp
-            // searches for a smaller encoding: 100 costs ~5x the CPU of the default
-            // and buys ~20 percentage points of file size. Worth it, once, here.
-            const webp = await sharp(pngPath).webp({ lossless: true, quality: 100, effort: 6 }).toBuffer();
-            if (isCancelled()) return;
+async function compressFile(pngPath: string): Promise<void> {
+    const webpPath = pngPath.slice(0, -'.png'.length) + '.webp';
+    const partialPath = webpPath + '.partial';
 
-            // Never trade a smaller file for a bigger one; both formats are read
-            // back just fine, so keeping the PNG is a valid outcome.
-            if (webp.length >= stat.size) continue;
+    try {
+        const stat = fs.statSync(pngPath);
+        // In lossless mode `quality` is not image quality but how hard libwebp
+        // searches for a smaller encoding: 100 costs ~5x the CPU of the default
+        // and buys ~20 percentage points of file size. Worth it, once, here.
+        const webp = await sharp(pngPath).webp({ lossless: true, quality: 100, effort: 6 }).toBuffer();
 
-            // The review server reads this directory while the conversion runs, so
-            // the WebP appears under its real name only once it is complete: a
-            // half-written file is a broken image in the browser and a comparison
-            // failure — which the summary reports as a visual change — in the server.
-            fs.writeFileSync(partialPath, webp);
-            fs.renameSync(partialPath, webpPath);
-            fs.rmSync(pngPath, { force: true });
-        } catch (error) {
-            fs.rmSync(partialPath, { force: true });
+        // Never trade a smaller file for a bigger one; both formats are read
+        // back just fine, so keeping the PNG is a valid outcome.
+        if (webp.length >= stat.size) {
+            keepAsPng.add(pngPath);
+            return;
+        }
+
+        // The review server reads the pool while the conversion runs, so the
+        // WebP appears under its real name only once it is complete: a
+        // half-written file is a broken image in the browser and a comparison
+        // failure — which the summary reports as a visual change — in the server.
+        fs.writeFileSync(partialPath, webp);
+        fs.renameSync(partialPath, webpPath);
+        fs.rmSync(pngPath, { force: true });
+    } catch (error) {
+        fs.rmSync(partialPath, { force: true });
+        // A PNG that gc removed mid-conversion is expected, not worth a warning.
+        if (fs.existsSync(pngPath)) {
             console.warn(`ShoTest: could not convert ${pngPath} to WebP: ${error instanceof Error ? error.message : String(error)}`);
         }
     }

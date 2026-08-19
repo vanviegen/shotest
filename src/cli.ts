@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
 import {
   startReviewServer,
-  loadCurrentImageEntries,
-  loadAcceptedImageEntries,
+  loadTestRecords,
+  buildAlignEntries,
   hasVisualChanges,
+  testId,
 } from './review.js';
-import type { TestManifest } from './fixture.js';
+import { gcPoolFiles, hasLegacyAcceptedLayout, legacyAcceptedHint } from './manifest.js';
 
 interface VisualSummary {
   passed: number;
@@ -20,12 +20,12 @@ interface VisualSummary {
 
 const require = createRequire(import.meta.url);
 
-function loadManifest(manifestPath: string): TestManifest | null {
-  try {
-    return JSON.parse(readFileSync(manifestPath, 'utf-8')) as TestManifest;
-  } catch {
-    return null;
-  }
+function getOutputDir(): string {
+  return process.env.SHOTEST_OUTPUT_DIR || 'test-results';
+}
+
+function getAcceptedDir(): string {
+  return process.env.SHOTEST_ACCEPTED_DIR || 'test-accepted';
 }
 
 async function getVisualSummary(outputDir: string, acceptedDir: string): Promise<VisualSummary | null> {
@@ -33,42 +33,32 @@ async function getVisualSummary(outputDir: string, acceptedDir: string): Promise
     return null;
   }
 
-  const testDirs = readdirSync(outputDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort();
+  if (hasLegacyAcceptedLayout(acceptedDir)) {
+    console.warn('\nShoTest: ' + legacyAcceptedHint(acceptedDir));
+    return null;
+  }
+
+  const acceptedByKey = new Map(loadTestRecords(acceptedDir).map((test) => [testId(test), test]));
 
   let passed = 0;
   let changed = 0;
   let unchanged = 0;
   let noScreenshots = 0;
 
-  for (const testName of testDirs) {
-    const manifestPath = join(outputDir, testName, 'manifest.json');
-    if (!existsSync(manifestPath)) {
+  for (const record of loadTestRecords(outputDir)) {
+    if (record.status !== 'passed') {
       continue;
     }
 
-    const manifest = loadManifest(manifestPath);
-    if (!manifest || manifest.status !== 'passed') {
-      continue;
-    }
-
-    const currentEntries = loadCurrentImageEntries(join(outputDir, testName), manifest);
-
-    if (currentEntries.length === 0) {
+    if (record.steps.length === 0) {
       noScreenshots++;
       continue;
     }
 
     passed++;
 
-    // Reuse the review app's sequence-based alignment (match frames by position
-    // and compare their content) rather than matching by filename. The two used
-    // to diverge: renaming a step — e.g. when a source line shifts — left the
-    // image identical but changed its filename, which the filename match counted
-    // as a change while the review UI (correctly) did not.
-    const acceptedEntries = loadAcceptedImageEntries(join(acceptedDir, testName), currentEntries);
+    const currentEntries = buildAlignEntries(outputDir, record.steps);
+    const acceptedEntries = buildAlignEntries(acceptedDir, acceptedByKey.get(testId(record))?.steps ?? []);
     if (await hasVisualChanges(acceptedEntries, currentEntries)) {
       changed++;
     } else {
@@ -84,10 +74,7 @@ async function getVisualSummary(outputDir: string, acceptedDir: string): Promise
 }
 
 async function printVisualSummary(): Promise<boolean> {
-  const summary = await getVisualSummary(
-    process.env.SHOTEST_OUTPUT_DIR || 'test-results',
-    process.env.SHOTEST_ACCEPTED_DIR || 'test-accepted',
-  );
+  const summary = await getVisualSummary(getOutputDir(), getAcceptedDir());
 
   if (!summary) {
     return false;
@@ -102,6 +89,20 @@ async function printVisualSummary(): Promise<boolean> {
     console.log('Run "npx shotest review" to review and accept visual changes');
   }
   return summary.changed > 0;
+}
+
+function runGc(verbose: boolean): void {
+  const acceptedDir = getAcceptedDir();
+  const legacyAccepted = hasLegacyAcceptedLayout(acceptedDir);
+  if (legacyAccepted && verbose) {
+    // The post-test summary already hints at this when gc runs automatically.
+    console.warn('ShoTest gc: ' + legacyAcceptedHint(acceptedDir));
+  }
+  const removedResults = gcPoolFiles(getOutputDir());
+  const removedAccepted = legacyAccepted ? 0 : gcPoolFiles(acceptedDir);
+  if (verbose || removedResults + removedAccepted > 0) {
+    console.log(`ShoTest gc: removed ${removedResults} unreferenced file(s) from ${getOutputDir()}, ${removedAccepted} from ${acceptedDir}`);
+  }
 }
 
 function runPlaywright(argv: string[]): number {
@@ -135,10 +136,22 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (firstArg === 'gc') {
+    runGc(true);
+    return;
+  }
+
   const status = runPlaywright(argv);
 
   if (firstArg === 'test') {
     const hasVisualChanges = await printVisualSummary();
+    // A clean, unfiltered run has produced results for every test there is,
+    // so anything the spec JSONs no longer reference is garbage. Extra
+    // arguments could have filtered the run (a file, -g, --shard, ...), in
+    // which case gc would see only a partial picture — skip it then.
+    if (status === 0 && argv.length === 1) {
+      runGc(false);
+    }
     if (status === 0 && hasVisualChanges && failOnVisualChanges) {
       process.exit(1);
     }
