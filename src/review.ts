@@ -46,6 +46,18 @@ function findScreenshotFile(dir: string, name: string): string | undefined {
     return imageExtensions.map((ext) => name + ext).find((file) => fs.existsSync(path.join(dir, file)));
 }
 
+// A background conversion may have replaced a screenshot with its other format
+// between the moment the directory was listed and the moment the file is read.
+function resolveExistingScreenshot(filePath: string): string {
+    if (fs.existsSync(filePath) || !isScreenshotFile(filePath)) {
+        return filePath;
+    }
+
+    const dir = path.dirname(filePath);
+    const alternate = findScreenshotFile(dir, path.basename(filePath, path.extname(filePath)));
+    return alternate ? path.join(dir, alternate) : filePath;
+}
+
 // ── Image alignment ────────────────────────────────────────────────
 
 // A comparison that cannot be made is reported as a difference. The alternative —
@@ -55,7 +67,7 @@ function findScreenshotFile(dir: string, name: string): string | undefined {
 // Reporting it as changed puts the step in front of the reviewer instead.
 async function imagesEquivalent(acceptedPath: string, currentPath: string): Promise<boolean> {
     try {
-        return await areImagesEquivalent(acceptedPath, currentPath);
+        return await areImagesEquivalent(resolveExistingScreenshot(acceptedPath), resolveExistingScreenshot(currentPath));
     } catch (error) {
         console.warn(`ShoTest: could not compare ${acceptedPath} with ${currentPath}: ${error instanceof Error ? error.message : String(error)}`);
         return false;
@@ -186,7 +198,19 @@ export function loadCurrentImageEntries(testDir: string, manifest: TestManifest)
     return entries;
 }
 
-export function loadAcceptedImageEntries(expDir: string): ImageEntry[] {
+// `order` is the current run's entries, when there is a run to compare against.
+// A baseline directory records no order of its own — just names — so listing it
+// means sorting, and steps are aligned by position. Screenshot names sort into
+// the order they were taken only while a test walks its source file top to
+// bottom: a screenshot from a helper defined higher up, or a loop coming back
+// around to an earlier line, sorts into a position the test never visited, and
+// every step from there on is compared against the wrong baseline. Accepting
+// cannot fix that — it copies the same images back — so the test stays stuck on
+// "changed" no matter how often it is accepted. Matching names one for one
+// against the current run identifies a baseline as those very screenshots,
+// which makes the run's order the order they were accepted in. That is the case
+// directly after an accept, which is the one that has to come out unchanged.
+export function loadAcceptedImageEntries(expDir: string, order?: ImageEntry[]): ImageEntry[] {
     if (!fs.existsSync(expDir)) {
         return [];
     }
@@ -200,7 +224,7 @@ export function loadAcceptedImageEntries(expDir: string): ImageEntry[] {
         }
     }
 
-    return [...names].sort().map((name: string) => {
+    function toEntry(name: string): ImageEntry {
         const file = findScreenshotFile(expDir, name)!;
         return {
             name,
@@ -211,7 +235,17 @@ export function loadAcceptedImageEntries(expDir: string): ImageEntry[] {
             role: undefined,
             consoleMessages: undefined,
         };
-    });
+    }
+
+    // Compared as sets, so a run that takes two screenshots under one name still
+    // lines up: both steps get handed the single baseline that was written for
+    // them, exactly as both read back the single file in test-results.
+    const orderedNames = order && new Set(order.map((entry) => entry.name));
+    if (orderedNames && orderedNames.size === names.size && [...orderedNames].every((name) => names.has(name))) {
+        return order!.map((entry) => toEntry(entry.name));
+    }
+
+    return [...names].sort().map(toEntry);
 }
 
 export async function hasVisualChanges(acceptedEntries: ImageEntry[], currentEntries: ImageEntry[]): Promise<boolean> {
@@ -272,9 +306,10 @@ async function getTests(): Promise<TestSummary[]> {
 
             const testDir = path.join(outputDir, name);
             const expDir = path.join(acceptedDir, name);
+            const currentEntries = loadCurrentImageEntries(testDir, manifest);
             hasChanges = await hasVisualChanges(
-                loadAcceptedImageEntries(expDir),
-                loadCurrentImageEntries(testDir, manifest),
+                loadAcceptedImageEntries(expDir, currentEntries),
+                currentEntries,
             );
         }
 
@@ -338,7 +373,7 @@ async function getTestDetails(testName: string): Promise<{
     const manifest: TestManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
 
     const currentEntries = loadCurrentImageEntries(testDir, manifest);
-    const acceptedEntries = loadAcceptedImageEntries(expDir);
+    const acceptedEntries = loadAcceptedImageEntries(expDir, currentEntries);
 
     // Worth the extra comparisons here: this is the view where a step marked
     // changed sends someone looking for the difference.
@@ -599,15 +634,9 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
                     res.end('Forbidden');
                     return;
                 }
-                // A background conversion may have replaced the file with its
-                // other format between listing and loading it; serve that instead
-                // of a 404.
-                let servePath = resolved;
-                if (!fs.existsSync(servePath) && isScreenshotFile(servePath)) {
-                    const dir = path.dirname(servePath);
-                    const alternate = findScreenshotFile(dir, path.basename(servePath, path.extname(servePath)));
-                    if (alternate) servePath = path.join(dir, alternate);
-                }
+                // Serve the replacement of a file a conversion moved out from
+                // under us rather than a 404.
+                const servePath = resolveExistingScreenshot(resolved);
 
                 const ext = path.extname(servePath).toLowerCase();
                 const mimeTypes: Record<string, string> = {

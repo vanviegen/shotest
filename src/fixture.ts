@@ -355,8 +355,13 @@ export interface TestManifest {
 
 let currentOutDir = '';
 let currentSteps: StepInfo[] = [];
-let lastScreenshotKey = '';
-let lastScreenshotSeq = 0;
+// How many screenshots each source line has produced in the current test. Per
+// line, because a test does not walk its source top to bottom: a loop comes back
+// around and helpers are called from wherever they are needed. A single counter
+// that resets whenever the line changes hands the same name out twice in those
+// tests, and the second screenshot overwrites the first — leaving the manifest
+// listing more steps than there are files.
+let screenshotSeqByLine = new Map<string, number>();
 let lastStepLocation: SourceLocation | null = null;
 let pendingFailureText = '';
 let pendingOverlayNotices: OverlayNotice[] = [];
@@ -407,12 +412,8 @@ async function takeScreenshot(
     stepStartTimeMs: number = Date.now(),
 ): Promise<StepInfo> {
     const key = currentOutDir + ':' + loc.line;
-    if (lastScreenshotKey !== key) {
-        lastScreenshotKey = key;
-        lastScreenshotSeq = 0;
-    } else {
-        lastScreenshotSeq++;
-    }
+    const seq = screenshotSeqByLine.get(key) ?? 0;
+    screenshotSeqByLine.set(key, seq + 1);
 
     if (!alreadyStable) {
         await waitForVisualStability(actualPage);
@@ -423,7 +424,7 @@ async function takeScreenshot(
         flushedPendingNotices = await showOverlayBanners(actualPage, pendingOverlayNotices, 'prepend');
     }
 
-    const name = `${loc.line.toString().padStart(4, '0')}${screenshotSuffix(lastScreenshotSeq)}`;
+    const name = `${loc.line.toString().padStart(4, '0')}${screenshotSuffix(seq)}`;
     const basePath = path.join(currentOutDir, name);
     const relFile = path.relative(process.cwd(), loc.file);
 
@@ -665,8 +666,7 @@ export const test = baseTest.extend({
         const outDir = testInfo.outputDir;
         currentOutDir = outDir;
         currentSteps = [];
-        lastScreenshotKey = '';
-        lastScreenshotSeq = 0;
+        screenshotSeqByLine = new Map();
         lastStepLocation = null;
         pendingFailureText = '';
         pendingOverlayNotices = [];

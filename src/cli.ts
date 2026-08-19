@@ -68,7 +68,7 @@ async function getVisualSummary(outputDir: string, acceptedDir: string): Promise
     // to diverge: renaming a step — e.g. when a source line shifts — left the
     // image identical but changed its filename, which the filename match counted
     // as a change while the review UI (correctly) did not.
-    const acceptedEntries = loadAcceptedImageEntries(join(acceptedDir, testName));
+    const acceptedEntries = loadAcceptedImageEntries(join(acceptedDir, testName), currentEntries);
     if (await hasVisualChanges(acceptedEntries, currentEntries)) {
       changed++;
     } else {

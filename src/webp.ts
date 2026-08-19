@@ -29,6 +29,7 @@ export async function compressDirectoryToWebp(dir: string, isCancelled: () => bo
 
         const pngPath = path.join(dir, file);
         const webpPath = pngPath.slice(0, -'.png'.length) + '.webp';
+        const partialPath = webpPath + '.partial';
 
         try {
             const stat = fs.statSync(pngPath);
@@ -42,9 +43,15 @@ export async function compressDirectoryToWebp(dir: string, isCancelled: () => bo
             // back just fine, so keeping the PNG is a valid outcome.
             if (webp.length >= stat.size) continue;
 
-            fs.writeFileSync(webpPath, webp);
+            // The review server reads this directory while the conversion runs, so
+            // the WebP appears under its real name only once it is complete: a
+            // half-written file is a broken image in the browser and a comparison
+            // failure — which the summary reports as a visual change — in the server.
+            fs.writeFileSync(partialPath, webp);
+            fs.renameSync(partialPath, webpPath);
             fs.rmSync(pngPath, { force: true });
         } catch (error) {
+            fs.rmSync(partialPath, { force: true });
             console.warn(`ShoTest: could not convert ${pngPath} to WebP: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
