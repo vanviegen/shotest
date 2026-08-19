@@ -445,12 +445,24 @@ const borderForChange: Record<StepChange, string> = {
 const gapStyle = A.insertCss({
   '&': 'align-self:stretch display:flex flex-direction:column align-items:center justify-content:center gap:0.4rem border: 2px dashed $s-faint; border-radius:8px pv:1rem ph:0.75rem max-width:11rem color:$s-muted',
   '.text': 'font-size:0.8em font-style:italic text-align:center word-break:break-word',
+  '.text.was': 'text-decoration:line-through opacity:0.7',
   '.status': 'font-size:0.75em',
 });
 
+// A gap carries no image, so its text is the only thing the reviewer can look
+// at. An empty one (withoutScreenshots('')) would otherwise draw a blank box.
+function gapText(text: string | undefined): string {
+  return text ? text : '(no description)';
+}
+
 function renderGapStep(step: ReviewStep, change: StepChange): void {
   A('div', gapStyle, change === 'unchanged' ? '' : borderForChange[change], () => {
-    A('div.text #', step.currentGap ?? step.acceptedGap ?? '');
+    // A changed gap changed its text: showing only the new one asks the reviewer
+    // to spot a difference against something they cannot see.
+    if (change === 'changed' && step.acceptedGap !== undefined && step.currentGap !== undefined) {
+      A('div.text.was #', gapText(step.acceptedGap));
+    }
+    A('div.text #', gapText(step.currentGap ?? step.acceptedGap));
     if (change !== 'unchanged') A('div.status #', change);
   });
 }

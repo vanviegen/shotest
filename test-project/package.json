@@ -9,5 +9,9 @@
   },
   "devDependencies": {
     "shotest": "file:.."
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "odiff-bin": true
   }
 }

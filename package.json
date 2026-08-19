@@ -26,7 +26,7 @@
   "scripts": {
     "build": "node --experimental-strip-types scripts/build.ts && npm run build:docs",
     "build:docs": "readme-tsdoc && rm -rf skill ; mkdir skill ; cat skill-header.md README.md > skill/SKILL.md",
-    "test": "npm --prefix test-project run test:run",
+    "test": "cd test-project && npm install && npm run test:run",
     "review": "npm run build && SHOTEST_OUTPUT_DIR=test-project/test-results SHOTEST_ACCEPTED_DIR=test-project/test-accepted node build/cli.js review",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build"

@@ -269,12 +269,23 @@ async function alignSteps(
     return result;
 }
 
+// Whether an aligned pair is something a reviewer has to look at: one side is
+// missing (a step was added or removed), or the two sides differ. A side counts
+// as present when its field is *there* — not when it is truthy. A gap step whose
+// text is empty (withoutScreenshots('')) is still a step on that side; calling
+// it missing reports a change the review app then shows as unchanged, leaving a
+// warning marker that cannot be inspected and an Accept button that never
+// appears. The review app's own getStepChange() applies the same rule; the two
+// must agree, or the summary and the detail view contradict each other.
+function pairHasChange(step: AlignedPair): boolean {
+    const hasAccepted = step.acceptedImage !== undefined || step.acceptedGap !== undefined;
+    const hasCurrent = step.currentImage !== undefined || step.currentGap !== undefined;
+    return step.changed || !hasAccepted || !hasCurrent;
+}
+
 export async function hasVisualChanges(acceptedEntries: AlignEntry[], currentEntries: AlignEntry[]): Promise<boolean> {
     const steps = await alignSteps(acceptedEntries, currentEntries);
-    return steps.some((step) =>
-        step.changed ||
-        (!step.acceptedImage && !step.acceptedGap) ||
-        (!step.currentImage && !step.currentGap));
+    return steps.some(pairHasChange);
 }
 
 // ── Test listing and details ───────────────────────────────────────

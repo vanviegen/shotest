@@ -1,0 +1,260 @@
+{
+  "tests": [
+    {
+      "file": "tests/shotest.spec.js",
+      "title": "captures browser console messages",
+      "steps": [
+        {
+          "image": "1e368b8a94412ce1"
+        },
+        {
+          "image": "dd1ac88e92e76ce6",
+          "name": "console-final"
+        }
+      ]
+    },
+    {
+      "file": "tests/shotest.spec.js",
+      "title": "captures screenshots for locator reads and timed waits",
+      "steps": [
+        {
+          "image": "aeee6c279f8bbc01"
+        },
+        {
+          "image": "86e70fb4aaeb4277"
+        },
+        {
+          "image": "e5d200643dd93eaa"
+        }
+      ]
+    },
+    {
+      "file": "tests/shotest.spec.js",
+      "title": "covers core wrapped actions and assertions",
+      "steps": [
+        {
+          "image": "1e368b8a94412ce1"
+        },
+        {
+          "image": "370d00ebe9fb8c92"
+        },
+        {
+          "image": "29312d1c150757e3"
+        },
+        {
+          "image": "eece380d38b82972"
+        },
+        {
+          "image": "d1934d9e3746e16b"
+        },
+        {
+          "image": "5f77cda80f1e8901"
+        },
+        {
+          "image": "b49c4822dc5c59c7"
+        },
+        {
+          "image": "d3235a676f19f44c"
+        },
+        {
+          "image": "6d80e5cb6cb644fb"
+        },
+        {
+          "image": "65d2fd58c2dfd4ed"
+        },
+        {
+          "image": "7bcfe7069157f46e"
+        },
+        {
+          "image": "7286b1b4e39e0a80"
+        },
+        {
+          "image": "b6e4a94ed0320f3b"
+        },
+        {
+          "image": "fcb373afd5d5c013"
+        },
+        {
+          "image": "72942fb0d279ca71"
+        },
+        {
+          "image": "7b53e49578fae7d8"
+        },
+        {
+          "image": "8a8f7e67065e79d7"
+        },
+        {
+          "image": "e17c4242507f59ad"
+        },
+        {
+          "image": "afff51185389f892"
+        },
+        {
+          "image": "d09ebf74f73913f0"
+        },
+        {
+          "image": "02d8db5eed0a1f88",
+          "name": "core-final"
+        }
+      ]
+    },
+    {
+      "file": "tests/shotest.spec.js",
+      "title": "covers demo helpers in non-video mode",
+      "steps": [
+        {
+          "image": "1e368b8a94412ce1"
+        },
+        {
+          "image": "370d00ebe9fb8c92"
+        },
+        {
+          "image": "0df70efdfdbc5984"
+        },
+        {
+          "image": "5151711679091544"
+        },
+        {
+          "image": "d08e01f8883a69bd"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "fc442cad0465d23c"
+        },
+        {
+          "image": "d08e01f8883a69bd"
+        },
+        {
+          "image": "243d069dfb5c5436"
+        },
+        {
+          "image": "34f87ff001f93cbb"
+        },
+        {
+          "image": "fdbe0e39116473df",
+          "name": "demo-final"
+        }
+      ]
+    },
+    {
+      "file": "tests/shotest.spec.js",
+      "title": "covers splitIntoRoles including repeated role names",
+      "steps": [
+        {
+          "image": "8e62bf2115a625b0",
+          "role": "beta"
+        },
+        {
+          "image": "1d3822e8384e0cb1",
+          "role": "alpha"
+        },
+        {
+          "image": "f85e1f902d2b8c2d",
+          "role": "alpha"
+        },
+        {
+          "image": "b2eff37005eed733",
+          "role": "beta"
+        },
+        {
+          "image": "caac339e86c48504",
+          "role": "beta"
+        },
+        {
+          "image": "d5fb7fca86a9de9d",
+          "name": "alpha-state",
+          "role": "alpha"
+        },
+        {
+          "image": "9bbc4afb15b15be8",
+          "name": "beta-state",
+          "role": "beta"
+        }
+      ]
+    },
+    {
+      "file": "tests/shotest.spec.js",
+      "title": "negative assertions on absent elements complete quickly",
+      "steps": [
+        {
+          "image": "e4520fb6b1a63877"
+        },
+        {
+          "image": "ad7b6612b9fe1644"
+        },
+        {
+          "image": "f67c8587f7fd3c87"
+        }
+      ]
+    },
+    {
+      "file": "tests/shotest.spec.js",
+      "title": "supports describe hints and screenshot suppression",
+      "steps": [
+        {
+          "gap": "Prepare the counter (2x increment)"
+        },
+        {
+          "image": "bf5a7ce4a3781383",
+          "description": "Verify the prepared counter"
+        }
+      ]
+    }
+  ]
+}
