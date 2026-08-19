@@ -4,8 +4,13 @@ import * as S from 'staffa';
 import {
   camera,
   check,
+  chevronDown,
+  chevronUp,
   circleAlert,
   circleCheck,
+  eye,
+  house,
+  loaderCircle,
   trash2,
   triangleAlert,
   undo2,
@@ -64,9 +69,7 @@ interface TestDetail {
 
 interface ReviewState {
   tests: TestSummary[];
-  detail: TestDetail | null;
   loadingTests: boolean;
-  loadingDetail: boolean;
   scale: number;
   compareMode: CompareMode;
   toggleShowNew: boolean;
@@ -74,17 +77,22 @@ interface ReviewState {
 
 const state = A.proxy<ReviewState>({
   tests: [],
-  detail: null,
   loadingTests: true,
-  loadingDetail: false,
   scale: 0.8,
   compareMode: 'toggle',
   toggleShowNew: true,
 });
 
-let detailToken = 0;
+// Detail data lives per open panel (a pinned test panel keeps showing its own
+// test), registered by path so the global keyboard handler can find the one
+// the URL is on.
+interface TestPanelCtx {
+  id: string;
+  $local: { detail: TestDetail | null; loading: boolean };
+  reload: () => Promise<void>;
+}
 
-route.interceptLinks();
+const testPanelCtxs = new Map<string, TestPanelCtx>();
 
 // Always use light mode.
 S.setDarkMode(false);
@@ -99,12 +107,23 @@ setInterval(() => {
 
 // ── Scoped styles for the few custom bits Staffa doesn't cover ──────
 
-const stageStyle = A.insertCss({
-  '&': 'position:relative display:inline-grid overflow:hidden border-radius:4px background:#000',
-  img: 'grid-area:1/1 display:block max-width:none border-radius:4px',
+// The screenshot with its overlays. The zoomed stage cannot hold the overlay
+// tag itself: CSS zoom would shrink the tag along with the pixels.
+const shotStyle = A.insertCss({
+  '&': 'position:relative width:max-content max-width:100%',
+  '.stage': 'display:inline-grid overflow:hidden border-radius:4px vertical-align:top',
+  '.stage img': 'grid-area:1/1 display:block max-width:none border-radius:4px',
   '.layer': 'opacity:0 transition: opacity 120ms linear;',
   '.layer.visible': 'opacity:1',
+  '.tag': 'position:absolute top:0.4rem left:0.4rem pv:0.1rem ph:0.5rem r:99px font-size:0.7em font-weight:700 letter-spacing:0.04em text-transform:uppercase color:#fff background:rgba(30,41,59,0.75) pointer-events:none',
+  '.tag.current': 'background:$s-primary',
 });
+
+// The shared shape of all pills: step status, step counts, role labels.
+// Meaning is never carried by colour alone — every pill spells itself out.
+const chipStyle = A.insertCss(
+  'display:inline-flex align-items:center gap:0.3rem font-size:0.72em font-weight:700 line-height:1.5 pv:0.05rem ph:0.5rem r:99px text-transform:uppercase letter-spacing:0.04em white-space:nowrap',
+);
 
 const consoleStyle = A.insertCss({
   // width:0 + min-width:100%: contributes nothing to the card's max-content
@@ -132,21 +151,32 @@ const sliderStyle = A.insertCss({
   '&::-moz-range-thumb': 'width:13px height:13px border:0 border-radius:50% background:$s-primary',
 });
 
-// ── Data loading ────────────────────────────────────────────────────
+A.insertGlobalCss({
+  '@keyframes shotest-spin': { to: 'transform:rotate(360deg)' },
+});
+const spinStyle = A.insertCss('animation: shotest-spin 1s linear infinite;');
 
-function routeTestId(): string | null {
-  return route.current.p[0] === 'test' && route.current.p[1]
-    ? decodeURIComponent(route.current.p[1])
-    : null;
-}
+const kbdStyle = A.insertCss(
+  'font-family:ui-monospace,monospace font-size:0.8em pv:0.05rem ph:0.4rem r:4px border: 1px solid $s-faint; background:$s-bg display:inline-block min-width:1.5em text-align:center',
+);
+
+// ── Data loading ────────────────────────────────────────────────────
 
 function hrefForTest(id: string): string {
   return `/test/${encodeURIComponent(id)}`;
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  return response.json() as Promise<T>;
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error((body as { error?: string } | null)?.error || `${response.status} ${response.statusText}`);
+  }
+  return body as T;
 }
 
 async function fetchTests(): Promise<void> {
@@ -163,42 +193,44 @@ async function fetchTests(): Promise<void> {
     // Update in place (instead of replacing the array) so only tests that
     // actually changed redraw — keeping the nav pane's DOM and scroll intact.
     A.copy(state, 'tests', tests);
+  } catch (error) {
+    S.toast({ title: 'Could not load tests', message: errorMessage(error), type: 'danger' });
   } finally {
     state.loadingTests = false;
   }
 }
 
-async function loadDetail(id: string): Promise<void> {
-  state.detail = null;
-  state.loadingDetail = true;
-  const token = ++detailToken;
+async function acceptChanges(ctx: TestPanelCtx): Promise<void> {
+  const orphaned = ctx.$local.detail?.orphaned ?? false;
+  const acceptedIndex = state.tests.findIndex((test) => test.id === ctx.id);
   try {
-    const detail = await fetchJson<TestDetail>(`/api/test/${encodeURIComponent(id)}`);
-    if (token === detailToken) {
-      state.detail = detail;
-    }
-  } finally {
-    if (token === detailToken) {
-      state.loadingDetail = false;
-    }
+    await fetchJson(`/api/accept/${encodeURIComponent(ctx.id)}`, { method: 'POST' });
+  } catch (error) {
+    S.toast({ title: orphaned ? 'Delete failed' : 'Accept failed', message: errorMessage(error), type: 'danger' });
+    return;
   }
-}
-
-async function acceptChanges(id: string): Promise<void> {
-  const acceptedIndex = state.tests.findIndex((test) => test.id === id);
-  await fetch(`/api/accept/${encodeURIComponent(id)}`, { method: 'POST' });
+  S.toast({ message: orphaned ? 'Stale baseline deleted' : 'Visuals accepted', type: 'success', duration: 3000 });
   await fetchTests();
 
+  // On to the next test needing review, or back to the overview when this was
+  // the last one. Everything navigates by swapping the whole (single-pane)
+  // stack, the same thing every link does under `linkNavigation: 'open'`.
   const next = findNextUnacceptedTestId(Math.max(0, acceptedIndex));
-  route.go(next ? hrefForTest(next) : '/');
+  void shell.openPanelStack(next ? hrefForTest(next) : '/');
 }
 
-async function revertChanges(id: string): Promise<void> {
-  state.detail = null;
-  state.loadingDetail = true;
-  await fetch(`/api/revert/${encodeURIComponent(id)}`, { method: 'POST' });
+async function revertChanges(ctx: TestPanelCtx): Promise<void> {
+  ctx.$local.loading = true;
+  try {
+    await fetchJson(`/api/revert/${encodeURIComponent(ctx.id)}`, { method: 'POST' });
+  } catch (error) {
+    ctx.$local.loading = false;
+    S.toast({ title: 'Revert failed', message: errorMessage(error), type: 'danger' });
+    return;
+  }
+  S.toast({ message: 'Accepted visuals reverted to git HEAD', type: 'success', duration: 3000 });
   await fetchTests();
-  await loadDetail(id);
+  await ctx.reload();
 }
 
 function findNextUnacceptedTestId(startIndex: number): string | null {
@@ -211,20 +243,6 @@ function findNextUnacceptedTestId(startIndex: number): string | null {
   }
   return null;
 }
-
-// React to URL changes: (re)load the selected test's detail.
-A(() => {
-  const id = routeTestId();
-  // The shell isn't rebuilt on navigation, so reset the content scroll ourselves.
-  document.querySelector('.s-main main')?.scrollTo(0, 0);
-  if (id) {
-    void loadDetail(id);
-  } else {
-    detailToken++;
-    state.detail = null;
-    state.loadingDetail = false;
-  }
-});
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -246,9 +264,12 @@ function getStepChange(step: ReviewStep): StepChange {
   return step.changed ? 'changed' : 'unchanged';
 }
 
-function selectedTestHasChanges(): boolean {
-  const steps = state.detail?.steps ?? [];
-  return steps.some((step) => getStepChange(step) !== 'unchanged');
+function detailHasChanges(detail: TestDetail | null): boolean {
+  return (detail?.steps ?? []).some((step) => getStepChange(step) !== 'unchanged');
+}
+
+function testIsFailed(status: string | undefined): boolean {
+  return status === 'failed' || status === 'timedOut';
 }
 
 function consoleTone(type?: string): ConsoleTone {
@@ -269,17 +290,21 @@ function isTextEntryTarget(target: EventTarget | null): boolean {
   return false;
 }
 
+// The test panel the URL is currently on, if any.
+function currentTestCtx(): TestPanelCtx | undefined {
+  return testPanelCtxs.get(route.current.path);
+}
+
 function selectRelativeTest(offset: number): void {
   const { tests } = state;
   if (tests.length === 0) return;
-  const selected = routeTestId();
-  const currentIndex = selected
-    ? tests.findIndex((test) => test.id === selected)
+  const ctx = currentTestCtx();
+  const currentIndex = ctx
+    ? tests.findIndex((test) => test.id === ctx.id)
     : (offset > 0 ? -1 : tests.length);
   const nextIndex = Math.min(tests.length - 1, Math.max(0, currentIndex + offset));
-  if (nextIndex !== currentIndex) {
-    route.go(hrefForTest(tests[nextIndex].id));
-  }
+  if (nextIndex === currentIndex) return;
+  void shell.openPanelStack(hrefForTest(tests[nextIndex].id));
 }
 
 document.addEventListener('keydown', (event) => {
@@ -299,66 +324,186 @@ document.addEventListener('keydown', (event) => {
   if (event.altKey || event.metaKey || event.ctrlKey) return;
 
   const key = event.key.toLowerCase();
-  const selected = routeTestId();
+  const ctx = currentTestCtx();
 
   if (key === 'o') { event.preventDefault(); state.compareMode = 'accepted'; }
   else if (key === 'n') { event.preventDefault(); state.compareMode = 'current'; }
   else if (key === 't') { event.preventDefault(); state.compareMode = 'toggle'; }
-  else if (key === 'a' && selected && selectedTestHasChanges()) {
+  else if (key === 'a' && ctx && !ctx.$local.loading && detailHasChanges(ctx.$local.detail)) {
     event.preventDefault();
-    void acceptChanges(selected);
-  } else if (key === 'r' && selected && state.detail?.canRevert) {
+    void acceptChanges(ctx);
+  } else if (key === 'r' && ctx && !ctx.$local.loading && ctx.$local.detail?.canRevert) {
     event.preventDefault();
-    void revertChanges(selected);
+    void revertChanges(ctx);
   }
 });
 
-// ── Rendering ───────────────────────────────────────────────────────
+// ── Status pills ────────────────────────────────────────────────────
+
+// Statuses ride on Staffa's semantic accent surfaces, so the pills and the
+// card borders below speak the same colour language: amber = changed,
+// green = new, red = removed.
+const statusSurface: Record<Exclude<StepChange, 'unchanged'>, string> = {
+  changed: '.warning',
+  new: '.success',
+  removed: '.danger',
+};
+
+function drawStatusChip(change: StepChange, count?: number): void {
+  if (change === 'unchanged') return;
+  const label = count !== undefined ? `${count} ${change}` : change;
+  A(`span.s-s${statusSurface[change]}`, chipStyle, '#', label);
+}
+
+function drawFailedChip(status: string): void {
+  A('span.s-s.danger', chipStyle, '#', status === 'timedOut' ? 'timed out' : 'failed');
+}
+
+// ── Roles ───────────────────────────────────────────────────────────
+
+// Each browser window (role) gets a hue: the card's surface is tinted with it
+// and a chip naming the role wears the same hue, so the tint explains itself.
+// Equal oklch lightness and chroma keep all tints at the same visual weight.
+// We're always in light mode, so hard-coded light values are fine.
+const roleHues = [250, 80, 320, 160]; // blue, amber, violet, green
+const roleTintStyles = roleHues.map((hue) =>
+  A.insertCss({ '&.s-s.neutral': `--s-bg: oklch(0.97 0.02 ${hue});` }));
+const roleChipStyles = roleHues.map((hue) =>
+  A.insertCss(`background: oklch(0.92 0.06 ${hue}); color: oklch(0.35 0.1 ${hue});`));
+const plainChipStyle = A.insertCss('background: oklch(0.93 0.005 250); color: oklch(0.4 0.01 250);');
+
+interface RoleInfo {
+  // Colour-code only when a test actually uses several browser windows.
+  multi: boolean;
+  indexOf: Map<string | undefined, number>;
+}
+
+function buildRoleInfo(steps: ReviewStep[]): RoleInfo {
+  const indexOf = new Map<string | undefined, number>();
+  for (const step of steps) {
+    if (isGapStep(step)) continue;
+    if (!indexOf.has(step.role)) indexOf.set(step.role, indexOf.size);
+  }
+  return { multi: indexOf.size > 1, indexOf };
+}
+
+function roleTint(roles: RoleInfo, role: string | undefined): string {
+  if (!roles.multi) return '';
+  return roleTintStyles[(roles.indexOf.get(role) ?? 0) % roleTintStyles.length];
+}
+
+function drawRoleChip(roles: RoleInfo, role: string | undefined): void {
+  // A single-window test has nothing to tell apart; only name the role if the
+  // test author gave it one.
+  if (!roles.multi && role === undefined) return;
+  const style = roles.multi
+    ? roleChipStyles[(roles.indexOf.get(role) ?? 0) % roleChipStyles.length]
+    : plainChipStyle;
+  A('span', chipStyle, style, '#', role ?? 'main');
+}
+
+// ── Rendering: nav ──────────────────────────────────────────────────
 
 function statusIcon(test: TestSummary): () => void {
-  const failed = test.status === 'failed' || test.status === 'timedOut';
   if (test.orphaned) return () => trash2({ size: '1.1em', color: 'var(--s-danger)' });
   if (test.hasChanges) return () => circleAlert({ size: '1.1em', color: 'var(--s-warning)' });
-  if (failed) return () => triangleAlert({ size: '1.1em', color: 'var(--s-danger)' });
+  if (testIsFailed(test.status)) return () => triangleAlert({ size: '1.1em', color: 'var(--s-danger)' });
   return () => circleCheck({ size: '1.1em', color: 'var(--s-success)' });
 }
 
-// The whole test list is a single stable nav slot rendered with A.onEach, so a
-// tests refresh (e.g. after accepting) updates items in place instead of
-// rebuilding the sidebar — which would reset its scroll position.
-function drawNavEntries(): void {
-  A.onEach(state.tests, (test, index) => {
-    A(() => {
-      if (test.file !== (index > 0 ? state.tests[index - 1]?.file : undefined)) {
-        A('div font-size:0.8em font-weight:600 color:$s-muted mt:0.5rem mb:0.1rem #', test.file);
-      }
-    });
-    const href = hrefForTest(test.id);
-    A('a.s-menu-item href=', href, () => {
-      A(() => { if (route.matchCurrent(href)) A('aria-current=page'); });
-      A('span.s-menu-icon', () => statusIcon(test)());
-      // Orphans are named after their baseline entry, not a live test — muted,
-      // to set them apart from the tests this run actually produced.
-      A(test.orphaned ? 'span color:$s-muted rich=' : 'span rich=', test.title);
-    });
+const navBadgeStyle = A.insertCss(
+  'font-size:0.7em font-weight:700 line-height:1.5 pv:0 ph:0.4rem r:99px margin-left:auto flex-shrink:0',
+);
+
+function drawNavLoadingRow(): void {
+  A('div display:flex align-items:center gap:0.5rem color:$s-muted pv:0.4rem ph:0.5rem font-size:0.9em', () => {
+    loaderCircle({ size: '1.1em', attrs: spinStyle });
+    A('span #Loading tests…');
   });
 }
 
-// The header above a screenshot: the test author's one-line description (from
-// page.describe), then the muted step facts. Duration moved to the footer.
-function renderStepMeta(step: ReviewStep, change: StepChange, showing?: 'accepted' | 'current'): void {
-  A('div display:flex flex-direction:column gap:0.15rem max-width:100%', () => {
-    if (step.description) A('div font-size:0.85em font-weight:600 #', step.description);
-    A('div display:flex flex-wrap:wrap gap:0.4rem align-items:center font-size:0.8em color:$s-muted', () => {
-      // Source line comes from the test run; a baseline-only (orphaned/removed)
-      // step can only be named by its label or image.
-      const label = step.location ? `line ${parseLine(step.location)}` : (step.name || step.acceptedImage || 'baseline');
-      A('span #', step.name && step.location ? `${step.name} · ${label}` : label);
-      A('span #', `· ${change}`);
-      if (showing) A('span #', `· showing ${showing}`);
-      if (step.role) A('span font-weight:600 color:$s-accent #', `· ${step.role}`);
+function buildNavItems(): S.MenuEntry[] {
+  const items: S.MenuEntry[] = [
+    { label: 'Overview', icon: () => house({ size: '1.1em' }), href: '/' },
+  ];
+
+  const { tests } = state;
+  if (tests.length === 0) {
+    items.push(state.loadingTests
+      ? drawNavLoadingRow
+      : () => A('div color:$s-muted font-size:0.9em pv:0.4rem ph:0.5rem #No test results found'));
+    return items;
+  }
+
+  // One collapsible branch per spec file (tests are already sorted by file).
+  const groups = new Map<string, TestSummary[]>();
+  for (const test of tests) {
+    let group = groups.get(test.file);
+    if (!group) groups.set(test.file, group = []);
+    group.push(test);
+  }
+
+  for (const [file, groupTests] of groups) {
+    const attention = groupTests.filter((test) => test.hasChanges).length;
+    items.push({
+      label: () => {
+        A('span flex:1 min-width:0 overflow:hidden text-overflow:ellipsis white-space:nowrap #', file);
+        // A folded branch must still say its tests need looking at.
+        if (attention > 0) A('span.s-s.warning', chipStyle, navBadgeStyle, '#', String(attention));
+      },
+      items: groupTests.map((test) => ({
+        // Orphans are named after their baseline entry, not a live test —
+        // muted, to set them apart from the tests this run actually produced.
+        label: test.orphaned ? () => A('span color:$s-muted rich=', test.title) : test.title,
+        icon: statusIcon(test),
+        href: hrefForTest(test.id),
+      })),
     });
+  }
+  return items;
+}
+
+// A stable proxied array: refreshing the tests updates entries in place, so
+// the sidebar redraws only what actually changed.
+const $navItems = A.proxy([] as S.MenuEntry[]);
+A(() => {
+  A.copy($navItems, buildNavItems());
+});
+
+// ── Rendering: steps ────────────────────────────────────────────────
+
+// Status is also a token-coloured border on the card, echoing the pill.
+const warningBorder = A.insertCss('border: 2px solid $s-warning;');
+const borderForChange: Record<StepChange, string> = {
+  changed: warningBorder,
+  new: A.insertCss('border: 2px solid $s-success;'),
+  removed: A.insertCss('border: 2px solid $s-danger;'),
+  unchanged: '',
+};
+
+function imageSrc(kind: 'accepted' | 'current', hash: string): string {
+  return `/image/${kind}/${hash}`;
+}
+
+function showingSide(): 'accepted' | 'current' {
+  return state.compareMode === 'toggle'
+    ? (state.toggleShowNew ? 'current' : 'accepted')
+    : state.compareMode;
+}
+
+// The row above a screenshot: status and role pills, with the step facts
+// tucked into the right corner; the author's description (page.describe) below.
+function renderStepHeader(step: ReviewStep, change: StepChange, roles: RoleInfo): void {
+  A('div display:flex align-items:center gap:0.4rem flex-wrap:wrap max-width:100%', () => {
+    drawStatusChip(change);
+    drawRoleChip(roles, step.role);
+    // Source line comes from the test run; a baseline-only (orphaned/removed)
+    // step can only be named by its label or image.
+    const label = step.location ? `line ${parseLine(step.location)}` : (step.name || step.acceptedImage || 'baseline');
+    A('span margin-left:auto font-size:0.8em color:$s-muted white-space:nowrap #',
+      step.name && step.location ? `${step.name} · ${label}` : label);
   });
+  if (step.description) A('div font-size:0.85em font-weight:600 max-width:100% #', step.description);
 }
 
 // Below the screenshot: only what deserves attention — a slow step and the
@@ -401,52 +546,46 @@ function renderConsoleMessages(step: ReviewStep): void {
   });
 }
 
-function imageSrc(kind: 'accepted' | 'current', hash: string): string {
-  return `/image/${kind}/${hash}`;
+// The screenshot area. For a changed step both versions are stacked and
+// cross-faded, with an overlay tag naming the side on show — right where the
+// eye is while it flips. The imgs are created once; only classes toggle, so
+// the fade actually animates.
+function renderStage(step: ReviewStep, change: StepChange): void {
+  A('div', shotStyle, () => {
+    if (change === 'changed') {
+      A('div.stage', () => {
+        A(() => A({ $zoom: state.scale }));
+        A('img.layer src=', imageSrc('accepted', step.acceptedImage!), () => {
+          if (showingSide() === 'accepted') A('.visible');
+        });
+        A('img.layer src=', imageSrc('current', step.currentImage!), () => {
+          if (showingSide() === 'current') A('.visible');
+        });
+      });
+      A('div.tag', () => {
+        const side = showingSide();
+        if (side === 'current') A('.current');
+        A('#', side);
+      });
+    } else {
+      const hash = step.currentImage || step.acceptedImage;
+      if (!hash) return;
+      const kind = step.currentImage ? 'current' : 'accepted';
+      A('div.stage', () => {
+        A(() => A({ $zoom: state.scale }));
+        A('img src=', imageSrc(kind, hash));
+      });
+    }
+  });
 }
-
-// Each browser window (role) gets its own subtle surface tint, so it's obvious
-// at a glance which window a screenshot came from. The first role keeps the
-// default surface; the others override the box's `--s-bg` (the derived tokens —
-// border, muted ink, gradient — follow automatically). Equal oklch lightness
-// and chroma keep all tints at the same visual weight. We're always in light
-// mode, so hard-coded light values are fine.
-const roleTints = [
-  '',
-  A.insertCss({ '&.s-s.neutral': '--s-bg: oklch(0.97 0.025 250);' }), // blue
-  A.insertCss({ '&.s-s.neutral': '--s-bg: oklch(0.97 0.025 80);' }), // amber
-  A.insertCss({ '&.s-s.neutral': '--s-bg: oklch(0.97 0.025 320);' }), // violet
-];
-
-function buildRoleTintMap(steps: ReviewStep[]): Map<string | undefined, string> {
-  const tints = new Map<string | undefined, string>();
-  for (const step of steps) {
-    if (isGapStep(step)) continue;
-    if (!tints.has(step.role)) tints.set(step.role, roleTints[tints.size % roleTints.length]);
-  }
-  return tints;
-}
-
-// Also marks the orphaned-baseline notice. A surface class (`.warning`) can't do
-// that job: `.neutral` from S.box wins over it.
-const warningBorder = A.insertCss('border: 2px solid $s-warning;');
-
-// Status is shown as a token-coloured border on the neutral card surface.
-const borderForChange: Record<StepChange, string> = {
-  changed: warningBorder,
-  new: A.insertCss('border: 2px solid $s-success;'),
-  removed: A.insertCss('border: 2px solid $s-danger;'),
-  unchanged: '',
-};
 
 // A subtle placeholder for steps that deliberately produced no screenshots
 // (withoutScreenshots). It should read as "something routine happened here"
 // without competing with the screenshots around it.
 const gapStyle = A.insertCss({
-  '&': 'align-self:stretch display:flex flex-direction:column align-items:center justify-content:center gap:0.4rem border: 2px dashed $s-faint; border-radius:8px pv:1rem ph:0.75rem max-width:11rem color:$s-muted',
+  '&': 'align-self:stretch display:flex flex-direction:column align-items:center justify-content:center gap:0.4rem border: 2px dashed $s-faint; border-radius:8px pv:1rem ph:0.75rem max-width:11rem color:$s-muted scroll-margin:1rem',
   '.text': 'font-size:0.8em font-style:italic text-align:center word-break:break-word',
   '.text.was': 'text-decoration:line-through opacity:0.7',
-  '.status': 'font-size:0.75em',
 });
 
 // A gap carries no image, so its text is the only thing the reviewer can look
@@ -455,165 +594,356 @@ function gapText(text: string | undefined): string {
   return text ? text : '(no description)';
 }
 
-function renderGapStep(step: ReviewStep, change: StepChange): void {
-  A('div', gapStyle, change === 'unchanged' ? '' : borderForChange[change], () => {
+function renderGapStep(step: ReviewStep, change: StepChange, extraAttrs = ''): void {
+  A('div', gapStyle, borderForChange[change], extraAttrs, () => {
+    drawStatusChip(change);
     // A changed gap changed its text: showing only the new one asks the reviewer
     // to spot a difference against something they cannot see.
     if (change === 'changed' && step.acceptedGap !== undefined && step.currentGap !== undefined) {
       A('div.text.was #', gapText(step.acceptedGap));
     }
     A('div.text #', gapText(step.currentGap ?? step.acceptedGap));
-    if (change !== 'unchanged') A('div.status #', change);
   });
 }
 
-function renderStep(step: ReviewStep, tint: string): void {
+function renderStep(step: ReviewStep, roles: RoleInfo, extraAttrs = ''): void {
   const change = getStepChange(step);
   if (isGapStep(step)) {
-    renderGapStep(step, change);
+    renderGapStep(step, change, extraAttrs);
     return;
   }
   S.box({
-    attrs: `${borderForChange[change]} ${tint} width:max-content max-width:100% mt:0`,
+    attrs: `${borderForChange[change]} ${roleTint(roles, step.role)} ${extraAttrs} width:max-content max-width:100% mt:0 scroll-margin:1rem`,
     contentAttrs: 'display:flex flex-direction:column align-items:stretch gap:0.5rem',
     content: () => {
-      if (change === 'changed') {
-        const showing = state.compareMode === 'toggle'
-          ? (state.toggleShowNew ? 'current' : 'accepted')
-          : state.compareMode;
-        renderStepMeta(step, change, showing);
-        A('div', stageStyle, '$zoom=', state.scale, () => {
-          A(`img.layer${showing === 'accepted' ? '.visible' : ''} src=`, imageSrc('accepted', step.acceptedImage!));
-          A(`img.layer${showing === 'current' ? '.visible' : ''} src=`, imageSrc('current', step.currentImage!));
-        });
-      } else {
-        renderStepMeta(step, change);
-        const hash = step.currentImage || step.acceptedImage;
-        if (hash) {
-          const kind = step.currentImage ? 'current' : 'accepted';
-          A('div', stageStyle, '$zoom=', state.scale, () => {
-            A('img src=', imageSrc(kind, hash));
-          });
-        }
-      }
+      renderStepHeader(step, change, roles);
+      renderStage(step, change);
       renderStepFooter(step);
     },
   });
 }
 
-function renderContent(): void {
-  A(() => {
-    const id = routeTestId();
-    if (!id) {
-      A('div display:flex height:100% align-items:center justify-content:center color:$s-muted #Select a test from the list');
-      return;
-    }
+function renderSteps(steps: ReviewStep[], markerClass: string): void {
+  if (steps.length === 0) {
+    A('div color:$s-muted #No screenshots taken');
+    return;
+  }
+  const roles = buildRoleInfo(steps);
+  const firstChanged = steps.findIndex((step) => getStepChange(step) !== 'unchanged');
+  A('div display:flex flex-wrap:wrap gap:1rem align-items:flex-start', () => {
+    steps.forEach((step, index) => {
+      // Tag the first screenshot that needs review, so the panel can scroll it
+      // into view. The panel already opens at the top; only mark when the
+      // first change sits somewhere below it.
+      const mark = index === firstChanged && index > 0 ? `.${markerClass}` : '';
+      renderStep(step, roles, mark);
+    });
+  });
+}
 
-    if (state.loadingDetail || !state.detail) {
-      A('div display:flex height:100% align-items:center justify-content:center color:$s-muted #Loading test…');
-      return;
-    }
+// ── Rendering: test panel ───────────────────────────────────────────
 
-    const { manifest, steps, canRevert, orphaned } = state.detail;
+function renderTestHeader(id: string, detail: TestDetail): void {
+  const test = state.tests.find((entry) => entry.id === id);
+  const counts = { changed: 0, new: 0, removed: 0, unchanged: 0 };
+  for (const step of detail.steps) counts[getStepChange(step)]++;
 
-    if (manifest) {
-      A('div font-size:0.85em color:$s-muted margin-bottom:0.75rem', () => {
-        A('span #', `${manifest.file} — `);
-        A('span color:$s-text #', manifest.title);
-      });
-    }
-
-    if (orphaned) {
-      A('div margin-bottom:1rem', () => {
-        S.box({
-          attrs: warningBorder,
-          header: () => A('span color:$s-warning #Baseline without a test'),
-          content: `This accepted baseline has no matching test in \`test-results/\`, so no test of that identity ran. It was most likely renamed or deleted — but a filtered run (\`-g\`, a file argument, \`--shard\`), a skipped test, or an interrupted run looks exactly the same from here. Accepting deletes the baseline shown below (its images are garbage-collected if nothing else references them).`,
-        });
-      });
-    }
-
-    if (steps.length === 0) {
-      A('div color:$s-muted #No screenshots taken');
-    } else {
-      const roleTintMap = buildRoleTintMap(steps);
-      A('div display:flex flex-wrap:wrap gap:1rem align-items:flex-start', () => {
-        for (const step of steps) renderStep(step, roleTintMap.get(step.role) ?? '');
-      });
-    }
-
-    if (manifest?.error) {
-      A('div margin-top:1rem', () => {
-        S.box({
-          attrs: borderForChange.removed,
-          header: () => A('span color:$s-danger #Error'),
-          content: () => {
-            A('div white-space:pre-wrap word-break:break-word font-family:monospace color:$s-danger #', manifest.error);
-            if (manifest.errorSource) A('div color:$s-muted margin-top:0.4rem #', manifest.errorSource);
-            if (manifest.errorStack) A('pre color:$s-muted font-size:0.85em overflow:auto max-height:120px #', manifest.errorStack);
-          },
-        });
-      });
-    }
-
-    const hasChanges = selectedTestHasChanges();
-    if (hasChanges || canRevert) {
-      A('div display:flex gap:0.75rem flex-wrap:wrap margin-top:1rem', () => {
-        if (hasChanges) {
-          S.button({
-            content: () => {
-              A(orphaned ? '#Delete baseline' : '#Accept visuals');
-              S.addTooltip({ tip: orphaned ? 'Delete this stale baseline (a)' : 'Accept visuals (a)' });
-            },
-            icon: orphaned ? trash2 : check,
-            attrs: orphaned ? '.danger' : undefined,
-            click: () => void acceptChanges(id),
-          });
-        }
-        if (canRevert) {
-          S.button({
-            content: () => { A('#Revert accepted'); S.addTooltip({ tip: 'Revert accepted visuals from git (r)' }); },
-            icon: undo2,
-            attrs: '.nest',
-            click: () => void revertChanges(id),
-          });
+  A('div display:flex flex-direction:column gap:0.3rem margin-bottom:1rem', () => {
+    A('div display:flex align-items:baseline gap:0.6rem flex-wrap:wrap', () => {
+      A('h2 font-size:1.15em font-weight:700 m:0 rich=', detail.manifest?.title ?? test?.title ?? 'Test');
+      A('span display:inline-flex align-items:center gap:0.4rem', () => {
+        if (test && !test.orphaned && testIsFailed(test.status)) drawFailedChip(test.status);
+        if (counts.changed) drawStatusChip('changed', counts.changed);
+        if (counts.new) drawStatusChip('new', counts.new);
+        if (counts.removed) drawStatusChip('removed', counts.removed);
+        if (detail.steps.length > 0 && !counts.changed && !counts.new && !counts.removed) {
+          A('span font-size:0.8em color:$s-muted #', `all ${detail.steps.length} unchanged`);
         }
       });
+    });
+    const file = detail.manifest?.file ?? (test && !test.orphaned ? test.file : undefined);
+    if (file) {
+      A('div font-size:0.85em color:$s-muted #', test?.line ? `${file} · line ${test.line}` : file);
+    } else if (detail.orphaned) {
+      A('div font-size:0.85em color:$s-muted #accepted baseline without a matching test');
     }
   });
 }
 
-function renderToolbar(): void {
-  A('div display:flex align-items:center gap:1.25rem flex-wrap:wrap', () => {
-    A('label display:flex align-items:center gap:0.4rem font-size:0.85em color:$s-muted', () => {
-      A('span #Scale');
-      A('input type=range min=0.1 max=1 step=0.01 bind=', A.ref(state, 'scale'), sliderStyle, () => {
-        A({ style: `--fill:${Math.round(((state.scale - 0.1) / 0.9) * 100)}%` });
-      });
-      A(() => A('span color:$s-text font-variant-numeric:tabular-nums #', `${Math.round(state.scale * 100)}%`));
+function renderOrphanNotice(): void {
+  A('div margin-bottom:1rem', () => {
+    S.box({
+      attrs: warningBorder,
+      header: () => A('span color:$s-warning #Baseline without a test'),
+      content: `This accepted baseline has no matching test in \`test-results/\`, so no test of that identity ran. It was most likely renamed or deleted — but a filtered run (\`-g\`, a file argument, \`--shard\`), a skipped test, or an interrupted run looks exactly the same from here. Deleting removes the baseline shown below (its images are garbage-collected if nothing else references them).`,
     });
-    S.buttonChooser({
-      options: {
-        accepted: () => { A('#old'); S.addTooltip({ tip: 'Show accepted/old image (o)' }); },
-        current: () => { A('#new'); S.addTooltip({ tip: 'Show current/new image (n)' }); },
-        toggle: () => { A('#toggle'); S.addTooltip({ tip: 'Toggle between old and new (t)' }); },
+  });
+}
+
+function renderErrorBox(manifest: TestRecord): void {
+  A('div margin-top:1rem', () => {
+    S.box({
+      attrs: borderForChange.removed,
+      header: () => A('span color:$s-danger #Error'),
+      content: () => {
+        A('div white-space:pre-wrap word-break:break-word font-family:monospace color:$s-danger #', manifest.error);
+        if (manifest.errorSource) A('div color:$s-muted margin-top:0.4rem #', manifest.errorSource);
+        if (manifest.errorStack) A('pre color:$s-muted font-size:0.85em overflow:auto max-height:120px #', manifest.errorStack);
       },
-      bind: A.ref(state, 'compareMode'),
+    });
+  });
+}
+
+let panelSeq = 0;
+
+function drawTestPanel($panel: S.Panel<{ id: string }>): void {
+  $panel.maxWidth = 'screen';
+  const id = $panel.params.id;
+  const markerClass = `shotest-first-change-${++panelSeq}`;
+
+  const $local = A.proxy<TestPanelCtx['$local']>({ detail: null, loading: true });
+  const ctx: TestPanelCtx = {
+    id,
+    $local,
+    reload: async () => {
+      $local.loading = true;
+      try {
+        $local.detail = await fetchJson<TestDetail>(`/api/test/${encodeURIComponent(id)}`);
+      } catch (error) {
+        $local.detail = null;
+        S.toast({ title: 'Could not load test', message: errorMessage(error), type: 'danger' });
+      } finally {
+        $local.loading = false;
+      }
+    },
+  };
+  testPanelCtxs.set($panel.path, ctx);
+  A.clean(() => testPanelCtxs.delete($panel.path));
+  void ctx.reload();
+
+  A(() => { $panel.loading = $local.loading; });
+  A(() => {
+    const test = state.tests.find((entry) => entry.id === id);
+    $panel.title = test?.title ?? 'Test';
+  });
+
+  // Once the detail is drawn and the panel is actually on screen, bring the
+  // first screenshot that needs review into view. Marker classes rather than
+  // element refs: Aberdeen offers no ref hook, and `create=` transitions only
+  // fire for top-level redraws.
+  let scrolledDetail: TestDetail | null = null;
+  A(() => {
+    const detail = $local.detail;
+    if (!detail || $local.loading || !$panel.visible || scrolledDetail === detail) return;
+    scrolledDetail = detail;
+    setTimeout(() => {
+      document.getElementsByClassName(markerClass)[0]
+        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }, 150);
+  });
+
+  $panel.actions = () => {
+    // Prev/next mirror Ctrl+↑/↓ for the mouse. They are plain links, which
+    // Staffa 0.11 made viable here: links among a panel's actions behave the
+    // same at every shell width, and `linkNavigation: 'open'` makes them swap
+    // the pane like any other click.
+    const index = state.tests.findIndex((test) => test.id === id);
+    const prev = index > 0 ? state.tests[index - 1] : undefined;
+    const next = index >= 0 ? state.tests[index + 1] : undefined;
+    S.iconButton({
+      icon: () => { chevronUp(); S.addTooltip({ tip: 'Previous test (Ctrl+↑)' }); },
+      ariaLabel: 'Previous test',
+      href: prev && hrefForTest(prev.id),
+      disabled: !prev,
       attrs: '.small',
     });
+    S.iconButton({
+      icon: () => { chevronDown(); S.addTooltip({ tip: 'Next test (Ctrl+↓)' }); },
+      ariaLabel: 'Next test',
+      href: next && hrefForTest(next.id),
+      disabled: !next,
+      attrs: '.small',
+    });
+
+    const detail = $local.detail;
+    if (!detail) return;
+    if (detailHasChanges(detail)) {
+      S.button({
+        content: () => {
+          A(detail.orphaned ? '#Delete baseline' : '#Accept visuals');
+          S.addTooltip({ tip: detail.orphaned ? 'Delete this stale baseline (a)' : 'Accept the new visuals as the baseline (a)' });
+        },
+        icon: detail.orphaned ? trash2 : check,
+        attrs: detail.orphaned ? '.danger.small' : '.small',
+        click: () => void acceptChanges(ctx),
+      });
+    }
+    if (detail.canRevert) {
+      S.button({
+        content: () => { A('#Revert'); S.addTooltip({ tip: 'Revert accepted visuals to git HEAD (r)' }); },
+        icon: undo2,
+        attrs: '.neutral.small',
+        click: () => void revertChanges(ctx),
+      });
+    }
+  };
+
+  A(() => {
+    const { detail } = $local;
+    if (!detail) {
+      // While loading, the shell's own indicator covers the wait.
+      if (!$local.loading) A('div color:$s-muted #Could not load this test.');
+      return;
+    }
+    renderTestHeader(id, detail);
+    if (detail.orphaned) renderOrphanNotice();
+    renderSteps(detail.steps, markerClass);
+    if (detail.manifest?.error) renderErrorBox(detail.manifest);
   });
 }
 
-A(() => {
-  S.main({
-    icon: () => camera({ color: 'var(--s-primary)' }),
-    title: 'ShoTest',
-    subtitle: 'Screenshot review',
-    nav: { items: [drawNavEntries] },
-    navPosition: 'left',
-    menu: renderToolbar,
-    content: renderContent,
+// ── Rendering: overview panel ───────────────────────────────────────
+
+function drawStatRow(icon: () => void, label: string, count: number): void {
+  A('div display:flex align-items:center gap:0.6rem', () => {
+    icon();
+    A(count === 0 ? 'span flex:1 color:$s-muted #' : 'span flex:1 #', label);
+    A('span font-weight:700 font-variant-numeric:tabular-nums #', String(count));
   });
-});
+}
+
+function drawShortcutRow(keys: string[], label: string): void {
+  A('div display:flex align-items:center gap:0.6rem', () => {
+    A('span display:inline-flex gap:0.25rem flex-shrink:0 min-width:5.5rem', () => {
+      for (const key of keys) A('kbd', kbdStyle, '#', key);
+    });
+    A('span color:$s-muted font-size:0.9em #', label);
+  });
+}
+
+function drawHomePanel($panel: S.Panel<{}>): void {
+  $panel.title = 'Overview';
+  $panel.maxWidth = 'half';
+  A(() => { $panel.loading = state.loadingTests && state.tests.length === 0; });
+
+  A('div display:flex flex-direction:column gap:1rem align-items:stretch', () => {
+    A(() => {
+      const { tests } = state;
+      const real = tests.filter((test) => !test.orphaned);
+      const changed = real.filter((test) => test.hasChanges).length;
+      const failed = real.filter((test) => testIsFailed(test.status)).length;
+      const orphaned = tests.length - real.length;
+      const needsReview = changed + orphaned;
+
+      if (tests.length === 0 && !state.loadingTests) {
+        S.box({
+          header: 'No test results',
+          content: 'Nothing found in `test-results/`. Run your Playwright tests with ShoTest, then reload this page.',
+        });
+        return;
+      }
+
+      S.box({
+        header: 'This run',
+        contentAttrs: 'display:flex flex-direction:column gap:0.5rem',
+        content: () => {
+          drawStatRow(() => camera({ size: '1.1em', color: 'var(--s-muted)' }), 'tests with screenshots', real.length);
+          drawStatRow(() => circleAlert({ size: '1.1em', color: changed ? 'var(--s-warning)' : 'var(--s-muted)' }), 'with visual changes', changed);
+          drawStatRow(() => triangleAlert({ size: '1.1em', color: failed ? 'var(--s-danger)' : 'var(--s-muted)' }), 'failed', failed);
+          if (orphaned > 0) {
+            drawStatRow(() => trash2({ size: '1.1em', color: 'var(--s-danger)' }), 'stale baselines', orphaned);
+          }
+        },
+      });
+
+      const first = findNextUnacceptedTestId(0);
+      if (needsReview > 0 && first) {
+        A('div', () => {
+          // A real link: under `linkNavigation: 'open'` it swaps the pane like
+          // every other click, and middle-click/copy-link work for free.
+          S.button({
+            content: `Start reviewing (${needsReview})`,
+            icon: eye,
+            href: hrefForTest(first),
+          });
+        });
+      } else if (real.length > 0) {
+        A('div display:flex align-items:center gap:0.5rem color:$s-success font-weight:600', () => {
+          circleCheck({ size: '1.2em' });
+          A('span #All screenshots match the accepted baselines.');
+        });
+      }
+    });
+
+    S.box({
+      header: 'Keyboard shortcuts',
+      contentAttrs: 'display:flex flex-direction:column gap:0.4rem',
+      content: () => {
+        drawShortcutRow(['o', 'n', 't'], 'show accepted / current / toggle between them');
+        drawShortcutRow(['a'], 'accept the new visuals');
+        drawShortcutRow(['r'], 'revert accepted visuals to git HEAD');
+        drawShortcutRow(['Ctrl', '↑/↓'], 'previous / next test');
+        drawShortcutRow(['Esc'], 'jump to the test list');
+      },
+    });
+  });
+}
+
+// ── Toolbar (top bar menu slot) ─────────────────────────────────────
+
+function drawToolbar(): void {
+  A(() => {
+    // The compare controls only mean something while a test is on screen.
+    if (route.current.p[0] !== 'test') return;
+    A('div display:flex align-items:center gap:1.25rem flex-wrap:wrap', () => {
+      A('label display:flex align-items:center gap:0.4rem font-size:0.85em color:$s-muted', () => {
+        A('span #Scale');
+        A('input type=range min=0.1 max=1 step=0.01 bind=', A.ref(state, 'scale'), sliderStyle, () => {
+          A({ style: `--fill:${Math.round(((state.scale - 0.1) / 0.9) * 100)}%` });
+        });
+        A(() => A('span color:$s-text font-variant-numeric:tabular-nums #', `${Math.round(state.scale * 100)}%`));
+      });
+      S.buttonChooser({
+        options: {
+          accepted: () => { A('#accepted'); S.addTooltip({ tip: 'Show the accepted (old) image (o)' }); },
+          current: () => { A('#current'); S.addTooltip({ tip: 'Show the current (new) image (n)' }); },
+          toggle: () => { A('#toggle'); S.addTooltip({ tip: 'Flip between accepted and current (t)' }); },
+        },
+        bind: A.ref(state, 'compareMode'),
+        attrs: '.small',
+      });
+    });
+  });
+}
+
+// ── Shell ───────────────────────────────────────────────────────────
+
+const shell = S.main({
+  logo: () => camera({ color: 'var(--s-primary)', size: '1.6em' }),
+  title: 'ShoTest',
+  subtitle: 'Playwright + visual diffs',
+  nav: { items: $navItems },
+  navPosition: 'left',
+  // The conventional sidebar-and-content model (new in Staffa 0.11): one pane,
+  // swapped on every click — nav items, in-panel links and the prev/next
+  // actions all replace the content as a whole.
+  columns: 'single',
+  linkNavigation: 'open',
+  menu: drawToolbar,
+  routes: {
+    '/': drawHomePanel,
+    '/test/[id]': drawTestPanel,
+  },
+  notFound: ($panel) => {
+    $panel.title = 'Not found';
+    S.box({
+      header: 'Not found',
+      content: () => {
+        A('p m:0 #', `No such page: ${$panel.path}`);
+        A('p mb:0 rich=Head back to the [overview](/).');
+      },
+    });
+  },
+})!;
 
 void fetchTests();
