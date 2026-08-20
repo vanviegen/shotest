@@ -592,6 +592,17 @@ function statusIcon(test: TestSummary): () => void {
   return () => circleCheck({ size: '1.1em', color: 'var(--s-success)' });
 }
 
+// A file row wears the most urgent status among its tests, in the same icon
+// language as the test rows — changes to review first, then failures.
+// (Orphans all live in one synthetic group, so their trash icon never has to
+// compete with a real file's statuses.)
+function fileStatusIcon(groupTests: TestSummary[]): () => void {
+  if (groupTests.some((test) => test.hasChanges)) return () => circleAlert({ size: '1.1em', color: 'var(--s-warning)' });
+  if (groupTests.some((test) => test.orphaned)) return () => trash2({ size: '1.1em', color: 'var(--s-danger)' });
+  if (groupTests.some((test) => testIsFailed(test.status))) return () => triangleAlert({ size: '1.1em', color: 'var(--s-danger)' });
+  return () => circleCheck({ size: '1.1em', color: 'var(--s-success)' });
+}
+
 const navBadgeStyle = A.insertCss(
   'font-size:0.7em font-weight:700 line-height:1.5 pv:0 ph:0.4rem r:99px margin-left:auto flex-shrink:0',
 );
@@ -627,6 +638,7 @@ function buildNavItems(): S.MenuEntry[] {
   for (const [file, groupTests] of groups) {
     const attention = groupTests.filter((test) => test.hasChanges).length;
     items.push({
+      icon: fileStatusIcon(groupTests),
       label: () => {
         A('span flex:1 min-width:0 overflow:hidden text-overflow:ellipsis white-space:nowrap #', file);
         // A folded branch must still say its tests need looking at.
