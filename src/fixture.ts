@@ -282,9 +282,9 @@ let currentPoolDir = '';
 let currentSteps: StepRecord[] = [];
 let lastStepLocation: SourceLocation | null = null;
 let pendingFailureText = '';
-// Events waiting for the next capture to attach to (e.g. a goto, which by
-// itself does not screenshot: the frame right after navigation is rarely
-// interesting, and the next step shows where it led).
+// Events waiting for the next capture to attach to (e.g. a page-level command
+// like goto, which by itself does not screenshot: the frame right after it is
+// rarely interesting, and the next step shows where it led).
 let pendingEvents: StepEventRecord[] = [];
 let suppressDepth = 0;
 let failureCaptured = false;
@@ -596,14 +596,29 @@ function wrapPage(actualPage: Page): ShotestPage {
         pendingEvents.push(makeEvent('describe', String(text), getCallerLocation()));
     };
 
-    wrapped.goto = async function (url: string, options: any) {
-        const loc = getCallerLocation();
-        lastStepLocation = loc;
-        await actualPage.goto(url, options);
-        if (!screenshotsSuppressed()) {
-            pendingEvents.push(makeEvent('goto', 'goto ' + url, loc));
-        }
+    // Page-level commands (navigation, viewport) take no screenshot of their
+    // own: the frame right after them is rarely interesting, and the next
+    // primitive's capture shows where they led. Each queues a pending 'page'
+    // event that lands beneath that capture — reading as "how the page got
+    // here", which is why the review app renders these rows dimmed.
+    const pageCommands: Record<string, (args: any[]) => string> = {
+        goto: (args) => 'goto ' + args[0],
+        reload: () => 'reload',
+        goBack: () => 'goBack',
+        goForward: () => 'goForward',
+        setViewportSize: (args) => `setViewportSize ${args[0]?.width}×${args[0]?.height}`,
     };
+    for (const [method, message] of Object.entries(pageCommands)) {
+        wrapped[method] = async function (...args: any[]) {
+            const loc = getCallerLocation();
+            lastStepLocation = loc;
+            const result = await (actualPage as any)[method](...args);
+            if (!screenshotsSuppressed()) {
+                pendingEvents.push(makeEvent('page', message(args), loc));
+            }
+            return result;
+        };
+    }
 
     wrapped.waitForTimeout = async function (timeout: number) {
         const loc = getCallerLocation();
@@ -717,13 +732,14 @@ export const test = baseTest.extend<{ page: ShotestPage }>({
         // function of the test's actions alone: a console message can arrive at any
         // moment (e.g. a framework's perf-timing debug log fired by the last action's
         // reactive update — more likely under load), so screenshotting on one would
-        // make the frame set flaky. Any console events still pending after the final
-        // action are folded into the last step so they aren't lost from the report.
-        const trailing = pendingEvents.filter((event) => event.type === 'console');
+        // make the frame set flaky. Any events still pending after the final capture
+        // (trailing console output, or a page command like goto with nothing after
+        // it) are folded into the last step so they aren't lost from the report.
         const lastImageStep = [...currentSteps].reverse().find((step) => !('gap' in step));
-        if (trailing.length > 0 && lastImageStep && 'image' in lastImageStep) {
-            lastImageStep.events = [...(lastImageStep.events ?? []), ...trailing];
+        if (pendingEvents.length > 0 && lastImageStep && 'image' in lastImageStep) {
+            lastImageStep.events = [...(lastImageStep.events ?? []), ...pendingEvents];
         }
+        pendingEvents = [];
 
         // Determine error info
         const errorObj = testInfo.error as any;

@@ -75,13 +75,17 @@ interface ReviewStep {
 }
 
 // Whether the two sides' event lists describe the same things happening.
-// Console rows are ignored: their timing shifts run to run, and offering an
-// accepted/current toggle over ambient noise would put buttons on nearly
-// every step. Boxes, sources and durations are display detail, not identity.
+// Identity is the message alone — messages are type-prefixed by construction
+// ('click "Submit"', 'goto /'), and comparing types too would flag renamed
+// event types (2.0 baselines say 'goto' where newer runs say 'page') as
+// differing lists. Console rows are ignored: their timing shifts run to run,
+// and offering an accepted/current toggle over ambient noise would put
+// buttons on nearly every step. Boxes, sources and durations are display
+// detail, not identity.
 function sameSignificantEvents(accepted: StepEvent[] = [], current: StepEvent[] = []): boolean {
   const a = accepted.filter((event) => event.type !== 'console');
   const c = current.filter((event) => event.type !== 'console');
-  return a.length === c.length && a.every((event, i) => event.type === c[i].type && event.message === c[i].message);
+  return a.length === c.length && a.every((event, i) => event.message === c[i].message);
 }
 
 interface TestDetail {
@@ -160,6 +164,7 @@ const shotStyle = A.insertCss({
   '.diff .top': 'opacity:1 transition:none mix-blend-mode:difference',
   '.marks': 'grid-area:1/1 position:relative pointer-events:none z-index:2',
   '.eventBox': 'position:absolute border: 2px solid; border-radius:4px',
+  '.eventBox.flash': 'animation: shotest-mark-flash 600ms ease-in-out;',
 });
 
 // The shared shape of all pills: step status, step counts, role labels.
@@ -194,6 +199,15 @@ const sliderStyle = A.insertCss({
 
 A.insertGlobalCss({
   '@keyframes shotest-spin': { to: 'transform:rotate(360deg)' },
+  // Two quick opacity dips, catching the eye when a hovered event row
+  // singles out its viewport box on the screenshot.
+  '@keyframes shotest-mark-flash': {
+    '0%': 'opacity:1',
+    '25%': 'opacity:0.15',
+    '50%': 'opacity:1',
+    '75%': 'opacity:0.15',
+    '100%': 'opacity:1',
+  },
 });
 const spinStyle = A.insertCss('animation: shotest-spin 1s linear infinite;');
 
@@ -461,7 +475,7 @@ const eventHues: Record<string, number> = {
   action: 250, // blue
   assert: 150, // green
   check: 185, // teal
-  goto: 310, // violet
+  page: 310, // violet — goto, reload, goBack, goForward, setViewportSize
   wait: 70, // amber
   screenshot: 340, // pink
   warn: 45, // orange
@@ -490,6 +504,10 @@ const eventListStyle = A.insertCss({
   '.event .msg': 'word-break:break-word',
   // A describe hint reads as a small header for the events that follow it.
   '.event.describe .msg': 'font-weight:600',
+  // Page rows (goto, reload, ...) happened before their step's screenshot
+  // existed — they are how the page got here. Dimmed, so they read as
+  // "en route" among rows that happened while the page looked like this.
+  '.event.page': 'opacity:0.65',
   // Browser console output: quiet for plain logs, louder with severity.
   '.event.console .msg': 'font-family:ui-monospace,monospace font-size:0.95em white-space:pre-wrap color:$s-muted',
   '.event.console.warning .msg': 'color:#b45309 font-weight:600',
@@ -733,7 +751,9 @@ function renderEventMarks(step: ReviewStep, lists: EventList[], $ui: StepUi): vo
       const y = Math.max(0, box.y - markPadding);
       const width = Math.min(viewport.width, box.x + box.width + markPadding) - x;
       const height = Math.min(viewport.height, box.y + box.height + markPadding) - y;
-      A('div.eventBox', eventBoxCss(event.type),
+      // The marks layer rebuilds whenever the selection changes, so the box a
+      // hovered row singles out is freshly created — its flash plays each time.
+      A('div.eventBox', index === $sel.hovered ? '.flash' : '', eventBoxCss(event.type),
         `left:${(x / viewport.width) * 100}% top:${(y / viewport.height) * 100}% ` +
         `width:${(width / viewport.width) * 100}% height:${(height / viewport.height) * 100}%`);
     }

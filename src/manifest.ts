@@ -41,7 +41,10 @@ export interface StepEventRecord {
      *   before it ran — its effect shows in the *next* screenshot.
      * assert: a passed expect() assertion.
      * check: a passive read (textContent, waitFor, isVisible, ...).
-     * goto / wait: page.goto and page.waitForTimeout.
+     * page: a page-level command that captures no screenshot of its own
+     *   (goto, reload, goBack, goForward, setViewportSize) — it queues and
+     *   lands under the next capture, reading as how the page got there.
+     * wait: page.waitForTimeout.
      * describe: a hint set via page.describe(...), shown by the review app
      *   as a header above the events that follow it.
      * screenshot: an explicit screenshot(page, name) call; the message is
@@ -50,7 +53,7 @@ export interface StepEventRecord {
      *   shifts run to run.
      * error: the failure a test ended on.
      */
-    type: 'action' | 'assert' | 'check' | 'goto' | 'wait' | 'describe' | 'screenshot' | 'console' | 'error';
+    type: 'action' | 'assert' | 'check' | 'page' | 'wait' | 'describe' | 'screenshot' | 'console' | 'error';
     /** One-line summary, e.g. 'click "Submit"' or 'expect text'. */
     message: string;
     /** CSS-pixel box of the element involved, relative to the viewport. */

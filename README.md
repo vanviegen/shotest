@@ -1,6 +1,6 @@
 # ShoTest
 
-**ShoTest 2.0 is here** 🎉 — screenshots are now content-hashed, tests run in a pinned container for pixel-exact comparison, and the review app was redesigned around per-step event lists with a pixel-diff view.
+**ShoTest 2 is here** 🎉 — screenshots are now content-hashed, tests run in a pinned container for pixel-exact comparison, and the review app was redesigned around per-step event lists with a pixel-diff view.
 
 ShoTest is a small wrapper around Playwright Test that acts as a drop-in replacement and provides:
 
@@ -82,7 +82,7 @@ Most common page and locator actions are wrapped so that a screenshot is taken a
 npx shotest test
 ```
 
-This writes results to `test-results/`: one `<spec-base>.json` per spec file, plus the screenshots and HTML snapshots, named by a hash of their pixel content (so identical frames share a single file). What happened at each moment — clicks, assertions, navigations — is recorded as *events* in the JSON, each with a message, source line and the viewport box of the element involved. Steps that don't change the page share a single screenshot carrying the whole list of events.
+This writes results to `test-results/`: one `<spec-base>.json` per spec file, plus the screenshots and HTML snapshots, named by a hash of their pixel content (so identical frames share a single file). What happened at each moment — clicks, assertions, navigations — is recorded as *events* in the JSON, each with a message, source line and the viewport box of the element involved. Steps that don't change the page share a single screenshot carrying the whole list of events. Page-level commands — `goto`, `reload`, `goBack`, `goForward`, `setViewportSize` — take no screenshot of their own: they are logged as events under the next screenshot, reading as how the page got there, and the review app shows such rows dimmed.
 
 The `shotest` command forwards arguments to Playwright, so `npx shotest test --ui` maps to `playwright test --ui`.
 

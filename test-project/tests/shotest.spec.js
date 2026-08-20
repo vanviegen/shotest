@@ -97,6 +97,18 @@ test('supports describe hints and screenshot suppression', async ({ page }) => {
   await expect(page.locator('#count-value')).toHaveText('2');
 });
 
+test('logs page-level commands as events without screenshots', async ({ page }) => {
+  // All of these queue a 'page' event instead of capturing; they should show
+  // up beneath the next capture (the expect below), dimmed in the review app.
+  await page.setViewportSize({ width: 500, height: 700 });
+  await page.goto('/');
+  await page.goto('/?variant=1');
+  await page.goBack();
+  await page.goForward();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Client Demo' })).toBeVisible();
+});
+
 test('passes without screenshots when only using plain page methods', async ({ page }) => {
   await page.goto('/');
 

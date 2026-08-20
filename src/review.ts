@@ -181,16 +181,19 @@ function significantEvents(events: StepEventRecord[] = []): StepEventRecord[] {
 }
 
 // Whether two entries are the same *moment in the test*: image steps whose
-// significant events match exactly by type and message. Sources (line numbers
-// shift on every edit), durations and boxes carry no identity. Empty event
-// lists don't count — a vacuous match could steal alignment from the plain
-// index pairing that handles such steps fine.
+// significant events match by message. Messages are type-prefixed by
+// construction ('click "Submit"', 'goto /', 'expect text'), so comparing
+// types too would only re-state them — and would break alignment across
+// event-type renames (2.0 baselines say 'goto' where newer runs say 'page').
+// Sources (line numbers shift on every edit), durations and boxes carry no
+// identity. Empty event lists don't count — a vacuous match could steal
+// alignment from the plain index pairing that handles such steps fine.
 function sameTestMoment(accepted: AlignEntry, current: AlignEntry): boolean {
     if (accepted.kind !== 'image' || current.kind !== 'image') return false;
     const a = significantEvents(accepted.step.events);
     const c = significantEvents(current.step.events);
     return a.length > 0 && a.length === c.length &&
-        a.every((event, i) => event.type === c[i].type && event.message === c[i].message);
+        a.every((event, i) => event.message === c[i].message);
 }
 
 /**
