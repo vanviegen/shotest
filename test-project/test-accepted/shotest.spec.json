@@ -1,15 +1,45 @@
 {
+  "version": 3,
   "tests": [
     {
       "file": "tests/shotest.spec.js",
       "title": "captures browser console messages",
       "steps": [
         {
-          "image": "1e368b8a94412ce1"
+          "image": "eab39546c9109404",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "goto",
+              "message": "goto /"
+            },
+            {
+              "type": "action",
+              "message": "click",
+              "box": {
+                "x": 39,
+                "y": 178,
+                "width": 97,
+                "height": 36
+              }
+            }
+          ]
         },
         {
-          "image": "dd1ac88e92e76ce6",
-          "name": "console-final"
+          "image": "81183bb9df4e6b8a",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "screenshot",
+              "message": "console-final"
+            }
+          ]
         }
       ]
     },
@@ -18,13 +48,41 @@
       "title": "captures screenshots for locator reads and timed waits",
       "steps": [
         {
-          "image": "aeee6c279f8bbc01"
-        },
-        {
-          "image": "86e70fb4aaeb4277"
-        },
-        {
-          "image": "e5d200643dd93eaa"
+          "image": "27af53ebe6b87c88",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "goto",
+              "message": "goto /"
+            },
+            {
+              "type": "check",
+              "message": "textContent",
+              "box": {
+                "x": 39,
+                "y": 134,
+                "width": 342,
+                "height": 18
+              }
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 120ms"
+            },
+            {
+              "type": "check",
+              "message": "textContent",
+              "box": {
+                "x": 39,
+                "y": 134,
+                "width": 342,
+                "height": 18
+              }
+            }
+          ]
         }
       ]
     },
@@ -33,68 +91,320 @@
       "title": "covers core wrapped actions and assertions",
       "steps": [
         {
-          "image": "1e368b8a94412ce1"
+          "image": "eab39546c9109404",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "goto",
+              "message": "goto /"
+            },
+            {
+              "type": "action",
+              "message": "click",
+              "box": {
+                "x": 39,
+                "y": 178,
+                "width": 97,
+                "height": 36
+              }
+            }
+          ]
         },
         {
-          "image": "370d00ebe9fb8c92"
+          "image": "81183bb9df4e6b8a",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "assert",
+              "message": "expect text",
+              "box": {
+                "x": 39,
+                "y": 134,
+                "width": 342,
+                "height": 18
+              }
+            },
+            {
+              "type": "action",
+              "message": "fill \"Alpha\"",
+              "box": {
+                "x": 39,
+                "y": 314,
+                "width": 342,
+                "height": 24
+              }
+            }
+          ]
         },
         {
-          "image": "29312d1c150757e3"
+          "image": "2976a33162ad2da4",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "assert",
+              "message": "expect value",
+              "box": {
+                "x": 39,
+                "y": 314,
+                "width": 342,
+                "height": 24
+              }
+            },
+            {
+              "type": "action",
+              "message": "clear",
+              "box": {
+                "x": 39,
+                "y": 314,
+                "width": 342,
+                "height": 24
+              }
+            }
+          ]
         },
         {
-          "image": "eece380d38b82972"
+          "image": "e283020f5e145b7e",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "action",
+              "message": "type \"Beta\"",
+              "box": {
+                "x": 39,
+                "y": 314,
+                "width": 342,
+                "height": 24
+              }
+            }
+          ]
         },
         {
-          "image": "d1934d9e3746e16b"
+          "image": "b83585e53a5ba367",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "action",
+              "message": "press \"End\"",
+              "box": {
+                "x": 39,
+                "y": 314,
+                "width": 342,
+                "height": 24
+              }
+            },
+            {
+              "type": "action",
+              "message": "selectOption \"mint\"",
+              "box": {
+                "x": 39,
+                "y": 376,
+                "width": 342,
+                "height": 21
+              }
+            }
+          ]
         },
         {
-          "image": "5f77cda80f1e8901"
+          "image": "3f9b129e4bd2fed3",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "assert",
+              "message": "expect value",
+              "box": {
+                "x": 39,
+                "y": 376,
+                "width": 342,
+                "height": 21
+              }
+            },
+            {
+              "type": "action",
+              "message": "check",
+              "box": {
+                "x": 43,
+                "y": 410,
+                "width": 13,
+                "height": 13
+              }
+            }
+          ]
         },
         {
-          "image": "b49c4822dc5c59c7"
+          "image": "33a1a2260dc44e9e",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "assert",
+              "message": "expect checked",
+              "box": {
+                "x": 43,
+                "y": 410,
+                "width": 13,
+                "height": 13
+              }
+            },
+            {
+              "type": "action",
+              "message": "uncheck",
+              "box": {
+                "x": 43,
+                "y": 410,
+                "width": 13,
+                "height": 13
+              }
+            }
+          ]
         },
         {
-          "image": "d3235a676f19f44c"
+          "image": "754f7b348b5f12b8",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "assert",
+              "message": "expect checked",
+              "box": {
+                "x": 43,
+                "y": 410,
+                "width": 13,
+                "height": 13
+              }
+            },
+            {
+              "type": "action",
+              "message": "hover",
+              "box": {
+                "x": 39,
+                "y": 604,
+                "width": 95,
+                "height": 36
+              }
+            }
+          ]
         },
         {
-          "image": "6d80e5cb6cb644fb"
+          "image": "e7182e6d6a9af62c",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "assert",
+              "message": "expect text",
+              "box": {
+                "x": 39,
+                "y": 666,
+                "width": 342,
+                "height": 18
+              }
+            }
+          ]
         },
         {
-          "image": "65d2fd58c2dfd4ed"
+          "image": "fb7eb85630e54bca",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "action",
+              "message": "dblclick",
+              "box": {
+                "x": 39,
+                "y": 332,
+                "width": 139,
+                "height": 36
+              }
+            }
+          ]
         },
         {
-          "image": "7bcfe7069157f46e"
+          "image": "45aaa946a6648975",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "assert",
+              "message": "expect text",
+              "box": {
+                "x": 39,
+                "y": 394,
+                "width": 342,
+                "height": 18
+              }
+            },
+            {
+              "type": "action",
+              "message": "click",
+              "box": {
+                "x": 39,
+                "y": 58,
+                "width": 76,
+                "height": 36
+              }
+            }
+          ]
         },
         {
-          "image": "7286b1b4e39e0a80"
-        },
-        {
-          "image": "b6e4a94ed0320f3b"
-        },
-        {
-          "image": "fcb373afd5d5c013"
-        },
-        {
-          "image": "72942fb0d279ca71"
-        },
-        {
-          "image": "7b53e49578fae7d8"
-        },
-        {
-          "image": "8a8f7e67065e79d7"
-        },
-        {
-          "image": "e17c4242507f59ad"
-        },
-        {
-          "image": "afff51185389f892"
-        },
-        {
-          "image": "d09ebf74f73913f0"
-        },
-        {
-          "image": "02d8db5eed0a1f88",
-          "name": "core-final"
+          "image": "237e6df3e29fed0f",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "check",
+              "message": "waitFor",
+              "box": {
+                "x": 39,
+                "y": 120,
+                "width": 342,
+                "height": 18
+              }
+            },
+            {
+              "type": "assert",
+              "message": "expect visible",
+              "box": {
+                "x": 39,
+                "y": 120,
+                "width": 342,
+                "height": 18
+              }
+            },
+            {
+              "type": "screenshot",
+              "message": "core-final"
+            }
+          ]
         }
       ]
     },
@@ -103,92 +413,199 @@
       "title": "covers demo helpers in non-video mode",
       "steps": [
         {
-          "image": "1e368b8a94412ce1"
+          "image": "eab39546c9109404",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "goto",
+              "message": "goto /"
+            },
+            {
+              "type": "action",
+              "message": "click",
+              "box": {
+                "x": 39,
+                "y": 178,
+                "width": 97,
+                "height": 36
+              }
+            }
+          ]
         },
         {
-          "image": "370d00ebe9fb8c92"
+          "image": "81183bb9df4e6b8a",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "assert",
+              "message": "expect text",
+              "box": {
+                "x": 39,
+                "y": 134,
+                "width": 342,
+                "height": 18
+              }
+            },
+            {
+              "type": "action",
+              "message": "fill \"DemoUser\"",
+              "box": {
+                "x": 39,
+                "y": 314,
+                "width": 342,
+                "height": 24
+              }
+            }
+          ]
         },
         {
-          "image": "0df70efdfdbc5984"
+          "image": "9f48cdbcd1800906",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "assert",
+              "message": "expect value",
+              "box": {
+                "x": 39,
+                "y": 314,
+                "width": 342,
+                "height": 24
+              }
+            }
+          ]
         },
         {
-          "image": "5151711679091544"
-        },
-        {
-          "image": "d08e01f8883a69bd"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "fc442cad0465d23c"
-        },
-        {
-          "image": "d08e01f8883a69bd"
-        },
-        {
-          "image": "243d069dfb5c5436"
-        },
-        {
-          "image": "34f87ff001f93cbb"
+          "image": "285e7126eb12cd0f",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "wait",
+              "message": "waitForTimeout 50ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 10ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 50ms"
+            },
+            {
+              "type": "wait",
+              "message": "waitForTimeout 200ms"
+            }
+          ]
         },
         {
           "image": "fdbe0e39116473df",
-          "name": "demo-final"
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "assert",
+              "message": "expect visible",
+              "box": {
+                "x": 39,
+                "y": 343,
+                "width": 342,
+                "height": 90
+              }
+            },
+            {
+              "type": "screenshot",
+              "message": "demo-final"
+            }
+          ]
         }
       ]
     },
@@ -197,33 +614,135 @@
       "title": "covers splitIntoRoles including repeated role names",
       "steps": [
         {
-          "image": "8e62bf2115a625b0",
+          "image": "eab39546c9109404",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "goto",
+              "message": "goto /"
+            },
+            {
+              "type": "assert",
+              "message": "expect visible",
+              "box": {
+                "x": 24,
+                "y": 24,
+                "width": 372,
+                "height": 37
+              }
+            }
+          ],
           "role": "beta"
         },
         {
-          "image": "1d3822e8384e0cb1",
-          "role": "alpha"
-        },
-        {
-          "image": "f85e1f902d2b8c2d",
-          "role": "alpha"
-        },
-        {
-          "image": "b2eff37005eed733",
-          "role": "beta"
-        },
-        {
-          "image": "caac339e86c48504",
-          "role": "beta"
-        },
-        {
-          "image": "d5fb7fca86a9de9d",
-          "name": "alpha-state",
+          "image": "4c2d962dcb03d5c0",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "action",
+              "message": "click",
+              "box": {
+                "x": 39,
+                "y": 565,
+                "width": 143,
+                "height": 36
+              }
+            }
+          ],
           "role": "alpha"
         },
         {
           "image": "9bbc4afb15b15be8",
-          "name": "beta-state",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "assert",
+              "message": "expect text",
+              "box": {
+                "x": 39,
+                "y": 627,
+                "width": 342,
+                "height": 18
+              }
+            }
+          ],
+          "role": "alpha"
+        },
+        {
+          "image": "4c2d962dcb03d5c0",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "action",
+              "message": "click",
+              "box": {
+                "x": 39,
+                "y": 565,
+                "width": 143,
+                "height": 36
+              }
+            }
+          ],
+          "role": "beta"
+        },
+        {
+          "image": "9bbc4afb15b15be8",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "assert",
+              "message": "expect text",
+              "box": {
+                "x": 39,
+                "y": 627,
+                "width": 342,
+                "height": 18
+              }
+            }
+          ],
+          "role": "beta"
+        },
+        {
+          "image": "9bbc4afb15b15be8",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "screenshot",
+              "message": "alpha-state"
+            }
+          ],
+          "role": "alpha"
+        },
+        {
+          "image": "9bbc4afb15b15be8",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "screenshot",
+              "message": "beta-state"
+            }
+          ],
           "role": "beta"
         }
       ]
@@ -233,13 +752,29 @@
       "title": "negative assertions on absent elements complete quickly",
       "steps": [
         {
-          "image": "e4520fb6b1a63877"
-        },
-        {
-          "image": "ad7b6612b9fe1644"
-        },
-        {
-          "image": "f67c8587f7fd3c87"
+          "image": "eab39546c9109404",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "goto",
+              "message": "goto /"
+            },
+            {
+              "type": "assert",
+              "message": "expect visible"
+            },
+            {
+              "type": "check",
+              "message": "waitFor"
+            },
+            {
+              "type": "check",
+              "message": "isHidden"
+            }
+          ]
         }
       ]
     },
@@ -251,8 +786,31 @@
           "gap": "Prepare the counter (2x increment)"
         },
         {
-          "image": "bf5a7ce4a3781383",
-          "description": "Verify the prepared counter"
+          "image": "787ae921ae4d2cdf",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "goto",
+              "message": "goto /"
+            },
+            {
+              "type": "describe",
+              "message": "Verify the prepared counter"
+            },
+            {
+              "type": "assert",
+              "message": "expect text",
+              "box": {
+                "x": 39,
+                "y": 134,
+                "width": 342,
+                "height": 18
+              }
+            }
+          ]
         }
       ]
     }

@@ -3,15 +3,18 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { stripPngMetadata } from './png.js';
 import { hashImagePixels } from './hash.js';
-import { mergeTestRecord, type ConsoleMessageInfo, type StepRecord, type TestRecord } from './manifest.js';
+import { mergeTestRecord, type StepEventRecord, type StepRecord, type TestRecord } from './manifest.js';
 
 export { expect };
 export type { Page };
-export type { ConsoleMessageInfo, StepRecord, TestRecord };
+export type { StepEventRecord, StepRecord, TestRecord };
 
 /** The page handed to tests: Playwright's Page plus ShoTest's describe(). */
 export interface ShotestPage extends Page {
-    /** Attach a one-line hint to the next screenshot, shown in the review tool. */
+    /**
+     * Attach a one-line hint to what happens next; the review tool shows it
+     * as a header above the following events in the step's event list.
+     */
     describe(text: string): void;
 }
 
@@ -86,8 +89,6 @@ const VIDEO_INIT_CSS = `
 // ── Stack trace helpers ────────────────────────────────────────────
 
 type SourceLocation = { file: string; line: number };
-type OverlayBannerType = 'info' | 'error' | 'success';
-type OverlayNotice = { text: string; type: OverlayBannerType };
 
 function getLocationFromStack(stack: string): SourceLocation | null {
     const frames = stack.split('\n');
@@ -122,9 +123,13 @@ function getCallerLocation(): SourceLocation {
 
 
 
-// ── Overlay helpers ────────────────────────────────────────────────
+// ── Stability CSS ──────────────────────────────────────────────────
 
-const OVERLAY_STYLE = `
+// Nothing is ever injected into the page for screenshots themselves — they
+// are clean captures, and what happened (clicks, assertions) is recorded as
+// step events in the spec JSON instead. This stylesheet only pins the page
+// down visually: no animations, no smooth scrolling.
+const STABILITY_STYLE = `
     html, body, * {
         scroll-behavior: auto !important;
     }
@@ -132,59 +137,6 @@ const OVERLAY_STYLE = `
         transition: none !important;
         animation: none !important;
     }
-    .shotest-overlay.check,
-    .shotest-overlay.assert {
-        position: absolute;
-        border-radius: 8px;
-        border-bottom-left-radius: 0;
-        pointer-events: none;
-        z-index: 1000000;
-    }
-    .shotest-overlay.check {
-        border: 2px solid #28a745;
-        background: rgba(40, 167, 69, 0.2);
-    }
-    .shotest-overlay.assert {
-        border: 2px solid #4fc1ff;
-        background: rgba(79, 193, 255, 0.2);
-    }
-    .shotest-overlay.check > p,
-    .shotest-overlay.assert > p {
-        position: absolute;
-        top: 100%;
-        left: -2px;
-        color: black;
-        padding: 2px 6px;
-        border-radius: 3px;
-        border-top-left-radius: 0;
-        font-size: 12px; white-space: nowrap; font-family: sans-serif;
-    }
-    .shotest-overlay.check > p { background: #28a745; }
-    .shotest-overlay.assert > p { background: #4fc1ff; }
-    #shotest-overlay-notices {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        pointer-events: none;
-        z-index: 1000002;
-    }
-    .shotest-overlay.banner {
-        position: relative;
-        background: rgba(0, 0, 0, 0.7);
-        color: white;
-        padding: 10px 20px;
-        font-family: sans-serif;
-        font-size: 14px;
-        border-top: 2px solid #333;
-        white-space: pre-wrap;
-    }
-    .shotest-overlay.banner.error { border-top-color: red !important; background: rgba(80, 0, 0, 0.9) !important; }
-    .shotest-overlay.banner.info { border-top-color: #007acc !important; }
-    .shotest-overlay.banner.success { border-top-color: #28a745 !important; }
 `;
 
 /**
@@ -214,78 +166,43 @@ export async function waitForVisualStability(page: Page, timeoutMs: number = 500
     }), timeoutMs).catch(() => { });
 }
 
-async function hideOverlay(page: Page) {
-    try {
-        await page.evaluate(() => {
-            document.querySelectorAll('.shotest-overlay').forEach((el) => el.remove());
-            const notices = document.getElementById('shotest-overlay-notices');
-            if (notices) notices.remove();
-        });
-    } catch { }
-}
-
-async function showOverlayCheck(page: Page, box: { x: number; y: number; width: number; height: number }, text?: string, kind: 'check' | 'assert' = 'check') {
-    try {
-        await page.evaluate(({ x, y, w, h, text, kind }) => {
-            const el = document.createElement('div');
-            el.className = 'shotest-overlay ' + kind;
-            document.body.appendChild(el);
-            Object.assign(el.style, {
-                left: (x + window.scrollX - 4) + 'px',
-                top: (y + window.scrollY - 4) + 'px',
-                width: (w + 8) + 'px',
-                height: (h + 8) + 'px',
-            });
-            if (text) {
-                const p = document.createElement('p');
-                p.innerText = text;
-                el.appendChild(p);
-            }
-        }, { x: box.x, y: box.y, w: box.width, h: box.height, text, kind });
-    } catch { }
-}
-
 function stripAnsi(text: string): string {
     return text.replace(/\u001b\[[0-9;]*m/g, '');
 }
 
-async function showOverlayBanners(page: Page, notices: OverlayNotice[], position: 'append' | 'prepend' = 'append'): Promise<boolean> {
-    if (notices.length === 0) return true;
-    try {
-        await page.evaluate(({ notices, position }) => {
-            let container = document.getElementById('shotest-overlay-notices');
-            if (!container) {
-                container = document.createElement('div');
-                container.id = 'shotest-overlay-notices';
-                document.body.appendChild(container);
-            }
+// ── Step events ────────────────────────────────────────────────────
 
-            const fragment = document.createDocumentFragment();
-            for (const notice of notices) {
-                const el = document.createElement('div');
-                el.className = 'shotest-overlay banner ' + notice.type;
-                el.textContent = notice.text;
-                fragment.appendChild(el);
-            }
+type EventBox = NonNullable<StepEventRecord['box']>;
 
-            if (position === 'prepend' && container.firstChild) {
-                container.insertBefore(fragment, container.firstChild);
-            } else {
-                container.appendChild(fragment);
-            }
-        }, { notices, position });
-        return true;
-    } catch {
-        return false;
-    }
+function roundBox(box: EventBox): EventBox {
+    return {
+        x: Math.round(box.x),
+        y: Math.round(box.y),
+        width: Math.round(box.width),
+        height: Math.round(box.height),
+    };
 }
 
-async function showOverlayBanner(page: Page, text: string, type: OverlayBannerType = 'info') {
-    await showOverlayBanners(page, [{ text: stripAnsi(text), type }]);
+function makeEvent(type: StepEventRecord['type'], message: string, loc: SourceLocation, box?: EventBox | null): StepEventRecord {
+    return {
+        type,
+        message: stripAnsi(message),
+        box: box ? roundBox(box) : undefined,
+        source: `${path.relative(process.cwd(), loc.file)}:${loc.line}`,
+    };
 }
 
-function queueOverlayBanner(text: string, type: OverlayBannerType = 'info') {
-    pendingOverlayNotices.push({ text: stripAnsi(text), type });
+/**
+ * Locate the element an event is about, scrolled into view so it shows in the
+ * screenshot. The underlying operation has already completed here, so the
+ * element is either present now or never will be (e.g. after a successful
+ * negative assertion like not.toBeVisible). A bounded wait keeps the absent
+ * case from stalling for the full default timeout; the event then simply
+ * carries no box.
+ */
+async function locatorEventBox(locator: Locator): Promise<EventBox | null> {
+    await locator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+    return await locator.boundingBox({ timeout: 1000 }).catch(() => null);
 }
 
 function describeExpectation(method: string): string {
@@ -308,36 +225,16 @@ function describeLocatorInspection(method: string, args: any[]): string {
     return method;
 }
 
-async function showLocatorStepOverlay(
-    actualLocator: Locator,
-    actualPage: Page,
-    text: string,
-    kind: 'check' | 'assert' = 'check',
-    fallbackType: OverlayBannerType = 'info',
-): Promise<void> {
-    await hideOverlay(actualPage);
-    await actualLocator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
-    // The underlying operation has already completed here, so the element is
-    // either present now or never will be (e.g. after a successful negative
-    // assertion like not.toBeVisible). A bounded wait keeps the absent case
-    // from stalling for the full default timeout; we then fall back to a banner.
-    const box = await actualLocator.boundingBox({ timeout: 1000 }).catch(() => null);
-    if (box) {
-        await showOverlayCheck(actualPage, box, text, kind);
-    } else {
-        await showOverlayBanner(actualPage, text, fallbackType);
-    }
-}
-
 // ── Screenshot capture ─────────────────────────────────────────────
 
 let currentPoolDir = '';
 let currentSteps: StepRecord[] = [];
 let lastStepLocation: SourceLocation | null = null;
 let pendingFailureText = '';
-let pendingOverlayNotices: OverlayNotice[] = [];
-let pendingConsoleMessages: ConsoleMessageInfo[] = [];
-let pendingDescription: string | undefined;
+// Events waiting for the next capture to attach to (e.g. a goto, which by
+// itself does not screenshot: the frame right after navigation is rarely
+// interesting, and the next step shows where it led).
+let pendingEvents: StepEventRecord[] = [];
 let suppressDepth = 0;
 let failureCaptured = false;
 
@@ -354,10 +251,6 @@ function getPageRole(page: Page): string | undefined {
     return (page as any)._shotestRole;
 }
 
-function setPendingDescription(text: string): void {
-    pendingDescription = String(text);
-}
-
 function normalizeConsoleSource(source: { url?: string; lineNumber?: number; columnNumber?: number } | undefined): string | undefined {
     const url = source?.url?.trim();
     if (!url) return undefined;
@@ -369,15 +262,10 @@ function normalizeConsoleSource(source: { url?: string; lineNumber?: number; col
     return normalizedUrl;
 }
 
-function drainPendingConsoleMessages(): ConsoleMessageInfo[] | undefined {
-    if (pendingConsoleMessages.length === 0) return undefined;
-    const messages = pendingConsoleMessages;
-    pendingConsoleMessages = [];
-    return messages;
-}
-
-function recordConsoleMessage(message: ConsoleMessageInfo): void {
-    pendingConsoleMessages.push(message);
+// Console output rides the same pending queue as goto/describe, so it lands
+// in a step's event list right between the events it arrived between.
+function recordConsoleEvent(consoleType: string, text: string, source?: string): void {
+    pendingEvents.push({ type: 'console', consoleType, message: text, source });
 }
 
 /**
@@ -385,7 +273,7 @@ function recordConsoleMessage(message: ConsoleMessageInfo): void {
  * assertions, recording a single placeholder ("gap") step with the given
  * one-line description instead. Use it for routine flows that reoccur across
  * many tests (logging in, seeding data) to keep reviews focused — it also
- * skips the overlay and stability work, so the wrapped part runs faster.
+ * skips the stability and capture work, so the wrapped part runs faster.
  *
  * A failure inside the block still captures an error screenshot, and explicit
  * `screenshot(page, name)` calls still capture.
@@ -404,8 +292,8 @@ export async function withoutScreenshots<T>(description: string, fn: () => Promi
 
 async function takeScreenshot(
     actualPage: Page,
+    event: StepEventRecord | null,
     alreadyStable: boolean = false,
-    loc: SourceLocation = getCallerLocation(),
     stepStartTimeMs: number = Date.now(),
     force: boolean = false,
 ): Promise<void> {
@@ -415,57 +303,47 @@ async function takeScreenshot(
         await waitForVisualStability(actualPage);
     }
 
-    let flushedPendingNotices = false;
-    if (pendingOverlayNotices.length > 0) {
-        flushedPendingNotices = await showOverlayBanners(actualPage, pendingOverlayNotices, 'prepend');
-    }
-
-    const relFile = path.relative(process.cwd(), loc.file);
-
     const hash = await captureStep(actualPage);
-    if (hash && flushedPendingNotices) {
-        pendingOverlayNotices = [];
-    }
-    if (!hash) return; // page closed (e.g. test timed out)
+    if (!hash) return; // page closed (e.g. test timed out) — keep pending events queued
 
-    currentSteps.push({
-        image: hash,
-        source: `${relFile}:${loc.line}`,
-        description: consumePendingDescription(),
-        duration: Math.max(0, Date.now() - stepStartTimeMs),
-        role: getPageRole(actualPage),
-        consoleMessages: drainPendingConsoleMessages(),
-    });
-}
-
-function consumePendingDescription(): string | undefined {
-    const description = pendingDescription;
-    pendingDescription = undefined;
-    return description;
+    if (event) event.duration = Math.max(0, Date.now() - stepStartTimeMs);
+    const events = pendingEvents;
+    pendingEvents = [];
+    if (event) events.push(event);
+    appendStep(actualPage, hash, events);
 }
 
 /**
- * Take a named screenshot (clean, no overlay). Useful for promotional material.
- * Captures even inside a withoutScreenshots() block.
+ * Record a captured frame as a step. Consecutive captures of an unchanged
+ * page hash identically; their events are folded onto the existing step, so
+ * a run of checks (usually ending with the action that changes the page)
+ * shows as one screenshot with a list of events in the review app.
  */
-export async function screenshot(page: Page, name: string): Promise<void> {
-    const loc = getCallerLocation();
-    const stepStartTimeMs = Date.now();
-    await waitForVisualStability(page);
-    const relFile = path.relative(process.cwd(), loc.file);
+function appendStep(actualPage: Page, hash: string, events: StepEventRecord[]): void {
+    const role = getPageRole(actualPage);
+    const last = currentSteps[currentSteps.length - 1];
 
-    await hideOverlay(page);
-    const hash = await captureStep(page);
-    if (!hash) return;
+    if (last && !('gap' in last) && last.image === hash && last.role === role) {
+        if (events.length > 0) last.events = [...(last.events ?? []), ...events];
+        return;
+    }
+
     currentSteps.push({
         image: hash,
-        name,
-        source: `${relFile}:${loc.line}`,
-        description: consumePendingDescription(),
-        duration: Math.max(0, Date.now() - stepStartTimeMs),
-        role: getPageRole(page),
-        consoleMessages: drainPendingConsoleMessages(),
+        viewport: actualPage.viewportSize() ?? undefined,
+        events: events.length > 0 ? events : undefined,
+        role,
     });
+}
+
+/**
+ * Take an explicitly named screenshot, recorded as a 'screenshot' event
+ * carrying the name. If the page looks the same as the previous step, the
+ * event simply joins that step's list. Captures even inside a
+ * withoutScreenshots() block.
+ */
+export async function screenshot(page: Page, name: string): Promise<void> {
+    await takeScreenshot(page, makeEvent('screenshot', name, getCallerLocation()), false, Date.now(), true);
 }
 
 export async function splitIntoRoles<const Names extends readonly string[]>(page: Page, ...names: Names): Promise<{ [K in Names[number]]: ShotestPage }> {
@@ -518,8 +396,6 @@ async function captureStep(page: Page): Promise<string | null> {
         fs.renameSync(tmpPath, basePath + '.png');
     }
 
-    await hideOverlay(page);
-
     if (captureHtml && !fs.existsSync(basePath + '.body.html')) {
         try {
             const { body, head } = await page.evaluate(() => ({
@@ -550,21 +426,21 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             pendingFailureText = failureText;
             try {
                 if (!screenshotsSuppressed()) {
-                    await hideOverlay(actualPage);
+                    // Capture *before* the action runs: the shot shows the
+                    // page the action found, with the event box marking what
+                    // it targeted. The action's effect shows in the next step.
                     await actualLocator.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
                     const box = await actualLocator.boundingBox().catch(() => null);
                     if (!box) {
                         throw new Error(failureText);
                     }
-                    await showOverlayCheck(actualPage, box, short);
-                    await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+                    await takeScreenshot(actualPage, makeEvent('action', short, loc, box), false, stepStartTimeMs);
                 }
                 const result = await (actualLocator as any)[method](...args);
                 pendingFailureText = '';
                 return result;
             } catch (error: any) {
-                await showOverlayBanner(actualPage, failureText, 'error');
-                await takeScreenshot(actualPage, false, loc, stepStartTimeMs, true).catch(() => {});
+                await takeScreenshot(actualPage, makeEvent('error', failureText, loc), false, stepStartTimeMs, true).catch(() => {});
                 failureCaptured = true;
                 if (error.stack) {
                     error.stack = error.stack.split('\n')
@@ -586,14 +462,14 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         try {
             const result = await (actualLocator as any)._expect(method, options);
             if (!screenshotsSuppressed()) {
-                await showLocatorStepOverlay(actualLocator, actualPage, label, 'assert', 'info');
-                await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+                const box = await locatorEventBox(actualLocator);
+                await takeScreenshot(actualPage, makeEvent('assert', label, loc, box), false, stepStartTimeMs);
             }
             pendingFailureText = '';
             return result;
         } catch (error: any) {
-            await showLocatorStepOverlay(actualLocator, actualPage, failureText, 'assert', 'error');
-            await takeScreenshot(actualPage, false, loc, stepStartTimeMs, true).catch(() => {});
+            const box = await locatorEventBox(actualLocator);
+            await takeScreenshot(actualPage, makeEvent('error', failureText, loc, box), false, stepStartTimeMs, true).catch(() => {});
             failureCaptured = true;
             throw error;
         }
@@ -605,8 +481,8 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         lastStepLocation = loc;
         await (actualLocator as any).waitFor(options);
         if (!screenshotsSuppressed()) {
-            await showLocatorStepOverlay(actualLocator, actualPage, 'waitFor');
-            await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+            const box = await locatorEventBox(actualLocator);
+            await takeScreenshot(actualPage, makeEvent('check', 'waitFor', loc, box), false, stepStartTimeMs);
         }
     };
 
@@ -622,14 +498,14 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             try {
                 const result = await (actualLocator as any)[method](...args);
                 if (!screenshotsSuppressed()) {
-                    await showLocatorStepOverlay(actualLocator, actualPage, label);
-                    await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+                    const box = await locatorEventBox(actualLocator);
+                    await takeScreenshot(actualPage, makeEvent('check', label, loc, box), false, stepStartTimeMs);
                 }
                 pendingFailureText = '';
                 return result;
             } catch (error) {
-                await showLocatorStepOverlay(actualLocator, actualPage, failureText, 'check', 'error');
-                await takeScreenshot(actualPage, false, loc, stepStartTimeMs, true).catch(() => {});
+                const box = await locatorEventBox(actualLocator);
+                await takeScreenshot(actualPage, makeEvent('error', failureText, loc, box), false, stepStartTimeMs, true).catch(() => {});
                 failureCaptured = true;
                 throw error;
             }
@@ -662,7 +538,10 @@ function wrapPage(actualPage: Page): ShotestPage {
     }
 
     wrapped.describe = function (text: string) {
-        setPendingDescription(text);
+        // A pending event, like goto: it attaches to the next capture, right
+        // before the events that follow it — which is where the header
+        // belongs, even when that capture merges into the previous step.
+        pendingEvents.push(makeEvent('describe', String(text), getCallerLocation()));
     };
 
     wrapped.goto = async function (url: string, options: any) {
@@ -670,7 +549,7 @@ function wrapPage(actualPage: Page): ShotestPage {
         lastStepLocation = loc;
         await actualPage.goto(url, options);
         if (!screenshotsSuppressed()) {
-            queueOverlayBanner('goto ' + url, 'info');
+            pendingEvents.push(makeEvent('goto', 'goto ' + url, loc));
         }
     };
 
@@ -680,9 +559,7 @@ function wrapPage(actualPage: Page): ShotestPage {
         lastStepLocation = loc;
         await actualPage.waitForTimeout(timeout);
         if (!screenshotsSuppressed()) {
-            await hideOverlay(actualPage);
-            await showOverlayBanner(actualPage, `waitForTimeout ${timeout}ms`, 'info');
-            await takeScreenshot(actualPage, false, loc, stepStartTimeMs);
+            await takeScreenshot(actualPage, makeEvent('wait', `waitForTimeout ${timeout}ms`, loc), false, stepStartTimeMs);
         }
     };
 
@@ -716,23 +593,21 @@ export const test = baseTest.extend<{ page: ShotestPage }>({
         currentSteps = [];
         lastStepLocation = null;
         pendingFailureText = '';
-        pendingOverlayNotices = [];
-        pendingConsoleMessages = [];
-        pendingDescription = undefined;
+        pendingEvents = [];
         suppressDepth = 0;
         failureCaptured = false;
 
         fs.mkdirSync(poolDir, { recursive: true });
 
         // Set video mode flag and inject appropriate CSS
-        await actualPage.addInitScript(({ isVideoMode, videoCss, overlayCss }: { isVideoMode: boolean; videoCss: string; overlayCss: string }) => {
+        await actualPage.addInitScript(({ isVideoMode, videoCss, stabilityCss }: { isVideoMode: boolean; videoCss: string; stabilityCss: string }) => {
             (window as any).__VIDEO_MODE__ = isVideoMode;
             const style = document.createElement('style');
             if (isVideoMode) {
                 Object.defineProperty(navigator, 'webdriver', { get: () => false });
                 style.textContent = videoCss;
             } else {
-                style.textContent = overlayCss;
+                style.textContent = stabilityCss;
 
                 // The `scroll-behavior: auto !important` in that CSS only governs
                 // scrolls that don't name a behavior themselves — an explicit
@@ -761,21 +636,17 @@ export const test = baseTest.extend<{ page: ShotestPage }>({
             }
             if (document.head) document.head.appendChild(style);
             else document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
-        }, { isVideoMode: videoMode, videoCss: VIDEO_INIT_CSS, overlayCss: OVERLAY_STYLE });
+        }, { isVideoMode: videoMode, videoCss: VIDEO_INIT_CSS, stabilityCss: STABILITY_STYLE });
 
         actualPage.on('console', (msg) => {
             const text = stripAnsi(msg.text());
             const type = msg.type();
-            recordConsoleMessage({
-                type,
-                text,
-                source: normalizeConsoleSource(msg.location()),
-            });
+            recordConsoleEvent(type, text, normalizeConsoleSource(msg.location()));
             console.log(`Browser ${type}: ${text}`);
         });
         actualPage.on('pageerror', (err) => {
             const text = stripAnsi(String(err.stack || err.message || err));
-            recordConsoleMessage({ type: 'error', text });
+            recordConsoleEvent('error', text);
             console.error('BROWSER ERROR:', text);
         });
 
@@ -790,16 +661,16 @@ export const test = baseTest.extend<{ page: ShotestPage }>({
             await use(wrappedPage);
         }
 
-        // Console messages never trigger a screenshot. The screenshot set must be a
+        // Console output never triggers a screenshot. The screenshot set must be a
         // function of the test's actions alone: a console message can arrive at any
         // moment (e.g. a framework's perf-timing debug log fired by the last action's
         // reactive update — more likely under load), so screenshotting on one would
-        // make the frame set flaky. Any messages still pending after the final action
-        // are folded into the last step's metadata so they aren't lost from the report.
-        const trailingMessages = drainPendingConsoleMessages();
+        // make the frame set flaky. Any console events still pending after the final
+        // action are folded into the last step so they aren't lost from the report.
+        const trailing = pendingEvents.filter((event) => event.type === 'console');
         const lastImageStep = [...currentSteps].reverse().find((step) => !('gap' in step));
-        if (trailingMessages && lastImageStep && 'image' in lastImageStep) {
-            lastImageStep.consoleMessages = [...(lastImageStep.consoleMessages ?? []), ...trailingMessages];
+        if (trailing.length > 0 && lastImageStep && 'image' in lastImageStep) {
+            lastImageStep.events = [...(lastImageStep.events ?? []), ...trailing];
         }
 
         // Determine error info
@@ -818,9 +689,7 @@ export const test = baseTest.extend<{ page: ShotestPage }>({
 
             // Only capture if our action/expect wrappers didn't already
             if (!videoMode && !failureCaptured) {
-                await hideOverlay(actualPage);
-                await showOverlayBanner(actualPage, errorMessage, 'error');
-                await takeScreenshot(actualPage, true, failureLoc, Date.now(), true).catch(() => {});
+                await takeScreenshot(actualPage, makeEvent('error', errorMessage, failureLoc), true, Date.now(), true).catch(() => {});
             }
 
             let currentUrl = '';

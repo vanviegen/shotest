@@ -2,7 +2,7 @@
 
 ShoTest is a small wrapper around Playwright Test that acts as a drop-in replacement and provides:
 
-- Automatic screenshots at every step of your test, overlaid with markers showing actions taken or elements verified.
+- Automatic screenshots at every step of your test, with the actions taken and elements verified logged as events alongside each screenshot — shown in the review app as a color-coded list that can point out the exact element on the image.
 - A local web app for browsing test results, comparing changes against the stored baseline, and accepting intentional changes.
 - HTML snapshots at every step, for debugging (by coding agents).
 - Helpers for recording demo videos with visible interactions and natural delays.
@@ -81,7 +81,7 @@ Run the tests using:
 npx shotest test
 ```
 
-This writes results to `test-results/`: one `<spec-base>.json` per spec file (listing its tests, steps and metadata), plus the screenshots and HTML snapshots themselves. Screenshot files are named by a hash of their pixel content, so identical frames — within a test or across tests — share a single file, and names don't change when line numbers shift.
+This writes results to `test-results/`: one `<spec-base>.json` per spec file (listing its tests, steps and metadata), plus the screenshots and HTML snapshots themselves. Screenshots are clean captures — what happened at each moment (clicks, assertions, navigations) is recorded as *events* in the JSON, each with a one-line message, source line and the viewport box of the element involved. Screenshot files are named by a hash of their pixel content, so identical frames — within a test or across tests — share a single file, and names don't change when line numbers shift. Because assertions don't alter the page, a run of checks (usually ended by the action that changes things) collapses into a single screenshot carrying the whole list of events.
 
 The `shotest` command forwards arguments to Playwright, so `npx shotest test --ui` maps to `playwright test --ui`.
 
@@ -91,14 +91,14 @@ ShoTest compares screenshots with `odiff-bin` and relies on it to decide whether
 
 ## Step descriptions and skipping screenshots
 
-Attach a one-line hint to the next screenshot; it shows up in the header of that screenshot in the review tool:
+Attach a one-line hint to what happens next; the review tool shows it as a subtle header above the events that follow it, in the event list below the screenshot (so one screenshot can carry several hints):
 
 ```ts
 page.describe('Create lunch talk event');
 await page.getByRole('button', { name: 'New event' }).click();
 ```
 
-Routine flows that reoccur in many tests (logging in, seeding data) would otherwise produce countless screenshots. Wrap them in `withoutScreenshots(description, fn)` to skip capture — the review tool shows a subtle placeholder with your description instead, and the wrapped part also runs faster because the overlay and stability work is skipped too:
+Routine flows that reoccur in many tests (logging in, seeding data) would otherwise produce countless screenshots. Wrap them in `withoutScreenshots(description, fn)` to skip capture — the review tool shows a subtle placeholder with your description instead, and the wrapped part also runs faster because the stability and capture work is skipped too:
 
 ```ts
 import { test, withoutScreenshots } from 'shotest';
@@ -124,6 +124,10 @@ npx shotest review
 ```
 
 It serves a web app on localhost and attempts to open it in your default browser.
+
+Steps that share a screenshot are shown as one card: the image, with the list of recorded events beneath it, color-coded by type and prefixed with their source line. Browser console output appears in that list too, right between the events it arrived between — quietly for plain logs, in color for warnings and errors. The viewport areas the events involved are outlined on the image; hover the image to see it unobstructed, or hover (or tap) a single event to highlight just that one. When a step changed, the accepted and current versions are cross-faded (or shown individually — see the toolbar), and checks that the current run no longer performs are listed struck-through.
+
+An explicit `screenshot(page, name)` call records a `screenshot` event carrying the name — like any other event, it joins the previous step when the page hasn't visually changed.
 
 When you press the 'Accept visuals' button for a test, its screenshots are copied into the `test-accepted` directory (configurable through `SHOTEST_ACCEPTED_DIR`) and become the new accepted baseline. Like `test-results/`, it holds a flat pool of content-hashed images plus one JSON per spec file; images shared between tests are stored once. It is recommended to commit this directory to version control (unlike `test-results/`).
 
@@ -161,7 +165,7 @@ Notes:
 - Call `splitIntoRoles(page, ...)` before the first interaction you want attributed to those roles. The first named role reuses the current page.
 - Later roles start on the same URL as the original page, but in their own browser sessions.
 - Repeating a role name within a test returns the same page instead of creating a duplicate session.
-- Labeled pages prefix screenshot filenames automatically, so named screenshots like `screenshot(page, 'dashboard')` do not collide across users.
+- Steps are labeled with their role in the review app, and each role gets its own tint so the browser windows are easy to tell apart.
 - Extra pages created by `splitIntoRoles()` are closed automatically at the end of the test.
 
 ## Recording demo videos
@@ -277,6 +281,8 @@ For the review server:
 - `SHOTEST_ACCEPTED_DIR`: Where to store accepted baseline images (defaults to `test-accepted`)
 - `SHOTEST_PORT`: Preferred web server TCP port (defaults to `3847`; if unavailable, ShoTest tries the next 9 ports)
 
-## Migrating from 1.x
+## Migrating from older versions
 
 ShoTest 2.0 changed the on-disk format: screenshots are content-hashed files in a flat pool with one JSON per spec file, instead of line-number-based files in one directory per test. Your tests run unchanged, but old baselines cannot be read (the review tool refuses to start on a 1.x `test-accepted/`): delete `test-accepted/`, rerun your tests, and re-accept the baselines with `npx shotest review`.
+
+Baselines recorded by earlier 2.0 pre-releases — before overlays were replaced by step events — are recognized (their spec JSONs carry no `version` field) and ignored: their tests show up as entirely new in the review app, and accepting them rebuilds the baseline in the current format. Images only such an old baseline referenced are garbage-collected along the way.

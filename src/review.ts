@@ -19,18 +19,21 @@ import { fileURLToPath } from 'url';
 import { areImagesEquivalent } from './visual-compare.js';
 import { compressAcceptedPool } from './webp.js';
 import {
+    eventsEquivalent,
     gcPoolFiles,
     hasLegacyAcceptedLayout,
     isGapStep,
+    isOutdatedSpecJson,
     legacyAcceptedHint,
     listSpecJsonFiles,
     mergeTestRecord,
     readSpecRecords,
+    significantEvents,
     specJsonName,
     withFileLock,
     writeSpecRecords,
-    type ConsoleMessageInfo,
     type ImageStepRecord,
+    type StepEventRecord,
     type StepRecord,
     type TestRecord,
 } from './manifest.js';
@@ -132,6 +135,10 @@ async function entriesEquivalent(accepted: AlignEntry, current: AlignEntry): Pro
     if (accepted.kind === 'gap' || current.kind === 'gap') {
         return accepted.kind === 'gap' && current.kind === 'gap' && accepted.text === current.text;
     }
+    // A step is what happened as much as how it looked: the same screenshot
+    // reached by a different set of checks or actions is a change the
+    // reviewer should see.
+    if (!eventsEquivalent(accepted.step.events, current.step.events)) return false;
     // Equal hashes are pixel-identical by construction — no files needed.
     if (accepted.step.image === current.step.image) return true;
     if (!accepted.filePath || !current.filePath) return false;
@@ -148,15 +155,13 @@ interface AlignedPair {
     // gap steps carry their (possibly differing) texts per side,
     acceptedGap?: string;
     currentGap?: string;
-    // image steps carry the image hash per side.
+    // image steps carry the image hash and event list per side.
     acceptedImage?: string;
     currentImage?: string;
-    location?: string;
-    name?: string;
-    description?: string;
-    duration?: number;
+    acceptedEvents?: StepEventRecord[];
+    currentEvents?: StepEventRecord[];
+    viewport?: { width: number; height: number };
     role?: string;
-    consoleMessages?: ConsoleMessageInfo[];
     changed: boolean;
 }
 
@@ -179,12 +184,10 @@ function makeAlignedPair(
     return {
         acceptedImage: acceptedStep?.image,
         currentImage: currentStep?.image,
-        location: step.source,
-        name: step.name,
-        description: step.description,
-        duration: step.duration,
+        acceptedEvents: acceptedStep?.events,
+        currentEvents: currentStep?.events,
+        viewport: step.viewport,
         role: step.role,
-        consoleMessages: step.consoleMessages,
         changed,
     };
 }
@@ -382,18 +385,24 @@ async function getTestDetails(file: string, title: string): Promise<{
 
 // ── Accepting ──────────────────────────────────────────────────────
 
-// The baseline keeps only what identifies and orders the steps; run metadata
-// (durations, console messages, source lines — which shift on every edit)
-// would churn version control without informing a later comparison.
+// The baseline keeps only what identifies, orders and displays the steps; run
+// metadata (durations, console output, source lines — which shift on every
+// edit) would churn version control without informing a later comparison.
+// Event types/messages take part in the comparison; boxes and the viewport
+// are kept so the review app can point at what a baseline-only step targeted.
 function stripForAccept(record: TestRecord): TestRecord {
     return {
         file: record.file,
         title: record.title,
-        steps: record.steps.map((step) => isGapStep(step) ? { gap: step.gap } : {
-            image: step.image,
-            name: step.name,
-            description: step.description,
-            role: step.role,
+        steps: record.steps.map((step) => {
+            if (isGapStep(step)) return { gap: step.gap };
+            const events = significantEvents(step.events).map(({ type, message, box }) => ({ type, message, box }));
+            return {
+                image: step.image,
+                viewport: step.viewport,
+                events: events.length > 0 ? events : undefined,
+                role: step.role,
+            };
         }),
     };
 }
@@ -575,6 +584,15 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
 
     if (hasLegacyAcceptedLayout(resolvedAcceptedDir)) {
         throw new Error('ShoTest Review: ' + legacyAcceptedHint(acceptedDir));
+    }
+
+    // Spec JSONs from an older format version are ignored, so their tests
+    // read as never-accepted (all steps "new") — accepting rebuilds them in
+    // the current format. Say so, or the silent downgrade looks like a bug.
+    const outdatedBaselines = listSpecJsonFiles(resolvedAcceptedDir)
+        .filter((file) => isOutdatedSpecJson(path.join(resolvedAcceptedDir, file)));
+    if (outdatedBaselines.length > 0) {
+        console.warn(`ShoTest Review: ignoring ${outdatedBaselines.length} baseline JSON(s) in ${acceptedDir} written by an older ShoTest version (${outdatedBaselines.join(', ')}). Their tests show as new; accepting them records a fresh baseline.`);
     }
 
     if (listSpecJsonFiles(resolvedOutputDir).length === 0 &&

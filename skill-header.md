@@ -8,7 +8,7 @@ description: |
 
 After running `npx playwright test`, results are written flat into `test-results/`:
 
-- <SPEC_BASE>.json: one per spec file (e.g. `login.spec.json`), listing its tests and their steps in order; each step names its screenshot by HASH and records the source line, plus any description, role, duration and console messages
+- <SPEC_BASE>.json: one per spec file (e.g. `login.spec.json`), listing its tests and their steps in order; each step names its screenshot by HASH and records the events that happened on it in order — actions, assertions, checks, describe-hints, named screenshots and browser console output — with message, source line, duration and the viewport box of the element involved. Consecutive events on an unchanged page share one step/screenshot.
 - <HASH>.png: a step's screenshot (you can view this image for visual/layout verification); HASH is derived from the pixel content, so identical frames share one file
 - <HASH>.body.html / <HASH>.head.html: DOM snapshots (useful for debugging and for writing test selectors)
 - <TEST_NAME>/error.txt: error message + stack trace (in case of an error), in Playwright's per-test directory

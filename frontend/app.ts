@@ -20,12 +20,6 @@ type ConsoleTone = 'error' | 'warning' | 'info' | 'debug' | 'log';
 type StepChange = 'changed' | 'unchanged' | 'removed' | 'new';
 type CompareMode = 'accepted' | 'current' | 'toggle';
 
-interface ConsoleMessageInfo {
-  type?: string;
-  text?: string;
-  source?: string;
-}
-
 interface TestSummary {
   id: string;
   file: string;
@@ -45,19 +39,43 @@ interface TestRecord {
   errorStack?: string;
 }
 
+interface EventBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface StepEvent {
+  type: string;
+  message: string;
+  box?: EventBox;
+  source?: string;
+  duration?: number;
+  // The browser console level (log, warning, error, ...). Console events only.
+  consoleType?: string;
+}
+
 interface ReviewStep {
-  // Gap steps (withoutScreenshots) carry a text per side; image steps a hash.
+  // Gap steps (withoutScreenshots) carry a text per side; image steps a hash
+  // plus the list of events (actions, checks) recorded on that screenshot.
   acceptedGap?: string;
   currentGap?: string;
   acceptedImage?: string;
   currentImage?: string;
-  location?: string;
-  name?: string;
-  description?: string;
-  duration?: number;
+  acceptedEvents?: StepEvent[];
+  currentEvents?: StepEvent[];
+  // CSS-pixel viewport of the capture, for mapping event boxes onto the image.
+  viewport?: { width: number; height: number };
   role?: string;
-  consoleMessages?: ConsoleMessageInfo[];
   changed: boolean;
+}
+
+// An entry in the rendered event list. `removed` marks events that the
+// accepted baseline had but the current run no longer produces.
+interface DisplayEvent {
+  event: StepEvent;
+  removed: boolean;
 }
 
 interface TestDetail {
@@ -107,14 +125,18 @@ setInterval(() => {
 
 // ── Scoped styles for the few custom bits Staffa doesn't cover ──────
 
-// The screenshot with its overlays. The zoomed stage cannot hold the overlay
-// tag itself: CSS zoom would shrink the tag along with the pixels.
+// The screenshot with its accepted/current tag. The zoomed stage cannot hold
+// the tag itself: CSS zoom would shrink the tag along with the pixels. The
+// `.marks` layer shares the image's grid cell, so an event's viewport box can
+// be placed with percentages — correct at any zoom or devicePixelRatio.
 const shotStyle = A.insertCss({
   '&': 'position:relative width:max-content max-width:100%',
   '.stage': 'display:inline-grid overflow:hidden border-radius:4px vertical-align:top',
   '.stage img': 'grid-area:1/1 display:block max-width:none border-radius:4px',
   '.layer': 'opacity:0 transition: opacity 120ms linear;',
   '.layer.visible': 'opacity:1',
+  '.marks': 'grid-area:1/1 position:relative pointer-events:none z-index:2',
+  '.eventBox': 'position:absolute border: 2px solid; border-radius:4px',
   '.tag': 'position:absolute top:0.4rem left:0.4rem pv:0.1rem ph:0.5rem r:99px font-size:0.7em font-weight:700 letter-spacing:0.04em text-transform:uppercase color:#fff background:rgba(30,41,59,0.75) pointer-events:none',
   '.tag.current': 'background:$s-primary',
 });
@@ -124,20 +146,6 @@ const shotStyle = A.insertCss({
 const chipStyle = A.insertCss(
   'display:inline-flex align-items:center gap:0.3rem font-size:0.72em font-weight:700 line-height:1.5 pv:0.05rem ph:0.5rem r:99px text-transform:uppercase letter-spacing:0.04em white-space:nowrap',
 );
-
-const consoleStyle = A.insertCss({
-  // width:0 + min-width:100%: contributes nothing to the card's max-content
-  // width (so a long console line can't stretch the card past its screenshot)
-  // while still filling the card during layout.
-  '&': 'width:0 min-width:100% font-size:0.8em',
-  summary: 'cursor:pointer color:$s-muted user-select:none',
-  '.list': 'display:flex flex-direction:column gap:0.4rem margin-top:0.4rem',
-  '.msg': 'border-left: 3px solid $s-faint; border-radius:4px white-space:pre-wrap word-break:break-word pv:0.3rem ph:0.5rem font-family: ui-monospace, monospace;',
-  '.msg.error': 'border-left-color:$s-danger color:$s-danger',
-  '.msg.warning': 'border-left-color:$s-warning',
-  '.type': 'text-transform:uppercase font-size:0.85em color:$s-muted margin-right:0.4rem',
-  '.src': 'color:$s-muted margin-top:0.25rem word-break:break-all',
-});
 
 // A thin, borderless range slider in the brand colour. The filled portion is a
 // `--fill`-sized gradient overlay on a faint track (set reactively for WebKit;
@@ -246,10 +254,10 @@ function findNextUnacceptedTestId(startIndex: number): string | null {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function parseLine(location?: string): string {
-  if (!location) return '?';
-  const index = location.lastIndexOf(':');
-  return index >= 0 ? location.slice(index + 1) : '?';
+// The source line an event ran from, e.g. "tests/my.spec.ts:10" → "10".
+function eventLine(event: StepEvent): string {
+  const line = event.source?.slice(event.source.lastIndexOf(':') + 1) ?? '';
+  return /^\d+$/.test(line) ? line : '';
 }
 
 function isGapStep(step: ReviewStep): boolean {
@@ -402,6 +410,133 @@ function drawRoleChip(roles: RoleInfo, role: string | undefined): void {
   A('span', chipStyle, style, '#', role ?? 'main');
 }
 
+// ── Step events ─────────────────────────────────────────────────────
+
+// Each event type gets a hue, worn by both its chip in the event list and the
+// viewport box drawn over the screenshot — so the box explains itself. Checks
+// and assertions sit in the green/teal family; the action that usually ends a
+// step is blue, and errors are unmistakably red. As with roles, all tints use
+// equal oklch lightness/chroma so no type shouts over another.
+// Console rows use their level as the chip label (log/warn/error/...), so
+// those labels live in the same map; levels without an entry (log, info,
+// debug) fall back to the plain gray chip.
+const eventHues: Record<string, number> = {
+  action: 250, // blue
+  assert: 150, // green
+  check: 185, // teal
+  goto: 310, // violet
+  wait: 70, // amber
+  screenshot: 340, // pink
+  warn: 45, // orange
+  error: 25, // red
+};
+
+const eventChipStyles = Object.fromEntries(Object.entries(eventHues).map(([type, hue]) =>
+  [type, A.insertCss(`background: oklch(0.92 0.06 ${hue}); color: oklch(0.35 0.1 ${hue});`)]));
+
+function eventBoxCss(type: string): string {
+  const hue = eventHues[type] ?? 250;
+  return `border-color: oklch(0.55 0.18 ${hue}); background: oklch(0.65 0.15 ${hue} / 0.18);`;
+}
+
+// Which side's events a step displays: the current run's when it has any,
+// else the baseline's (removed/orphaned steps). Accepted events that the
+// current run no longer produces are appended struck-through, so a changed
+// check reads as old-vs-new rather than silently disappearing.
+function buildDisplayEvents(step: ReviewStep): DisplayEvent[] {
+  const accepted = step.acceptedEvents ?? [];
+  if (step.currentImage === undefined && step.currentGap === undefined) {
+    return accepted.map((event) => ({ event, removed: false }));
+  }
+  const current = step.currentEvents ?? [];
+  const result: DisplayEvent[] = current.map((event) => ({ event, removed: false }));
+  const unmatched = [...current];
+  for (const event of accepted) {
+    const index = unmatched.findIndex((c) => c.type === event.type && c.message === event.message);
+    if (index >= 0) unmatched.splice(index, 1);
+    else result.push({ event, removed: true });
+  }
+  return result;
+}
+
+const eventListStyle = A.insertCss({
+  // width:0 + min-width:100%: long messages wrap instead of stretching the
+  // card past its screenshot. The rows' horizontal padding is cancelled by a
+  // negative margin, so their text stays aligned with the image edge above
+  // while hover backgrounds still get a little air.
+  '&': 'width:0 min-width:100% display:flex flex-direction:column font-size:0.8em',
+  '.event': 'display:flex align-items:baseline gap:0.5rem pv:0.1rem ph:0.3rem mh:-0.3rem r:6px',
+  '.event.boxed': 'cursor:pointer',
+  '.event.boxed:hover': 'background:$s-faint',
+  '.event.pinned': 'background:$s-faint',
+  '.line': 'color:$s-muted font-size:0.85em font-variant-numeric:tabular-nums',
+  '.event .msg': 'word-break:break-word',
+  // A describe hint reads as a small header for the events that follow it.
+  '.event.describe .msg': 'font-weight:600',
+  // Browser console output: quiet for plain logs, louder with severity.
+  '.event.console .msg': 'font-family:ui-monospace,monospace font-size:0.95em white-space:pre-wrap color:$s-muted',
+  '.event.console.warning .msg': 'color:#b45309 font-weight:600',
+  '.event.console.error .msg': 'color:$s-danger font-weight:600',
+  '.src': 'margin-left:auto color:$s-muted font-size:0.85em white-space:nowrap overflow:hidden text-overflow:ellipsis max-width:40%',
+  '.event.removed .msg': 'text-decoration:line-through color:$s-muted',
+  '.event .dur': 'margin-left:auto white-space:nowrap font-variant-numeric:tabular-nums font-size:0.9em font-weight:700',
+});
+
+// Per-step (card-local) state deciding which viewport boxes are drawn over
+// the screenshot. All of them by default; none while the pointer is on the
+// image itself (so it can be inspected unobstructed); only the corresponding
+// one while an event row is hovered or has been tapped/clicked (pinned).
+interface EventSelection {
+  hovered: number;
+  pinned: number;
+  imageHovered: boolean;
+}
+
+function visibleMarkIndexes($sel: EventSelection, displayEvents: DisplayEvent[]): number[] {
+  if ($sel.imageHovered) return [];
+  const isolated = $sel.hovered >= 0 ? $sel.hovered : $sel.pinned;
+  if (isolated >= 0) return displayEvents[isolated]?.event.box ? [isolated] : [];
+  // Removed (baseline-only) events are left out of the default set: their
+  // boxes belong to the old layout and may not line up with what's shown.
+  return displayEvents.flatMap(({ event, removed }, index) => event.box && !removed ? [index] : []);
+}
+
+function renderEvents(displayEvents: DisplayEvent[], $sel: EventSelection): void {
+  if (displayEvents.length === 0) return;
+  A('div', eventListStyle, () => {
+    displayEvents.forEach(({ event, removed }, index) => {
+      A('div.event', () => {
+        if (removed) A('.removed');
+        if (event.box) {
+          A('.boxed');
+          A('mouseenter=', () => { $sel.hovered = index; });
+          A('mouseleave=', () => { if ($sel.hovered === index) $sel.hovered = -1; });
+          A('click=', () => { $sel.pinned = $sel.pinned === index ? -1 : index; });
+          A(() => { if ($sel.pinned === index) A('.pinned'); });
+        }
+        // Console rows are chipped by their level; their source is the
+        // emitting browser location, shown at the end instead of as a line
+        // number in front.
+        const isConsole = event.type === 'console';
+        const tone = consoleTone(event.consoleType);
+        const chip = isConsole ? (tone === 'warning' ? 'warn' : tone) : event.type;
+        A('.' + (isConsole ? `console.${tone}` : event.type));
+        if (!isConsole) {
+          const line = eventLine(event);
+          if (line) A('span.line #', line);
+        }
+        A('span', chipStyle, eventChipStyles[chip] ?? plainChipStyle, '#', chip);
+        A('span.msg #', event.message);
+        if (isConsole && event.source) A('span.src #', event.source);
+        const duration = event.duration;
+        if (typeof duration === 'number' && duration >= 300) {
+          A('span.dur', `color:${duration >= 1000 ? '$s-danger' : '#d97706'}`, '#', `${Math.round(duration)}ms`);
+        }
+      });
+    });
+  });
+}
+
 // ── Rendering: nav ──────────────────────────────────────────────────
 
 function statusIcon(test: TestSummary): () => void {
@@ -491,58 +626,39 @@ function showingSide(): 'accepted' | 'current' {
     : state.compareMode;
 }
 
-// The row above a screenshot: status and role pills, with the step facts
-// tucked into the right corner; the author's description (page.describe) below.
+// The row above a screenshot: status and role pills. Everything else the
+// header used to carry (source lines, names, descriptions) lives with the
+// individual events below the image now. Nothing to say → no row.
 function renderStepHeader(step: ReviewStep, change: StepChange, roles: RoleInfo): void {
+  const label = change === 'removed' && !step.acceptedEvents?.length ? 'baseline' : '';
+  if (change === 'unchanged' && !label && (!roles.multi && step.role === undefined)) return;
   A('div display:flex align-items:center gap:0.4rem flex-wrap:wrap max-width:100%', () => {
     drawStatusChip(change);
     drawRoleChip(roles, step.role);
-    // Source line comes from the test run; a baseline-only (orphaned/removed)
-    // step can only be named by its label or image.
-    const label = step.location ? `line ${parseLine(step.location)}` : (step.name || step.acceptedImage || 'baseline');
-    A('span margin-left:auto font-size:0.8em color:$s-muted white-space:nowrap #',
-      step.name && step.location ? `${step.name} · ${label}` : label);
+    if (label) A('span margin-left:auto font-size:0.8em color:$s-muted white-space:nowrap #', label);
   });
-  if (step.description) A('div font-size:0.85em font-weight:600 max-width:100% #', step.description);
 }
 
-// Below the screenshot: only what deserves attention — a slow step and the
-// console messages it produced.
-function renderStepFooter(step: ReviewStep): void {
-  const duration = step.duration;
-  if (typeof duration === 'number' && duration >= 300) {
-    const color = duration >= 1000 ? '$s-danger' : '#d97706';
-    A(`div font-size:0.8em font-weight:700 color:${color} #`, `${Math.round(duration)}ms`);
-  }
-  renderConsoleMessages(step);
-}
+// Breathing room around a highlighted element, in viewport CSS pixels.
+const markPadding = 5;
 
-function renderConsoleMessages(step: ReviewStep): void {
-  const messages = step.consoleMessages ?? [];
-  if (messages.length === 0) return;
-
-  const counts: Record<ConsoleTone, number> = { error: 0, warning: 0, info: 0, debug: 0, log: 0 };
-  for (const message of messages) counts[consoleTone(message.type)]++;
-  const tones = (['error', 'warning', 'info', 'debug', 'log'] as ConsoleTone[]).filter((tone) => counts[tone] > 0);
-
-  A('details', consoleStyle, () => {
-    A('summary', () => {
-      tones.forEach((tone, index) => {
-        const text = `${index > 0 ? ' · ' : ''}${counts[tone]} ${tone}`;
-        // Error counts must stand out.
-        if (tone === 'error') A('span font-weight:700 color:$s-danger #', text);
-        else A('span #', text);
-      });
-    });
-    A('div.list', () => {
-      for (const message of messages) {
-        A(`div.msg.${consoleTone(message.type)}`, () => {
-          A('span.type #', String(message.type || 'log'));
-          A('span #', String(message.text || ''));
-          if (message.source) A('div.src #', message.source);
-        });
-      }
-    });
+// The viewport boxes of the visible events, drawn over the image with
+// percentage coordinates so they land right at any zoom level.
+function renderEventMarks(step: ReviewStep, displayEvents: DisplayEvent[], $sel: EventSelection): void {
+  const viewport = step.viewport;
+  if (!viewport || displayEvents.length === 0) return;
+  A('div.marks', () => {
+    for (const index of visibleMarkIndexes($sel, displayEvents)) {
+      const { event } = displayEvents[index];
+      const box = event.box!;
+      const x = Math.max(0, box.x - markPadding);
+      const y = Math.max(0, box.y - markPadding);
+      const width = Math.min(viewport.width, box.x + box.width + markPadding) - x;
+      const height = Math.min(viewport.height, box.y + box.height + markPadding) - y;
+      A('div.eventBox', eventBoxCss(event.type),
+        `left:${(x / viewport.width) * 100}% top:${(y / viewport.height) * 100}% ` +
+        `width:${(width / viewport.width) * 100}% height:${(height / viewport.height) * 100}%`);
+    }
   });
 }
 
@@ -550,30 +666,37 @@ function renderConsoleMessages(step: ReviewStep): void {
 // cross-faded, with an overlay tag naming the side on show — right where the
 // eye is while it flips. The imgs are created once; only classes toggle, so
 // the fade actually animates.
-function renderStage(step: ReviewStep, change: StepChange): void {
+function renderStage(step: ReviewStep, change: StepChange, displayEvents: DisplayEvent[], $sel: EventSelection): void {
+  // Cross-fade only when there really are two different images: a step marked
+  // changed on events alone would otherwise flip between two equal frames,
+  // reading as "no visible difference" — which a single image says better.
+  const flip = change === 'changed' && !!step.acceptedImage && !!step.currentImage && step.acceptedImage !== step.currentImage;
+  const hash = step.currentImage || step.acceptedImage;
+  if (!hash) return;
   A('div', shotStyle, () => {
-    if (change === 'changed') {
-      A('div.stage', () => {
-        A(() => A({ $zoom: state.scale }));
+    A('div.stage', () => {
+      // Hovering the image clears the event boxes, so it can be inspected
+      // unobstructed. `.marks` is pointer-events:none and doesn't interfere.
+      A('mouseenter=', () => { $sel.imageHovered = true; });
+      A('mouseleave=', () => { $sel.imageHovered = false; });
+      A(() => A({ $zoom: state.scale }));
+      if (flip) {
         A('img.layer src=', imageSrc('accepted', step.acceptedImage!), () => {
           if (showingSide() === 'accepted') A('.visible');
         });
         A('img.layer src=', imageSrc('current', step.currentImage!), () => {
           if (showingSide() === 'current') A('.visible');
         });
-      });
+      } else {
+        A('img src=', imageSrc(step.currentImage ? 'current' : 'accepted', hash));
+      }
+      renderEventMarks(step, displayEvents, $sel);
+    });
+    if (flip) {
       A('div.tag', () => {
         const side = showingSide();
         if (side === 'current') A('.current');
         A('#', side);
-      });
-    } else {
-      const hash = step.currentImage || step.acceptedImage;
-      if (!hash) return;
-      const kind = step.currentImage ? 'current' : 'accepted';
-      A('div.stage', () => {
-        A(() => A({ $zoom: state.scale }));
-        A('img src=', imageSrc(kind, hash));
       });
     }
   });
@@ -612,13 +735,15 @@ function renderStep(step: ReviewStep, roles: RoleInfo, extraAttrs = ''): void {
     renderGapStep(step, change, extraAttrs);
     return;
   }
+  const displayEvents = buildDisplayEvents(step);
+  const $sel = A.proxy<EventSelection>({ hovered: -1, pinned: -1, imageHovered: false });
   S.box({
     attrs: `${borderForChange[change]} ${roleTint(roles, step.role)} ${extraAttrs} width:max-content max-width:100% mt:0 scroll-margin:1rem`,
     contentAttrs: 'display:flex flex-direction:column align-items:stretch gap:0.5rem',
     content: () => {
       renderStepHeader(step, change, roles);
-      renderStage(step, change);
-      renderStepFooter(step);
+      renderStage(step, change, displayEvents, $sel);
+      renderEvents(displayEvents, $sel);
     },
   });
 }

@@ -15,7 +15,7 @@ export * from '@playwright/test';
 
 import { defineConfig as playwrightDefineConfig } from '@playwright/test';
 import { test, expect, screenshot, waitForVisualStability, getVideoModeOverride, splitIntoRoles, withoutScreenshots } from './fixture.js';
-import type { ShotestPage, TestRecord, StepRecord, ConsoleMessageInfo } from './fixture.js';
+import type { ShotestPage, TestRecord, StepRecord, StepEventRecord } from './fixture.js';
 
 function applyShotestDefaults(config: Record<string, any>): Record<string, any> {
   const videoMode = getVideoModeOverride();
@@ -39,6 +39,6 @@ export function defineConfig(
 }
 
 export { test, expect, screenshot, waitForVisualStability, splitIntoRoles, withoutScreenshots };
-export type { ShotestPage, TestRecord, StepRecord, ConsoleMessageInfo };
+export type { ShotestPage, TestRecord, StepRecord, StepEventRecord };
 
 export { demoTap, demoType, demoPause, demoSwipe } from './video.js';
