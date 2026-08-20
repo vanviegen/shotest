@@ -6,7 +6,7 @@ description: |
 
 # UI Testing Guidance
 
-After running `npx playwright test`, results are written flat into `test-results/`:
+After running `npx shotest test`, results are written flat into `test-results/`:
 
 - <SPEC_BASE>.json: one per spec file (e.g. `login.spec.json`), listing its tests and their steps in order; each step names its screenshot by HASH and records the events that happened on it in order — actions, assertions, checks, describe-hints, named screenshots and browser console output — with message, source line, duration and the viewport box of the element involved. Consecutive events on an unchanged page share one step/screenshot.
 - <HASH>.png: a step's screenshot (you can view this image for visual/layout verification); HASH is derived from the pixel content, so identical frames share one file

@@ -92,18 +92,18 @@ function printVisualSummary(): boolean {
   return summary.changed > 0;
 }
 
-function runGc(verbose: boolean): void {
+// The explicit `shotest gc` sweeps both pools. Elsewhere each pool is swept
+// at the moment it can have become garbage: test-results/ after a clean full
+// run, test-accepted/ whenever the review app accepts or deletes a baseline.
+function runGc(): void {
   const acceptedDir = getAcceptedDir();
   const legacyAccepted = hasLegacyAcceptedLayout(acceptedDir);
-  if (legacyAccepted && verbose) {
-    // The post-test summary already hints at this when gc runs automatically.
+  if (legacyAccepted) {
     console.warn('ShoTest gc: ' + legacyAcceptedHint(acceptedDir));
   }
   const removedResults = gcPoolFiles(getOutputDir());
   const removedAccepted = legacyAccepted ? 0 : gcPoolFiles(acceptedDir);
-  if (verbose || removedResults + removedAccepted > 0) {
-    console.log(`ShoTest gc: removed ${removedResults} unreferenced file(s) from ${getOutputDir()}, ${removedAccepted} from ${acceptedDir}`);
-  }
+  console.log(`ShoTest gc: removed ${removedResults} unreferenced file(s) from ${getOutputDir()}, ${removedAccepted} from ${acceptedDir}`);
 }
 
 function runPlaywright(argv: string[]): number {
@@ -219,7 +219,7 @@ async function main(): Promise<void> {
   }
 
   if (firstArg === 'gc') {
-    runGc(true);
+    runGc();
     return;
   }
 
@@ -243,12 +243,24 @@ async function main(): Promise<void> {
     // A clean, unfiltered run has produced results for every test there is,
     // so anything the spec JSONs no longer reference is garbage. Extra
     // arguments could have filtered the run (a file, -g, --shard, ...), in
-    // which case gc would see only a partial picture — skip it then.
+    // which case gc would see only a partial picture — skip it then. The
+    // accepted pool is not touched here: the review app cleans it on every
+    // accept or baseline deletion.
     if (status === 0 && argv.length === 1) {
-      runGc(false);
+      const removed = gcPoolFiles(getOutputDir());
+      if (removed > 0) {
+        console.log(`ShoTest gc: removed ${removed} unreferenced file(s) from ${getOutputDir()}`);
+      }
     }
-    if (status === 0 && hasVisualChanges && failOnVisualChanges) {
-      process.exit(1);
+    if (status === 0 && failOnVisualChanges) {
+      // A gating flag must never pass because comparison was impossible.
+      if (hasLegacyAcceptedLayout(getAcceptedDir())) {
+        console.error('ShoTest: --fail-on-visual-changes: no comparison possible against the 1.x-format baseline in ' + getAcceptedDir());
+        process.exit(1);
+      }
+      if (hasVisualChanges) {
+        process.exit(1);
+      }
     }
   }
 

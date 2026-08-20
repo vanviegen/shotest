@@ -615,15 +615,6 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
         const pathname = url.pathname;
 
         try {
-            // CORS for dev
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-            if (req.method === 'OPTIONS') {
-                res.writeHead(204);
-                res.end();
-                return;
-            }
-
             if (req.method === 'GET' && !pathname.startsWith('/api/') && !pathname.startsWith('/image/')) {
                 serveFile(res, reviewUiPath, 'text/html; charset=utf-8');
                 return;

@@ -40,6 +40,9 @@ let rescanRequested = false;
  * images from a fresh accept are always picked up.
  */
 export async function compressAcceptedPool(dir: string): Promise<void> {
+    // Callers pass both relative and absolute paths; keepAsPng keys on the
+    // full path, so normalize before anything is recorded under it.
+    dir = path.resolve(dir);
     if (running) {
         rescanRequested = true;
         return;
