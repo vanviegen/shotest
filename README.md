@@ -87,7 +87,17 @@ The `shotest` command forwards arguments to Playwright, so `npx shotest test --u
 
 When the `--fail-on-visual-changes` flag is passed, ShoTest exits with a non-zero code if any visual changes compared to the accepted baseline in `test-accepted/` (or `$SHOTEST_ACCEPTED_DIR`) are detected, even if the test assertions pass. This allows you to enforce visual consistency in your CI pipeline.
 
-ShoTest compares screenshots with `odiff-bin` and relies on it to decide whether a visual change is significant. (Screenshots with equal content hashes are pixel-identical and skip the comparison entirely.)
+Screenshot comparison is exact: images are named by a hash of their decoded pixels, and two steps match only when their hashes do. There is no tolerance threshold — a one-character text change is a change. What makes that workable is running every test in the same pinned rendering environment, which is the next section.
+
+## Deterministic screenshots
+
+Rendering is a function of the browser build plus the OS font stack. Playwright pins its browser builds to the `@playwright/test` version, and the official Playwright Docker image pins the rest — so ShoTest runs your tests inside the image matching your installed Playwright version by default:
+
+- `npx shotest test` looks for `podman` or `docker` (in that order) and re-runs itself inside `mcr.microsoft.com/playwright:v<version>-noble`, with your project mounted at its real path. Results land in `test-results/` as usual; review them on the host with `npx shotest review`.
+- Pass `--no-container` (or set `SHOTEST_NO_CONTAINER=1`) to skip this and run natively. That is the CI pattern: make the Playwright image the job's own image (GitHub Actions: `container: mcr.microsoft.com/playwright:v1.59.1-noble` on the job; GitLab: `image: ...`) and run `npx shotest test --no-container` — no docker-in-docker needed. It is also handy for local functional iteration where pixels don't matter. Without the flag, a machine with no container runner gets a warning and a native run.
+- Set `SHOTEST_IMAGE` to override the image, e.g. to pin a digest (`mcr.microsoft.com/playwright@sha256:...`) for byte-for-byte reproducibility — version tags are stable in practice but, like all Docker tags, not contractually immutable.
+
+Keep the image lockstepped with your `@playwright/test` version: a Playwright upgrade means a browser upgrade, which typically means re-accepting baselines once — a deliberate, reviewable event rather than flakiness. Two caveats: baselines are only comparable when everyone (developers and CI) generates them from the same image on the same CPU architecture, and the bind-mounted `node_modules` must be loadable inside the Linux container — true on Linux hosts, but macOS/Windows hosts install their own platform's native modules (e.g. `sharp`), so there prefer running tests in a devcontainer, or let CI produce `test-results/` and review that.
 
 ## Step descriptions and skipping screenshots
 

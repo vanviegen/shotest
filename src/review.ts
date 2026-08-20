@@ -6,9 +6,10 @@
  *
  * Both test-results/ and test-accepted/ hold flat, content-hashed image pools
  * plus one JSON per spec file describing tests, steps and the images they
- * reference (see manifest.ts). Steps are compared by hash first — equal hash
- * means pixel-identical by construction — and by odiff (which tolerates
- * insignificant differences) when the hashes differ.
+ * reference (see manifest.ts). Steps are compared purely by hash — equal hash
+ * means pixel-identical by construction; anything else is a change. Runs are
+ * expected to come from a pinned rendering environment (see entriesEquivalent
+ * and the README's "Deterministic screenshots" section).
  */
 
 import * as http from 'http';
@@ -16,7 +17,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
-import { areImagesEquivalent } from './visual-compare.js';
 import { compressAcceptedPool } from './webp.js';
 import {
     gcPoolFiles,
@@ -64,18 +64,6 @@ function findScreenshotFile(dir: string, hash: string): string | undefined {
     return imageExtensions.map((ext) => hash + ext).find((file) => fs.existsSync(path.join(dir, file)));
 }
 
-// A background conversion may have replaced a screenshot with its other format
-// between the moment a path was resolved and the moment the file is read.
-function resolveExistingScreenshot(filePath: string): string {
-    if (fs.existsSync(filePath) || !imageExtensions.includes(path.extname(filePath).toLowerCase())) {
-        return filePath;
-    }
-
-    const dir = path.dirname(filePath);
-    const alternate = findScreenshotFile(dir, path.basename(filePath, path.extname(filePath)));
-    return alternate ? path.join(dir, alternate) : filePath;
-}
-
 // ── Test identity ──────────────────────────────────────────────────
 
 // Tests are identified by (spec file, title). The API and routes carry that
@@ -113,15 +101,13 @@ function findTestRecord(dir: string, file: string, title: string): TestRecord | 
 // ── Step alignment ─────────────────────────────────────────────────
 
 type AlignEntry =
-    | { kind: 'image'; step: ImageStepRecord; filePath: string | undefined }
+    | { kind: 'image'; step: ImageStepRecord }
     | { kind: 'gap'; text: string };
 
-export function buildAlignEntries(dir: string, steps: StepRecord[]): AlignEntry[] {
-    return steps.map((step) => {
-        if (isGapStep(step)) return { kind: 'gap' as const, text: step.gap };
-        const file = findScreenshotFile(dir, step.image);
-        return { kind: 'image' as const, step, filePath: file ? path.join(dir, file) : undefined };
-    });
+export function buildAlignEntries(steps: StepRecord[]): AlignEntry[] {
+    return steps.map((step) => isGapStep(step)
+        ? { kind: 'gap' as const, text: step.gap }
+        : { kind: 'image' as const, step });
 }
 
 // THE single point deciding whether a step changed — the sidebar scan, the
@@ -132,24 +118,18 @@ export function buildAlignEntries(dir: string, steps: StepRecord[]): AlignEntry[
 // a display concern (the review app offers an accepted/current flip on such
 // steps), not a change to review.
 //
-// A comparison that cannot be made is reported as a difference. The alternative —
-// letting the error escape — has the caller decide what a missing answer means,
-// and the summary view answers "unchanged": a test whose baseline is unreadable
-// then shows a green check, which is exactly how a real regression goes unseen.
-// Reporting it as changed puts the step in front of the reviewer instead.
-async function entriesEquivalent(accepted: AlignEntry, current: AlignEntry): Promise<boolean> {
+// "Same screenshot" means pixel-identical: images are named by a hash of
+// their decoded pixels, so equality is a string comparison — no tolerance,
+// no image decoding. Screenshots are deterministic within one rendering
+// environment (pinned browser build, software rasterization, animations
+// disabled, fonts awaited); keeping that environment pinned across machines
+// is what the containerized `shotest test` is for (see the README's
+// "Deterministic screenshots" section).
+function entriesEquivalent(accepted: AlignEntry, current: AlignEntry): boolean {
     if (accepted.kind === 'gap' || current.kind === 'gap') {
         return accepted.kind === 'gap' && current.kind === 'gap' && accepted.text === current.text;
     }
-    // Equal hashes are pixel-identical by construction — no files needed.
-    if (accepted.step.image === current.step.image) return true;
-    if (!accepted.filePath || !current.filePath) return false;
-    try {
-        return await areImagesEquivalent(resolveExistingScreenshot(accepted.filePath), resolveExistingScreenshot(current.filePath));
-    } catch (error) {
-        console.warn(`ShoTest: could not compare ${accepted.filePath} with ${current.filePath}: ${error instanceof Error ? error.message : String(error)}`);
-        return false;
-    }
+    return accepted.step.image === current.step.image;
 }
 
 interface AlignedPair {
@@ -194,83 +174,73 @@ function makeAlignedPair(
     };
 }
 
-// `refineMiddle` decides whether the steps between the outermost differences are
-// compared or simply assumed to differ — see the middle-section comment below.
-async function alignSteps(
-    accepted: AlignEntry[],
-    current: AlignEntry[],
-    refineMiddle = false,
-): Promise<AlignedPair[]> {
+// Align the two step sequences by a longest common subsequence over
+// entriesEquivalent — now that equivalence is a string comparison, a full
+// LCS costs nothing, and it aligns correctly around inserted and deleted
+// steps where the old prefix/suffix walk index-smeared the middle. Matched
+// entries pair up unchanged; the leftover runs between matches pair
+// index-wise as changed, except that a gap never pairs with an image (the
+// gap is emitted on its own, so pair slots stay image-vs-image — which is
+// what the compare view can show).
+function alignSteps(accepted: AlignEntry[], current: AlignEntry[]): AlignedPair[] {
+    // lcs[i][j] = length of the LCS of accepted[i..] and current[j..].
+    const lcs: number[][] = Array.from({ length: accepted.length + 1 },
+        () => new Array<number>(current.length + 1).fill(0));
+    for (let i = accepted.length - 1; i >= 0; i--) {
+        for (let j = current.length - 1; j >= 0; j--) {
+            lcs[i][j] = entriesEquivalent(accepted[i], current[j])
+                ? lcs[i + 1][j + 1] + 1
+                : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+        }
+    }
+
     const result: AlignedPair[] = [];
+    const pendingAccepted: AlignEntry[] = [];
+    const pendingCurrent: AlignEntry[] = [];
 
-    let prefixLength = 0;
-    const sharedLength = Math.min(accepted.length, current.length);
-    while (prefixLength < sharedLength) {
-        if (!(await entriesEquivalent(accepted[prefixLength], current[prefixLength]))) {
-            break;
-        }
-        result.push(makeAlignedPair(accepted[prefixLength], current[prefixLength], false));
-        prefixLength++;
-    }
-
-    let acceptedTail = accepted.length - 1;
-    let currentTail = current.length - 1;
-    const suffix: AlignedPair[] = [];
-    while (acceptedTail >= prefixLength && currentTail >= prefixLength) {
-        if (!(await entriesEquivalent(accepted[acceptedTail], current[currentTail]))) {
-            break;
-        }
-        suffix.push(makeAlignedPair(accepted[acceptedTail], current[currentTail], false));
-        acceptedTail--;
-        currentTail--;
-    }
-
-    const acceptedMiddle = accepted.slice(prefixLength, acceptedTail + 1);
-    const currentMiddle = current.slice(prefixLength, currentTail + 1);
-
-    // Trimming an equal prefix and suffix locates the region that changed, but says
-    // nothing about the steps inside it: a run that alters the first and last
-    // screenshot leaves every screenshot between them in here, unchanged. Pairing
-    // them by index and calling them all changed is fine for a yes/no verdict and
-    // free, which is why the summary keeps doing it — the first middle pair is the
-    // one that broke the prefix walk, so the verdict cannot come out differently.
-    // A reviewer needs better: flipping between two identical screenshots looking
-    // for a difference that was never there is worse than the comparison it saves.
-    // Refining costs one comparison per middle step, only on tests already known to
-    // have changed, and it corrects index-paired steps either side of an inserted
-    // or deleted screenshot too.
-    let acceptedIndex = 0;
-    let currentIndex = 0;
-    while (acceptedIndex < acceptedMiddle.length && currentIndex < currentMiddle.length) {
-        const acceptedEntry = acceptedMiddle[acceptedIndex];
-        const currentEntry = currentMiddle[currentIndex];
-        // Never pair a gap with an image: emit the gap on its own so the pair
-        // slots stay image-vs-image (which is what the compare view can show).
-        if (acceptedEntry.kind !== currentEntry.kind) {
-            if (acceptedEntry.kind === 'gap') {
-                result.push(makeAlignedPair(acceptedEntry, undefined, true));
-                acceptedIndex++;
-            } else {
-                result.push(makeAlignedPair(undefined, currentEntry, true));
-                currentIndex++;
+    const flushPending = () => {
+        let a = 0;
+        let c = 0;
+        while (a < pendingAccepted.length && c < pendingCurrent.length) {
+            const acceptedEntry = pendingAccepted[a];
+            const currentEntry = pendingCurrent[c];
+            if (acceptedEntry.kind !== currentEntry.kind) {
+                if (acceptedEntry.kind === 'gap') {
+                    result.push(makeAlignedPair(acceptedEntry, undefined, true));
+                    a++;
+                } else {
+                    result.push(makeAlignedPair(undefined, currentEntry, true));
+                    c++;
+                }
+                continue;
             }
-            continue;
+            result.push(makeAlignedPair(acceptedEntry, currentEntry, true));
+            a++;
+            c++;
         }
-        const changed = !refineMiddle || !(await entriesEquivalent(acceptedEntry, currentEntry));
-        result.push(makeAlignedPair(acceptedEntry, currentEntry, changed));
-        acceptedIndex++;
-        currentIndex++;
-    }
+        for (; a < pendingAccepted.length; a++) result.push(makeAlignedPair(pendingAccepted[a], undefined, true));
+        for (; c < pendingCurrent.length; c++) result.push(makeAlignedPair(undefined, pendingCurrent[c], true));
+        pendingAccepted.length = 0;
+        pendingCurrent.length = 0;
+    };
 
-    for (; acceptedIndex < acceptedMiddle.length; acceptedIndex++) {
-        result.push(makeAlignedPair(acceptedMiddle[acceptedIndex], undefined, true));
+    let i = 0;
+    let j = 0;
+    while (i < accepted.length && j < current.length) {
+        if (entriesEquivalent(accepted[i], current[j])) {
+            flushPending();
+            result.push(makeAlignedPair(accepted[i], current[j], false));
+            i++;
+            j++;
+        } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+            pendingAccepted.push(accepted[i++]);
+        } else {
+            pendingCurrent.push(current[j++]);
+        }
     }
-
-    for (; currentIndex < currentMiddle.length; currentIndex++) {
-        result.push(makeAlignedPair(undefined, currentMiddle[currentIndex], true));
-    }
-
-    result.push(...suffix.reverse());
+    pendingAccepted.push(...accepted.slice(i));
+    pendingCurrent.push(...current.slice(j));
+    flushPending();
     return result;
 }
 
@@ -288,9 +258,8 @@ function pairHasChange(step: AlignedPair): boolean {
     return step.changed || !hasAccepted || !hasCurrent;
 }
 
-export async function hasVisualChanges(acceptedEntries: AlignEntry[], currentEntries: AlignEntry[]): Promise<boolean> {
-    const steps = await alignSteps(acceptedEntries, currentEntries);
-    return steps.some(pairHasChange);
+export function hasVisualChanges(acceptedEntries: AlignEntry[], currentEntries: AlignEntry[]): boolean {
+    return alignSteps(acceptedEntries, currentEntries).some(pairHasChange);
 }
 
 // ── Test listing and details ───────────────────────────────────────
@@ -309,25 +278,23 @@ interface TestSummary {
 // longer exist), grouping them together at the bottom of the review app's list.
 const orphanedGroupLabel = 'not in test-results/';
 
-async function getTests(): Promise<TestSummary[]> {
+function getTests(): TestSummary[] {
     const currentTests = loadTestRecords(outputDir);
     const acceptedTests = loadTestRecords(acceptedDir);
     const acceptedByKey = new Map(acceptedTests.map((test) => [testId(test), test]));
 
-    const tests = await Promise.all(currentTests.map(async (record) => {
-        const currentEntries = buildAlignEntries(outputDir, record.steps);
+    const tests = currentTests.map((record) => {
         const acceptedRecord = acceptedByKey.get(testId(record));
-        const acceptedEntries = buildAlignEntries(acceptedDir, acceptedRecord?.steps ?? []);
         return {
             id: testId(record),
             file: record.file,
             line: record.line ?? 0,
             title: record.title,
             status: record.status ?? 'unknown',
-            hasChanges: await hasVisualChanges(acceptedEntries, currentEntries),
+            hasChanges: hasVisualChanges(buildAlignEntries(acceptedRecord?.steps ?? []), buildAlignEntries(record.steps)),
             orphaned: false,
         };
-    }));
+    });
 
     // Baselines without a matching test in test-results: the test was renamed
     // or deleted — or it simply wasn't part of this run. Listing them (last) is
@@ -355,15 +322,15 @@ async function getTests(): Promise<TestSummary[]> {
     );
 }
 
-async function getTestDetails(file: string, title: string): Promise<{
+function getTestDetails(file: string, title: string): {
     manifest: TestRecord | null;
     steps: AlignedPair[];
     canRevert: boolean;
     orphaned: boolean;
-}> {
+} {
     const currentRecord = findTestRecord(outputDir, file, title);
     const acceptedRecord = findTestRecord(acceptedDir, file, title);
-    const acceptedEntries = buildAlignEntries(acceptedDir, acceptedRecord?.steps ?? []);
+    const acceptedEntries = buildAlignEntries(acceptedRecord?.steps ?? []);
 
     if (!currentRecord) {
         // No test ran under this identity. If a baseline is still there, align
@@ -371,17 +338,13 @@ async function getTestDetails(file: string, title: string): Promise<{
         // app can show what the stale baseline holds before it is dropped.
         return {
             manifest: null,
-            steps: await alignSteps(acceptedEntries, []),
+            steps: alignSteps(acceptedEntries, []),
             canRevert: canRevertTest(file, title),
             orphaned: !!acceptedRecord,
         };
     }
 
-    const currentEntries = buildAlignEntries(outputDir, currentRecord.steps);
-
-    // Worth the extra comparisons here: this is the view where a step marked
-    // changed sends someone looking for the difference.
-    const steps = await alignSteps(acceptedEntries, currentEntries, true);
+    const steps = alignSteps(acceptedEntries, buildAlignEntries(currentRecord.steps));
     return { manifest: currentRecord, steps, canRevert: canRevertTest(file, title), orphaned: false };
 }
 
@@ -616,7 +579,7 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
             }
 
             if (pathname === '/api/tests') {
-                serveJson(res, await getTests());
+                serveJson(res, getTests());
                 return;
             }
 
@@ -624,7 +587,7 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
             if (testDetailMatch && req.method === 'GET') {
                 const id = readTestId(res, testDetailMatch[1]);
                 if (!id) return;
-                serveJson(res, await getTestDetails(id.file, id.title));
+                serveJson(res, getTestDetails(id.file, id.title));
                 return;
             }
 
