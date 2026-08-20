@@ -174,36 +174,100 @@ function makeAlignedPair(
     };
 }
 
-// Align the two step sequences by a longest common subsequence over
-// entriesEquivalent — now that equivalence is a string comparison, a full
-// LCS costs nothing, and it aligns correctly around inserted and deleted
-// steps where the old prefix/suffix walk index-smeared the middle. Matched
-// entries pair up unchanged; the leftover runs between matches pair
-// index-wise as changed, except that a gap never pairs with an image (the
-// gap is emitted on its own, so pair slots stay image-vs-image — which is
-// what the compare view can show).
-function alignSteps(accepted: AlignEntry[], current: AlignEntry[]): AlignedPair[] {
+// The events that identify a step for alignment. Console output is ambient
+// (its timing shifts run to run) and is left out.
+function significantEvents(events: StepEventRecord[] = []): StepEventRecord[] {
+    return events.filter((event) => event.type !== 'console');
+}
+
+// Whether two entries are the same *moment in the test*: image steps whose
+// significant events match exactly by type and message. Sources (line numbers
+// shift on every edit), durations and boxes carry no identity. Empty event
+// lists don't count — a vacuous match could steal alignment from the plain
+// index pairing that handles such steps fine.
+function sameTestMoment(accepted: AlignEntry, current: AlignEntry): boolean {
+    if (accepted.kind !== 'image' || current.kind !== 'image') return false;
+    const a = significantEvents(accepted.step.events);
+    const c = significantEvents(current.step.events);
+    return a.length > 0 && a.length === c.length &&
+        a.every((event, i) => event.type === c[i].type && event.message === c[i].message);
+}
+
+/**
+ * Walk a longest-common-subsequence (by `eq`) over the two sequences,
+ * calling `emitMatch` for every matched pair and `emitWindow` for every
+ * (non-empty) run of unmatched entries between and around the matches — all
+ * in sequence order.
+ */
+function lcsWalk(
+    accepted: AlignEntry[],
+    current: AlignEntry[],
+    eq: (accepted: AlignEntry, current: AlignEntry) => boolean,
+    emitMatch: (accepted: AlignEntry, current: AlignEntry) => void,
+    emitWindow: (accepted: AlignEntry[], current: AlignEntry[]) => void,
+): void {
     // lcs[i][j] = length of the LCS of accepted[i..] and current[j..].
     const lcs: number[][] = Array.from({ length: accepted.length + 1 },
         () => new Array<number>(current.length + 1).fill(0));
     for (let i = accepted.length - 1; i >= 0; i--) {
         for (let j = current.length - 1; j >= 0; j--) {
-            lcs[i][j] = entriesEquivalent(accepted[i], current[j])
+            lcs[i][j] = eq(accepted[i], current[j])
                 ? lcs[i + 1][j + 1] + 1
                 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
         }
     }
 
-    const result: AlignedPair[] = [];
     const pendingAccepted: AlignEntry[] = [];
     const pendingCurrent: AlignEntry[] = [];
+    const flush = () => {
+        if (pendingAccepted.length > 0 || pendingCurrent.length > 0) {
+            emitWindow(pendingAccepted.splice(0), pendingCurrent.splice(0));
+        }
+    };
 
-    const flushPending = () => {
+    let i = 0;
+    let j = 0;
+    while (i < accepted.length && j < current.length) {
+        if (eq(accepted[i], current[j])) {
+            flush();
+            emitMatch(accepted[i++], current[j++]);
+        } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+            pendingAccepted.push(accepted[i++]);
+        } else {
+            pendingCurrent.push(current[j++]);
+        }
+    }
+    pendingAccepted.push(...accepted.slice(i));
+    pendingCurrent.push(...current.slice(j));
+    flush();
+}
+
+// Align the two step sequences in three tiers, each running only inside the
+// windows the tier above could not match:
+//
+//   1. Pixel-identical (or gap-text-equal) steps — certainty; these pair up
+//      unchanged, and are never sacrificed for a lower-tier match.
+//   2. Same test moment (see sameTestMoment) — a step whose look changed but
+//      whose actions and checks are the very same. This is what keeps a
+//      global restyle (every hash different) aligned around an inserted or
+//      removed step, instead of index-smearing everything after it.
+//   3. Index pairing for whatever identity can't reach, except that a gap
+//      never pairs with an image (the gap is emitted on its own, so pair
+//      slots stay image-vs-image — which is what the compare view can show).
+//
+// Events influence only the *pairing*, never the verdict: every pair emitted
+// from inside a window — tier 2 and 3 alike — is changed or one-sided, and a
+// window emits at least one such pair under any pairing, so hasVisualChanges
+// comes out the same regardless. The verdict stays purely visual.
+function alignSteps(accepted: AlignEntry[], current: AlignEntry[]): AlignedPair[] {
+    const result: AlignedPair[] = [];
+
+    const pairByIndex = (windowAccepted: AlignEntry[], windowCurrent: AlignEntry[]) => {
         let a = 0;
         let c = 0;
-        while (a < pendingAccepted.length && c < pendingCurrent.length) {
-            const acceptedEntry = pendingAccepted[a];
-            const currentEntry = pendingCurrent[c];
+        while (a < windowAccepted.length && c < windowCurrent.length) {
+            const acceptedEntry = windowAccepted[a];
+            const currentEntry = windowCurrent[c];
             if (acceptedEntry.kind !== currentEntry.kind) {
                 if (acceptedEntry.kind === 'gap') {
                     result.push(makeAlignedPair(acceptedEntry, undefined, true));
@@ -218,29 +282,16 @@ function alignSteps(accepted: AlignEntry[], current: AlignEntry[]): AlignedPair[
             a++;
             c++;
         }
-        for (; a < pendingAccepted.length; a++) result.push(makeAlignedPair(pendingAccepted[a], undefined, true));
-        for (; c < pendingCurrent.length; c++) result.push(makeAlignedPair(undefined, pendingCurrent[c], true));
-        pendingAccepted.length = 0;
-        pendingCurrent.length = 0;
+        for (; a < windowAccepted.length; a++) result.push(makeAlignedPair(windowAccepted[a], undefined, true));
+        for (; c < windowCurrent.length; c++) result.push(makeAlignedPair(undefined, windowCurrent[c], true));
     };
 
-    let i = 0;
-    let j = 0;
-    while (i < accepted.length && j < current.length) {
-        if (entriesEquivalent(accepted[i], current[j])) {
-            flushPending();
-            result.push(makeAlignedPair(accepted[i], current[j], false));
-            i++;
-            j++;
-        } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
-            pendingAccepted.push(accepted[i++]);
-        } else {
-            pendingCurrent.push(current[j++]);
-        }
-    }
-    pendingAccepted.push(...accepted.slice(i));
-    pendingCurrent.push(...current.slice(j));
-    flushPending();
+    const pairBySameEvents = (windowAccepted: AlignEntry[], windowCurrent: AlignEntry[]) =>
+        lcsWalk(windowAccepted, windowCurrent, sameTestMoment,
+            (a, c) => result.push(makeAlignedPair(a, c, true)), pairByIndex);
+
+    lcsWalk(accepted, current, entriesEquivalent,
+        (a, c) => result.push(makeAlignedPair(a, c, false)), pairBySameEvents);
     return result;
 }
 
