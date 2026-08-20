@@ -18,9 +18,10 @@ import {
 
 type ConsoleTone = 'error' | 'warning' | 'info' | 'debug' | 'log';
 type StepChange = 'changed' | 'unchanged' | 'removed' | 'new';
-// Which side of a changed step is on show: pinned via its header buttons, or
-// 'auto' — following the global flip.
-type StepSide = 'accepted' | 'current' | 'auto';
+// Which side of a changed step is on show: pinned via its header buttons
+// ('diff' overlays the two sides as an amplified difference), or 'auto' —
+// following the global flip.
+type StepSide = 'accepted' | 'current' | 'diff' | 'auto';
 
 interface TestSummary {
   id: string;
@@ -130,21 +131,33 @@ setInterval(() => {
 
 // The screenshot stage. The `.marks` layer shares the image's grid cell, so
 // an event's viewport box can be placed with percentages — correct at any
-// zoom or devicePixelRatio. For changed steps two images stack in that cell:
-// the accepted one fully opaque below, the current one fading in and out
-// above it — so mid-fade shows a true blend of the two, never the background
-// (both at half opacity would darken the picture). When the images differ in
-// size and the current one is on show, the larger accepted image would stick
-// out around it; `.covered` hides it then, delayed past the fade so it is
-// still visible while the current image is translucent.
+// zoom or devicePixelRatio. For changed steps two images stack in that cell
+// (inside `.shots`, so a filter can hit their composite without touching the
+// marks): the accepted one fully opaque below, the current one fading in and
+// out above it — so mid-fade shows a true blend of the two, never the
+// background (both at half opacity would darken the picture). When the images
+// differ in size and the current one is on show, the larger accepted image
+// would stick out around it; `.covered` hides it then, delayed past the fade
+// so it is still visible while the current image is translucent.
+// Pinning a step's Diff button puts the stage in `.diff`: the top image goes
+// fully opaque in difference blend mode, and the stack is turned grayscale
+// and brightened so hard it becomes a binary mask — unchanged pixels stay
+// black, any changed pixel (even off by 1/255 on one channel) goes white.
+// The `.diff .top` rules must come after `.top.visible` (equal specificity)
+// to win while diffing.
 const shotStyle = A.insertCss({
   '&': 'position:relative width:max-content max-width:100%',
   '.stage': 'display:inline-grid overflow:hidden border-radius:4px vertical-align:top',
+  '.shots': 'grid-area:1/1 display:grid',
   '.stage img': 'grid-area:1/1 display:block max-width:none border-radius:4px',
   '.top': 'opacity:0 transition: opacity 120ms linear;',
   '.top.visible': 'opacity:1',
   '.bottom': 'transition: visibility 0s linear;',
   '.bottom.covered': 'visibility:hidden; transition: visibility 0s linear 140ms;',
+  // 255² brightness: grayscale() weighs blue at only ~7%, so a 1/255 diff on
+  // blue alone yields a luminance of ~0.07/255 — ×255² still clears full white.
+  '.diff .shots': 'filter: grayscale(1) brightness(65025);',
+  '.diff .top': 'opacity:1 transition:none mix-blend-mode:difference',
   '.marks': 'grid-area:1/1 position:relative pointer-events:none z-index:2',
   '.eventBox': 'position:absolute border: 2px solid; border-radius:4px',
 });
@@ -515,7 +528,10 @@ interface EventList {
 }
 
 function showingSide($ui: StepUi): 'accepted' | 'current' {
-  if ($ui.side !== 'auto') return $ui.side;
+  if ($ui.side === 'accepted' || $ui.side === 'current') return $ui.side;
+  // The diff overlays the current image on the accepted one; as far as the
+  // stacked images are concerned, the current side is the one on show.
+  if ($ui.side === 'diff') return 'current';
   return !$ui.autoFlips || state.toggleShowNew ? 'current' : 'accepted';
 }
 
@@ -525,7 +541,8 @@ function activeList(lists: EventList[], $ui: StepUi): EventList {
 }
 
 function visibleMarkIndexes($ui: StepUi, $sel: ListSel, events: StepEvent[]): number[] {
-  if ($ui.imageHovered) return [];
+  // While diffing, boxes would clutter the (mostly black) difference view.
+  if ($ui.imageHovered || $ui.side === 'diff') return [];
   const isolated = $sel.hovered >= 0 ? $sel.hovered : $sel.pinned;
   if (isolated >= 0) return events[isolated]?.box ? [isolated] : [];
   return events.flatMap((event, index) => event.box ? [index] : []);
@@ -652,9 +669,16 @@ function imageSrc(kind: 'accepted' | 'current', hash: string): string {
 // The row above a screenshot: the step's status tag, plus — when the two
 // sides differ in any way worth flipping between (a visual change, or event
 // lists that disagree on an otherwise unchanged step) — the attached
-// Accepted/Current side buttons. Tapping one pins that side; tapping it
-// again returns to auto.
-function renderStepHeader(change: StepChange, interactive: boolean, $ui: StepUi): void {
+// Accepted/Current side buttons. Steps with a real visual change get a third
+// Diff button, overlaying the sides as an amplified difference. Tapping a
+// button pins that state; tapping it again returns to auto.
+const sideTips: Record<Exclude<StepSide, 'auto'>, string> = {
+  accepted: 'Pin the accepted (old) side; tap again to return to automatic',
+  current: 'Pin the current (new) side; tap again to return to automatic',
+  diff: 'Highlight the changed pixels; tap again to return to automatic',
+};
+
+function renderStepHeader(change: StepChange, interactive: boolean, canDiff: boolean, $ui: StepUi): void {
   A('div display:flex align-items:stretch', () => {
     const attach = interactive ? tagAttachedStyle : '';
     if (change === 'unchanged') {
@@ -663,18 +687,15 @@ function renderStepHeader(change: StepChange, interactive: boolean, $ui: StepUi)
       A(`span.s-s${statusSurface[change]}`, chipStyle, attach, '#', change);
     }
     if (!interactive) return;
-    for (const side of ['accepted', 'current'] as const) {
+    const sides = canDiff ? (['accepted', 'current', 'diff'] as const) : (['accepted', 'current'] as const);
+    for (const side of sides) {
       A('button', sideButtonStyle, () => {
         A(() => {
           if ($ui.side === side) A('.pinned');
           else if ($ui.side === 'auto' && showingSide($ui) === side) A('.showing');
         });
         A('click=', () => { $ui.side = $ui.side === side ? 'auto' : side; });
-        S.addTooltip({
-          tip: side === 'accepted'
-            ? 'Pin the accepted (old) side; tap again to return to automatic'
-            : 'Pin the current (new) side; tap again to return to automatic',
-        });
+        S.addTooltip({ tip: sideTips[side] });
         A('#', side);
       });
     }
@@ -721,11 +742,16 @@ function renderStage(step: ReviewStep, fade: boolean, lists: EventList[], $ui: S
       A('mouseleave=', () => { $ui.imageHovered = false; });
       A(() => A({ $zoom: state.scale }));
       if (fade) {
-        A('img.bottom src=', imageSrc('accepted', step.acceptedImage!), () => {
-          if (showingSide($ui) === 'current') A('.covered');
-        });
-        A('img.top src=', imageSrc('current', step.currentImage!), () => {
-          if (showingSide($ui) === 'current') A('.visible');
+        A(() => { if ($ui.side === 'diff') A('.diff'); });
+        A('div.shots', () => {
+          A('img.bottom src=', imageSrc('accepted', step.acceptedImage!), () => {
+            // The diff needs the accepted image as its blend backdrop, so
+            // never cover it while diffing.
+            if ($ui.side !== 'diff' && showingSide($ui) === 'current') A('.covered');
+          });
+          A('img.top src=', imageSrc('current', step.currentImage!), () => {
+            if (showingSide($ui) === 'current') A('.visible');
+          });
         });
       } else {
         A('img src=', imageSrc(step.currentImage ? 'current' : 'accepted', hash));
@@ -781,7 +807,8 @@ function buildEventLists(step: ReviewStep, dual: boolean): EventList[] {
 
 // Both side lists render stacked in one grid cell, so the row keeps the
 // height of the taller one and the layout below never jumps while flipping.
-// Only the list matching the shown image is visible and interactive.
+// Only the list matching the shown image is visible and interactive — and
+// while diffing, no list is: the difference view describes neither side.
 const listStackStyle = A.insertCss({
   '&': 'display:grid grid-template-columns:100%',
   '.list': 'grid-area:1/1 transition: opacity 120ms linear;',
@@ -789,14 +816,14 @@ const listStackStyle = A.insertCss({
 });
 
 function renderEventLists(lists: EventList[], $ui: StepUi): void {
-  if (lists.length === 1) {
-    renderEvents(lists[0].events, lists[0].$sel);
-    return;
-  }
   A('div', listStackStyle, () => {
     for (const list of lists) {
       A('div.list', () => {
-        A(() => { if (showingSide($ui) !== list.side) A('.faded'); });
+        A(() => {
+          const hidden = $ui.side === 'diff'
+            || (list.side !== undefined && showingSide($ui) !== list.side);
+          if (hidden) A('.faded');
+        });
         renderEvents(list.events, list.$sel);
       });
     }
@@ -823,7 +850,7 @@ function renderStep(step: ReviewStep, roles: RoleInfo, extraAttrs = ''): void {
   const lists = buildEventLists(step, dualLists);
   const $ui = A.proxy<StepUi>({ imageHovered: false, side: 'auto', autoFlips: change === 'changed' });
   A('div display:flex flex-direction:column align-items:stretch gap:0.6rem width:max-content max-width:100% scroll-margin:1rem', extraAttrs, () => {
-    renderStepHeader(change, interactive, $ui);
+    renderStepHeader(change, interactive, fade, $ui);
     renderStage(step, fade, lists, $ui, stepShadow(roles, step.role));
     renderEventLists(lists, $ui);
   });
