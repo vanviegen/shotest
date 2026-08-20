@@ -18,7 +18,9 @@ import {
 
 type ConsoleTone = 'error' | 'warning' | 'info' | 'debug' | 'log';
 type StepChange = 'changed' | 'unchanged' | 'removed' | 'new';
-type CompareMode = 'accepted' | 'current' | 'toggle';
+// Which side of a changed step is on show: pinned via its header buttons, or
+// 'auto' — following the global flip.
+type StepSide = 'accepted' | 'current' | 'auto';
 
 interface TestSummary {
   id: string;
@@ -71,11 +73,14 @@ interface ReviewStep {
   changed: boolean;
 }
 
-// An entry in the rendered event list. `removed` marks events that the
-// accepted baseline had but the current run no longer produces.
-interface DisplayEvent {
-  event: StepEvent;
-  removed: boolean;
+// Whether the two sides' event lists describe the same things happening.
+// Console rows are ignored: their timing shifts run to run, and offering an
+// accepted/current toggle over ambient noise would put buttons on nearly
+// every step. Boxes, sources and durations are display detail, not identity.
+function sameSignificantEvents(accepted: StepEvent[] = [], current: StepEvent[] = []): boolean {
+  const a = accepted.filter((event) => event.type !== 'console');
+  const c = current.filter((event) => event.type !== 'console');
+  return a.length === c.length && a.every((event, i) => event.type === c[i].type && event.message === c[i].message);
 }
 
 interface TestDetail {
@@ -89,7 +94,6 @@ interface ReviewState {
   tests: TestSummary[];
   loadingTests: boolean;
   scale: number;
-  compareMode: CompareMode;
   toggleShowNew: boolean;
 }
 
@@ -97,7 +101,6 @@ const state = A.proxy<ReviewState>({
   tests: [],
   loadingTests: true,
   scale: 0.8,
-  compareMode: 'toggle',
   toggleShowNew: true,
 });
 
@@ -115,7 +118,7 @@ const testPanelCtxs = new Map<string, TestPanelCtx>();
 // Always use light mode.
 S.setDarkMode(false);
 
-// Drives the automatic flip in "toggle" compare mode.
+// Drives the automatic flip of changed steps whose side is on 'auto'.
 setInterval(() => {
   state.toggleShowNew = false;
   setTimeout(() => {
@@ -125,20 +128,25 @@ setInterval(() => {
 
 // ── Scoped styles for the few custom bits Staffa doesn't cover ──────
 
-// The screenshot with its accepted/current tag. The zoomed stage cannot hold
-// the tag itself: CSS zoom would shrink the tag along with the pixels. The
-// `.marks` layer shares the image's grid cell, so an event's viewport box can
-// be placed with percentages — correct at any zoom or devicePixelRatio.
+// The screenshot stage. The `.marks` layer shares the image's grid cell, so
+// an event's viewport box can be placed with percentages — correct at any
+// zoom or devicePixelRatio. For changed steps two images stack in that cell:
+// the accepted one fully opaque below, the current one fading in and out
+// above it — so mid-fade shows a true blend of the two, never the background
+// (both at half opacity would darken the picture). When the images differ in
+// size and the current one is on show, the larger accepted image would stick
+// out around it; `.covered` hides it then, delayed past the fade so it is
+// still visible while the current image is translucent.
 const shotStyle = A.insertCss({
   '&': 'position:relative width:max-content max-width:100%',
   '.stage': 'display:inline-grid overflow:hidden border-radius:4px vertical-align:top',
   '.stage img': 'grid-area:1/1 display:block max-width:none border-radius:4px',
-  '.layer': 'opacity:0 transition: opacity 120ms linear;',
-  '.layer.visible': 'opacity:1',
+  '.top': 'opacity:0 transition: opacity 120ms linear;',
+  '.top.visible': 'opacity:1',
+  '.bottom': 'transition: visibility 0s linear;',
+  '.bottom.covered': 'visibility:hidden; transition: visibility 0s linear 140ms;',
   '.marks': 'grid-area:1/1 position:relative pointer-events:none z-index:2',
   '.eventBox': 'position:absolute border: 2px solid; border-radius:4px',
-  '.tag': 'position:absolute top:0.4rem left:0.4rem pv:0.1rem ph:0.5rem r:99px font-size:0.7em font-weight:700 letter-spacing:0.04em text-transform:uppercase color:#fff background:rgba(30,41,59,0.75) pointer-events:none',
-  '.tag.current': 'background:$s-primary',
 });
 
 // The shared shape of all pills: step status, step counts, role labels.
@@ -146,6 +154,18 @@ const shotStyle = A.insertCss({
 const chipStyle = A.insertCss(
   'display:inline-flex align-items:center gap:0.3rem font-size:0.72em font-weight:700 line-height:1.5 pv:0.05rem ph:0.5rem r:99px text-transform:uppercase letter-spacing:0.04em white-space:nowrap',
 );
+
+// The step tag and its Accepted/Current side buttons form one attached pill
+// group: the tag loses its right rounding, the last button gets it back. A
+// pinned side is filled like a pressed control; in auto mode the side on show
+// right now is merely tinted, so "showing" reads differently from "pinned".
+const tagAttachedStyle = A.insertCss('border-radius: 99px 0 0 99px;');
+const sideButtonStyle = A.insertCss({
+  '&': 'appearance:none display:inline-flex align-items:center m:0 pv:0 ph:0.5rem font-family:inherit font-size:0.72em font-weight:600 line-height:1.5 letter-spacing:0.04em text-transform:uppercase white-space:nowrap cursor:pointer border: 1px solid $s-faint; border-left-width:0 border-radius:0 background:$s-bg color:$s-muted',
+  '&:last-child': 'border-radius: 0 99px 99px 0;',
+  '&.showing': 'background:$s-faint color:$s-text',
+  '&.pinned': 'background:$s-primary border-color:$s-primary color:#fff',
+});
 
 // A thin, borderless range slider in the brand colour. The filled portion is a
 // `--fill`-sized gradient overlay on a faint track (set reactively for WebKit;
@@ -334,10 +354,7 @@ document.addEventListener('keydown', (event) => {
   const key = event.key.toLowerCase();
   const ctx = currentTestCtx();
 
-  if (key === 'o') { event.preventDefault(); state.compareMode = 'accepted'; }
-  else if (key === 'n') { event.preventDefault(); state.compareMode = 'current'; }
-  else if (key === 't') { event.preventDefault(); state.compareMode = 'toggle'; }
-  else if (key === 'a' && ctx && !ctx.$local.loading && detailHasChanges(ctx.$local.detail)) {
+  if (key === 'a' && ctx && !ctx.$local.loading && detailHasChanges(ctx.$local.detail)) {
     event.preventDefault();
     void acceptChanges(ctx);
   } else if (key === 'r' && ctx && !ctx.$local.loading && ctx.$local.detail?.canRevert) {
@@ -369,15 +386,19 @@ function drawFailedChip(status: string): void {
 
 // ── Roles ───────────────────────────────────────────────────────────
 
-// Each browser window (role) gets a hue: the card's surface is tinted with it
-// and a chip naming the role wears the same hue, so the tint explains itself.
-// Equal oklch lightness and chroma keep all tints at the same visual weight.
-// We're always in light mode, so hard-coded light values are fine.
-const roleHues = [250, 80, 320, 160]; // blue, amber, violet, green
-const roleTintStyles = roleHues.map((hue) =>
-  A.insertCss({ '&.s-s.neutral': `--s-bg: oklch(0.97 0.02 ${hue});` }));
-const roleChipStyles = roleHues.map((hue) =>
-  A.insertCss(`background: oklch(0.92 0.06 ${hue}); color: oklch(0.35 0.1 ${hue});`));
+// Screenshots float on a heavy drop shadow instead of sitting in a card.
+// When a test uses several browser windows (roles), each role's screenshots
+// throw a shadow in that role's hue, so the windows tell themselves apart.
+// Equal oklch lightness and chroma keep all shadows at the same weight.
+// Only hues that stay rich when darkened qualify — dark yellow/amber reads
+// as brown, so the warm slot is raspberry rather than amber. Ordered for
+// maximum contrast in the common two-role case.
+const roleHues = [250, 350, 160, 300]; // blue, raspberry, emerald, violet
+const plainShadowStyle = A.insertCss(
+  'box-shadow: 0 0px 40px -6px rgba(15, 23, 42, 0.5), 0 0 15px rgba(15, 23, 42, 0.2);');
+const roleShadowStyles = roleHues.map((hue) => A.insertCss(
+  `box-shadow: 0 0px 40px -6px oklch(0.55 0.2 ${hue} / 0.9), 0 0 15px oklch(0.55 0.2 ${hue} / 0.5);`));
+
 const plainChipStyle = A.insertCss('background: oklch(0.93 0.005 250); color: oklch(0.4 0.01 250);');
 
 interface RoleInfo {
@@ -395,19 +416,22 @@ function buildRoleInfo(steps: ReviewStep[]): RoleInfo {
   return { multi: indexOf.size > 1, indexOf };
 }
 
-function roleTint(roles: RoleInfo, role: string | undefined): string {
-  if (!roles.multi) return '';
-  return roleTintStyles[(roles.indexOf.get(role) ?? 0) % roleTintStyles.length];
+function stepShadow(roles: RoleInfo, role: string | undefined): string {
+  if (!roles.multi) return plainShadowStyle;
+  return roleShadowStyles[(roles.indexOf.get(role) ?? 0) % roleShadowStyles.length];
 }
 
-function drawRoleChip(roles: RoleInfo, role: string | undefined): void {
-  // A single-window test has nothing to tell apart; only name the role if the
-  // test author gave it one.
-  if (!roles.multi && role === undefined) return;
-  const style = roles.multi
-    ? roleChipStyles[(roles.indexOf.get(role) ?? 0) % roleChipStyles.length]
-    : plainChipStyle;
-  A('span', chipStyle, style, '#', role ?? 'main');
+// The shadows tell the windows apart, but only a legend can name them.
+// Renders bare swatch+name pairs; the caller's row provides layout and tone
+// (it sits on the test header's file line).
+function renderRoleLegend(roles: RoleInfo): void {
+  if (!roles.multi) return;
+  for (const [role, index] of roles.indexOf) {
+    A('span display:inline-flex align-items:center gap:0.4rem', () => {
+      A('span display:inline-block w:0.85em h:0.85em r:3px', `background: oklch(0.55 0.2 ${roleHues[index % roleHues.length]});`);
+      A('span #', role ?? 'main');
+    });
+  }
 }
 
 // ── Step events ─────────────────────────────────────────────────────
@@ -439,26 +463,6 @@ function eventBoxCss(type: string): string {
   return `border-color: oklch(0.55 0.18 ${hue}); background: oklch(0.65 0.15 ${hue} / 0.18);`;
 }
 
-// Which side's events a step displays: the current run's when it has any,
-// else the baseline's (removed/orphaned steps). Accepted events that the
-// current run no longer produces are appended struck-through, so a changed
-// check reads as old-vs-new rather than silently disappearing.
-function buildDisplayEvents(step: ReviewStep): DisplayEvent[] {
-  const accepted = step.acceptedEvents ?? [];
-  if (step.currentImage === undefined && step.currentGap === undefined) {
-    return accepted.map((event) => ({ event, removed: false }));
-  }
-  const current = step.currentEvents ?? [];
-  const result: DisplayEvent[] = current.map((event) => ({ event, removed: false }));
-  const unmatched = [...current];
-  for (const event of accepted) {
-    const index = unmatched.findIndex((c) => c.type === event.type && c.message === event.message);
-    if (index >= 0) unmatched.splice(index, 1);
-    else result.push({ event, removed: true });
-  }
-  return result;
-}
-
 const eventListStyle = A.insertCss({
   // width:0 + min-width:100%: long messages wrap instead of stretching the
   // card past its screenshot. The rows' horizontal padding is cancelled by a
@@ -478,35 +482,60 @@ const eventListStyle = A.insertCss({
   '.event.console.warning .msg': 'color:#b45309 font-weight:600',
   '.event.console.error .msg': 'color:$s-danger font-weight:600',
   '.src': 'margin-left:auto color:$s-muted font-size:0.85em white-space:nowrap overflow:hidden text-overflow:ellipsis max-width:40%',
-  '.event.removed .msg': 'text-decoration:line-through color:$s-muted',
   '.event .dur': 'margin-left:auto white-space:nowrap font-variant-numeric:tabular-nums font-size:0.9em font-weight:700',
 });
 
-// Per-step (card-local) state deciding which viewport boxes are drawn over
-// the screenshot. All of them by default; none while the pointer is on the
-// image itself (so it can be inspected unobstructed); only the corresponding
-// one while an event row is hovered or has been tapped/clicked (pinned).
-interface EventSelection {
+// Per-step (card-local) UI state: which side of the step is on show (see
+// StepSide), whether 'auto' follows the global flip (only steps with a real
+// visual change pulse; an unchanged step offering side buttons stays calmly
+// on 'current'), and whether the pointer is on the screenshot itself.
+interface StepUi {
+  imageHovered: boolean;
+  side: StepSide;
+  autoFlips: boolean;
+}
+
+// Per-event-list state: which row is hovered or has been tapped (pinned).
+// Together with StepUi this decides which viewport boxes are drawn over the
+// screenshot — all boxed events by default; none while the image itself is
+// hovered (so it can be inspected unobstructed); only the corresponding one
+// while a row is hovered or pinned.
+interface ListSel {
   hovered: number;
   pinned: number;
-  imageHovered: boolean;
 }
 
-function visibleMarkIndexes($sel: EventSelection, displayEvents: DisplayEvent[]): number[] {
-  if ($sel.imageHovered) return [];
+// One rendered event list. A step whose sides differ in events has two —
+// one per side, shown in sync with its image; every other step has a single
+// one (see buildEventLists).
+interface EventList {
+  side?: 'accepted' | 'current';
+  events: StepEvent[];
+  $sel: ListSel;
+}
+
+function showingSide($ui: StepUi): 'accepted' | 'current' {
+  if ($ui.side !== 'auto') return $ui.side;
+  return !$ui.autoFlips || state.toggleShowNew ? 'current' : 'accepted';
+}
+
+// The list whose events belong to the image side on show right now.
+function activeList(lists: EventList[], $ui: StepUi): EventList {
+  return (lists.length > 1 ? lists.find((list) => list.side === showingSide($ui)) : undefined) ?? lists[0];
+}
+
+function visibleMarkIndexes($ui: StepUi, $sel: ListSel, events: StepEvent[]): number[] {
+  if ($ui.imageHovered) return [];
   const isolated = $sel.hovered >= 0 ? $sel.hovered : $sel.pinned;
-  if (isolated >= 0) return displayEvents[isolated]?.event.box ? [isolated] : [];
-  // Removed (baseline-only) events are left out of the default set: their
-  // boxes belong to the old layout and may not line up with what's shown.
-  return displayEvents.flatMap(({ event, removed }, index) => event.box && !removed ? [index] : []);
+  if (isolated >= 0) return events[isolated]?.box ? [isolated] : [];
+  return events.flatMap((event, index) => event.box ? [index] : []);
 }
 
-function renderEvents(displayEvents: DisplayEvent[], $sel: EventSelection): void {
-  if (displayEvents.length === 0) return;
+function renderEvents(events: StepEvent[], $sel: ListSel): void {
+  if (events.length === 0) return;
   A('div', eventListStyle, () => {
-    displayEvents.forEach(({ event, removed }, index) => {
+    events.forEach((event, index) => {
       A('div.event', () => {
-        if (removed) A('.removed');
         if (event.box) {
           A('.boxed');
           A('mouseenter=', () => { $sel.hovered = index; });
@@ -620,22 +649,35 @@ function imageSrc(kind: 'accepted' | 'current', hash: string): string {
   return `/image/${kind}/${hash}`;
 }
 
-function showingSide(): 'accepted' | 'current' {
-  return state.compareMode === 'toggle'
-    ? (state.toggleShowNew ? 'current' : 'accepted')
-    : state.compareMode;
-}
-
-// The row above a screenshot: status and role pills. Everything else the
-// header used to carry (source lines, names, descriptions) lives with the
-// individual events below the image now. Nothing to say → no row.
-function renderStepHeader(step: ReviewStep, change: StepChange, roles: RoleInfo): void {
-  const label = change === 'removed' && !step.acceptedEvents?.length ? 'baseline' : '';
-  if (change === 'unchanged' && !label && (!roles.multi && step.role === undefined)) return;
-  A('div display:flex align-items:center gap:0.4rem flex-wrap:wrap max-width:100%', () => {
-    drawStatusChip(change);
-    drawRoleChip(roles, step.role);
-    if (label) A('span margin-left:auto font-size:0.8em color:$s-muted white-space:nowrap #', label);
+// The row above a screenshot: the step's status tag, plus — when the two
+// sides differ in any way worth flipping between (a visual change, or event
+// lists that disagree on an otherwise unchanged step) — the attached
+// Accepted/Current side buttons. Tapping one pins that side; tapping it
+// again returns to auto.
+function renderStepHeader(change: StepChange, interactive: boolean, $ui: StepUi): void {
+  A('div display:flex align-items:stretch', () => {
+    const attach = interactive ? tagAttachedStyle : '';
+    if (change === 'unchanged') {
+      A('span', chipStyle, plainChipStyle, attach, '#', change);
+    } else {
+      A(`span.s-s${statusSurface[change]}`, chipStyle, attach, '#', change);
+    }
+    if (!interactive) return;
+    for (const side of ['accepted', 'current'] as const) {
+      A('button', sideButtonStyle, () => {
+        A(() => {
+          if ($ui.side === side) A('.pinned');
+          else if ($ui.side === 'auto' && showingSide($ui) === side) A('.showing');
+        });
+        A('click=', () => { $ui.side = $ui.side === side ? 'auto' : side; });
+        S.addTooltip({
+          tip: side === 'accepted'
+            ? 'Pin the accepted (old) side; tap again to return to automatic'
+            : 'Pin the current (new) side; tap again to return to automatic',
+        });
+        A('#', side);
+      });
+    }
   });
 }
 
@@ -643,13 +685,16 @@ function renderStepHeader(step: ReviewStep, change: StepChange, roles: RoleInfo)
 const markPadding = 5;
 
 // The viewport boxes of the visible events, drawn over the image with
-// percentage coordinates so they land right at any zoom level.
-function renderEventMarks(step: ReviewStep, displayEvents: DisplayEvent[], $sel: EventSelection): void {
+// percentage coordinates so they land right at any zoom level. On a
+// cross-fading step the boxes come from the list of the side on show, so they
+// always describe the image they are drawn on.
+function renderEventMarks(step: ReviewStep, lists: EventList[], $ui: StepUi): void {
   const viewport = step.viewport;
-  if (!viewport || displayEvents.length === 0) return;
+  if (!viewport) return;
   A('div.marks', () => {
-    for (const index of visibleMarkIndexes($sel, displayEvents)) {
-      const { event } = displayEvents[index];
+    const { events, $sel } = activeList(lists, $ui);
+    for (const index of visibleMarkIndexes($ui, $sel, events)) {
+      const event = events[index];
       const box = event.box!;
       const x = Math.max(0, box.x - markPadding);
       const y = Math.max(0, box.y - markPadding);
@@ -662,43 +707,31 @@ function renderEventMarks(step: ReviewStep, displayEvents: DisplayEvent[], $sel:
   });
 }
 
-// The screenshot area. For a changed step both versions are stacked and
-// cross-faded, with an overlay tag naming the side on show — right where the
-// eye is while it flips. The imgs are created once; only classes toggle, so
-// the fade actually animates.
-function renderStage(step: ReviewStep, change: StepChange, displayEvents: DisplayEvent[], $sel: EventSelection): void {
-  // Cross-fade only when there really are two different images: a step marked
-  // changed on events alone would otherwise flip between two equal frames,
-  // reading as "no visible difference" — which a single image says better.
-  const flip = change === 'changed' && !!step.acceptedImage && !!step.currentImage && step.acceptedImage !== step.currentImage;
+// The screenshot area. When the step fades between two images, both are
+// stacked (see shotStyle for the layering). The imgs are created once; only
+// classes toggle, so the fade actually animates.
+function renderStage(step: ReviewStep, fade: boolean, lists: EventList[], $ui: StepUi, shadowStyle: string): void {
   const hash = step.currentImage || step.acceptedImage;
   if (!hash) return;
   A('div', shotStyle, () => {
-    A('div.stage', () => {
+    A('div.stage', shadowStyle, () => {
       // Hovering the image clears the event boxes, so it can be inspected
       // unobstructed. `.marks` is pointer-events:none and doesn't interfere.
-      A('mouseenter=', () => { $sel.imageHovered = true; });
-      A('mouseleave=', () => { $sel.imageHovered = false; });
+      A('mouseenter=', () => { $ui.imageHovered = true; });
+      A('mouseleave=', () => { $ui.imageHovered = false; });
       A(() => A({ $zoom: state.scale }));
-      if (flip) {
-        A('img.layer src=', imageSrc('accepted', step.acceptedImage!), () => {
-          if (showingSide() === 'accepted') A('.visible');
+      if (fade) {
+        A('img.bottom src=', imageSrc('accepted', step.acceptedImage!), () => {
+          if (showingSide($ui) === 'current') A('.covered');
         });
-        A('img.layer src=', imageSrc('current', step.currentImage!), () => {
-          if (showingSide() === 'current') A('.visible');
+        A('img.top src=', imageSrc('current', step.currentImage!), () => {
+          if (showingSide($ui) === 'current') A('.visible');
         });
       } else {
         A('img src=', imageSrc(step.currentImage ? 'current' : 'accepted', hash));
       }
-      renderEventMarks(step, displayEvents, $sel);
+      renderEventMarks(step, lists, $ui);
     });
-    if (flip) {
-      A('div.tag', () => {
-        const side = showingSide();
-        if (side === 'current') A('.current');
-        A('#', side);
-      });
-    }
   });
 }
 
@@ -729,22 +762,70 @@ function renderGapStep(step: ReviewStep, change: StepChange, extraAttrs = ''): v
   });
 }
 
+// When the sides' event lists differ, each side gets its own list, shown in
+// sync with its image; otherwise a single list serves both sides — the
+// current run's when it has one (it carries sources and durations), else the
+// baseline's (removed/orphaned steps). Lists come with their own hover/pin
+// selection.
+function buildEventLists(step: ReviewStep, dual: boolean): EventList[] {
+  const newSel = () => A.proxy<ListSel>({ hovered: -1, pinned: -1 });
+  if (!dual) {
+    const events = step.currentImage !== undefined ? step.currentEvents : step.acceptedEvents;
+    return [{ events: events ?? [], $sel: newSel() }];
+  }
+  return [
+    { side: 'accepted' as const, events: step.acceptedEvents ?? [], $sel: newSel() },
+    { side: 'current' as const, events: step.currentEvents ?? [], $sel: newSel() },
+  ];
+}
+
+// Both side lists render stacked in one grid cell, so the row keeps the
+// height of the taller one and the layout below never jumps while flipping.
+// Only the list matching the shown image is visible and interactive.
+const listStackStyle = A.insertCss({
+  '&': 'display:grid grid-template-columns:100%',
+  '.list': 'grid-area:1/1 transition: opacity 120ms linear;',
+  '.list.faded': 'opacity:0 pointer-events:none',
+});
+
+function renderEventLists(lists: EventList[], $ui: StepUi): void {
+  if (lists.length === 1) {
+    renderEvents(lists[0].events, lists[0].$sel);
+    return;
+  }
+  A('div', listStackStyle, () => {
+    for (const list of lists) {
+      A('div.list', () => {
+        A(() => { if (showingSide($ui) !== list.side) A('.faded'); });
+        renderEvents(list.events, list.$sel);
+      });
+    }
+  });
+}
+
 function renderStep(step: ReviewStep, roles: RoleInfo, extraAttrs = ''): void {
   const change = getStepChange(step);
   if (isGapStep(step)) {
     renderGapStep(step, change, extraAttrs);
     return;
   }
-  const displayEvents = buildDisplayEvents(step);
-  const $sel = A.proxy<EventSelection>({ hovered: -1, pinned: -1, imageHovered: false });
-  S.box({
-    attrs: `${borderForChange[change]} ${roleTint(roles, step.role)} ${extraAttrs} width:max-content max-width:100% mt:0 scroll-margin:1rem`,
-    contentAttrs: 'display:flex flex-direction:column align-items:stretch gap:0.5rem',
-    content: () => {
-      renderStepHeader(step, change, roles);
-      renderStage(step, change, displayEvents, $sel);
-      renderEvents(displayEvents, $sel);
-    },
+  // The step's changed/unchanged verdict is the server's, and purely visual —
+  // events never enter into it, so this view and the sidebar always agree.
+  // The sides are still flippable whenever there is anything to flip between:
+  // a visual change, or event lists that disagree on an unchanged step.
+  const hasBoth = step.acceptedImage !== undefined && step.currentImage !== undefined;
+  const dualLists = hasBoth && !sameSignificantEvents(step.acceptedEvents, step.currentEvents);
+  const interactive = hasBoth && (change === 'changed' || dualLists);
+  // Cross-fade only when there really are two different images: flipping
+  // between two equal frames reads as "no visible difference" — which a
+  // single image says better.
+  const fade = interactive && step.acceptedImage !== step.currentImage;
+  const lists = buildEventLists(step, dualLists);
+  const $ui = A.proxy<StepUi>({ imageHovered: false, side: 'auto', autoFlips: change === 'changed' });
+  A('div display:flex flex-direction:column align-items:stretch gap:0.6rem width:max-content max-width:100% scroll-margin:1rem', extraAttrs, () => {
+    renderStepHeader(change, interactive, $ui);
+    renderStage(step, fade, lists, $ui, stepShadow(roles, step.role));
+    renderEventLists(lists, $ui);
   });
 }
 
@@ -755,7 +836,9 @@ function renderSteps(steps: ReviewStep[], markerClass: string): void {
   }
   const roles = buildRoleInfo(steps);
   const firstChanged = steps.findIndex((step) => getStepChange(step) !== 'unchanged');
-  A('div display:flex flex-wrap:wrap gap:1rem align-items:flex-start', () => {
+  // Row gap well above the image↔events gap inside a step, so an event list
+  // reads as belonging to the screenshot above it, not the one below.
+  A('div display:flex flex-wrap:wrap column-gap:2.5rem row-gap:3rem align-items:flex-start pt:0.5rem', () => {
     steps.forEach((step, index) => {
       // Tag the first screenshot that needs review, so the panel can scroll it
       // into view. The panel already opens at the top; only mark when the
@@ -768,30 +851,83 @@ function renderSteps(steps: ReviewStep[], markerClass: string): void {
 
 // ── Rendering: test panel ───────────────────────────────────────────
 
-function renderTestHeader(id: string, detail: TestDetail): void {
-  const test = state.tests.find((entry) => entry.id === id);
+// The test's action buttons, shown to the right of the test header (wrapping
+// below it when the panel is narrow). Prev/next mirror Ctrl+↑/↓ for the
+// mouse. They are plain links, which Staffa 0.11 made viable here: under
+// `linkNavigation: 'open'` they swap the pane like any other click.
+function renderTestActions(ctx: TestPanelCtx, detail: TestDetail): void {
+  const index = state.tests.findIndex((test) => test.id === ctx.id);
+  const prev = index > 0 ? state.tests[index - 1] : undefined;
+  const next = index >= 0 ? state.tests[index + 1] : undefined;
+  S.iconButton({
+    icon: () => { chevronUp(); S.addTooltip({ tip: 'Previous test (Ctrl+↑)' }); },
+    ariaLabel: 'Previous test',
+    href: prev && hrefForTest(prev.id),
+    disabled: !prev,
+    attrs: '.small',
+  });
+  S.iconButton({
+    icon: () => { chevronDown(); S.addTooltip({ tip: 'Next test (Ctrl+↓)' }); },
+    ariaLabel: 'Next test',
+    href: next && hrefForTest(next.id),
+    disabled: !next,
+    attrs: '.small',
+  });
+  if (detailHasChanges(detail)) {
+    S.button({
+      content: () => {
+        A(detail.orphaned ? '#Delete baseline' : '#Accept visuals');
+        S.addTooltip({ tip: detail.orphaned ? 'Delete this stale baseline (a)' : 'Accept the new visuals as the baseline (a)' });
+      },
+      icon: detail.orphaned ? trash2 : check,
+      attrs: detail.orphaned ? '.danger.small' : '.small',
+      click: () => void acceptChanges(ctx),
+    });
+  }
+  if (detail.canRevert) {
+    S.button({
+      content: () => { A('#Revert'); S.addTooltip({ tip: 'Revert accepted visuals to git HEAD (r)' }); },
+      icon: undo2,
+      attrs: '.neutral.small',
+      click: () => void revertChanges(ctx),
+    });
+  }
+}
+
+function renderTestHeader(ctx: TestPanelCtx, detail: TestDetail): void {
+  const test = state.tests.find((entry) => entry.id === ctx.id);
   const counts = { changed: 0, new: 0, removed: 0, unchanged: 0 };
   for (const step of detail.steps) counts[getStepChange(step)]++;
+  const roles = buildRoleInfo(detail.steps);
 
-  A('div display:flex flex-direction:column gap:0.3rem margin-bottom:1rem', () => {
-    A('div display:flex align-items:baseline gap:0.6rem flex-wrap:wrap', () => {
-      A('h2 font-size:1.15em font-weight:700 m:0 rich=', detail.manifest?.title ?? test?.title ?? 'Test');
-      A('span display:inline-flex align-items:center gap:0.4rem', () => {
-        if (test && !test.orphaned && testIsFailed(test.status)) drawFailedChip(test.status);
-        if (counts.changed) drawStatusChip('changed', counts.changed);
-        if (counts.new) drawStatusChip('new', counts.new);
-        if (counts.removed) drawStatusChip('removed', counts.removed);
-        if (detail.steps.length > 0 && !counts.changed && !counts.new && !counts.removed) {
-          A('span font-size:0.8em color:$s-muted #', `all ${detail.steps.length} unchanged`);
-        }
+  A('div display:flex flex-wrap:wrap align-items:flex-start column-gap:1rem row-gap:0.5rem margin-bottom:1rem', () => {
+    A('div display:flex flex-direction:column gap:0.3rem flex:1 min-width:min(100%,20rem)', () => {
+      A('div display:flex align-items:baseline gap:0.6rem flex-wrap:wrap', () => {
+        A('h2 font-size:1.15em font-weight:700 m:0 rich=', detail.manifest?.title ?? test?.title ?? 'Test');
+        A('span display:inline-flex align-items:center gap:0.4rem', () => {
+          if (test && !test.orphaned && testIsFailed(test.status)) drawFailedChip(test.status);
+          if (counts.changed) drawStatusChip('changed', counts.changed);
+          if (counts.new) drawStatusChip('new', counts.new);
+          if (counts.removed) drawStatusChip('removed', counts.removed);
+          if (detail.steps.length > 0 && !counts.changed && !counts.new && !counts.removed) {
+            A('span font-size:0.8em color:$s-muted #', `all ${detail.steps.length} unchanged`);
+          }
+        });
       });
+      const file = detail.manifest?.file ?? (test && !test.orphaned ? test.file : undefined);
+      if (file || detail.orphaned || roles.multi) {
+        A('div display:flex align-items:center flex-wrap:wrap column-gap:1.2rem row-gap:0.3rem font-size:0.85em color:$s-muted', () => {
+          if (file) A('span #', test?.line ? `${file} · line ${test.line}` : file);
+          else if (detail.orphaned) A('span #accepted baseline without a matching test');
+          renderRoleLegend(roles);
+        });
+      }
     });
-    const file = detail.manifest?.file ?? (test && !test.orphaned ? test.file : undefined);
-    if (file) {
-      A('div font-size:0.85em color:$s-muted #', test?.line ? `${file} · line ${test.line}` : file);
-    } else if (detail.orphaned) {
-      A('div font-size:0.85em color:$s-muted #accepted baseline without a matching test');
-    }
+    // margin-left:auto keeps the buttons right-aligned, also on the row of
+    // their own they wrap to when the header block needs the full width.
+    A('div display:flex align-items:center gap:0.5rem margin-left:auto', () => {
+      renderTestActions(ctx, detail);
+    });
   });
 }
 
@@ -867,52 +1003,6 @@ function drawTestPanel($panel: S.Panel<{ id: string }>): void {
     }, 150);
   });
 
-  $panel.actions = () => {
-    // Prev/next mirror Ctrl+↑/↓ for the mouse. They are plain links, which
-    // Staffa 0.11 made viable here: links among a panel's actions behave the
-    // same at every shell width, and `linkNavigation: 'open'` makes them swap
-    // the pane like any other click.
-    const index = state.tests.findIndex((test) => test.id === id);
-    const prev = index > 0 ? state.tests[index - 1] : undefined;
-    const next = index >= 0 ? state.tests[index + 1] : undefined;
-    S.iconButton({
-      icon: () => { chevronUp(); S.addTooltip({ tip: 'Previous test (Ctrl+↑)' }); },
-      ariaLabel: 'Previous test',
-      href: prev && hrefForTest(prev.id),
-      disabled: !prev,
-      attrs: '.small',
-    });
-    S.iconButton({
-      icon: () => { chevronDown(); S.addTooltip({ tip: 'Next test (Ctrl+↓)' }); },
-      ariaLabel: 'Next test',
-      href: next && hrefForTest(next.id),
-      disabled: !next,
-      attrs: '.small',
-    });
-
-    const detail = $local.detail;
-    if (!detail) return;
-    if (detailHasChanges(detail)) {
-      S.button({
-        content: () => {
-          A(detail.orphaned ? '#Delete baseline' : '#Accept visuals');
-          S.addTooltip({ tip: detail.orphaned ? 'Delete this stale baseline (a)' : 'Accept the new visuals as the baseline (a)' });
-        },
-        icon: detail.orphaned ? trash2 : check,
-        attrs: detail.orphaned ? '.danger.small' : '.small',
-        click: () => void acceptChanges(ctx),
-      });
-    }
-    if (detail.canRevert) {
-      S.button({
-        content: () => { A('#Revert'); S.addTooltip({ tip: 'Revert accepted visuals to git HEAD (r)' }); },
-        icon: undo2,
-        attrs: '.neutral.small',
-        click: () => void revertChanges(ctx),
-      });
-    }
-  };
-
   A(() => {
     const { detail } = $local;
     if (!detail) {
@@ -920,7 +1010,7 @@ function drawTestPanel($panel: S.Panel<{ id: string }>): void {
       if (!$local.loading) A('div color:$s-muted #Could not load this test.');
       return;
     }
-    renderTestHeader(id, detail);
+    renderTestHeader(ctx, detail);
     if (detail.orphaned) renderOrphanNotice();
     renderSteps(detail.steps, markerClass);
     if (detail.manifest?.error) renderErrorBox(detail.manifest);
@@ -1004,7 +1094,6 @@ function drawHomePanel($panel: S.Panel<{}>): void {
       header: 'Keyboard shortcuts',
       contentAttrs: 'display:flex flex-direction:column gap:0.4rem',
       content: () => {
-        drawShortcutRow(['o', 'n', 't'], 'show accepted / current / toggle between them');
         drawShortcutRow(['a'], 'accept the new visuals');
         drawShortcutRow(['r'], 'revert accepted visuals to git HEAD');
         drawShortcutRow(['Ctrl', '↑/↓'], 'previous / next test');
@@ -1018,25 +1107,14 @@ function drawHomePanel($panel: S.Panel<{}>): void {
 
 function drawToolbar(): void {
   A(() => {
-    // The compare controls only mean something while a test is on screen.
+    // The scale control only means something while a test is on screen.
     if (route.current.p[0] !== 'test') return;
-    A('div display:flex align-items:center gap:1.25rem flex-wrap:wrap', () => {
-      A('label display:flex align-items:center gap:0.4rem font-size:0.85em color:$s-muted', () => {
-        A('span #Scale');
-        A('input type=range min=0.1 max=1 step=0.01 bind=', A.ref(state, 'scale'), sliderStyle, () => {
-          A({ style: `--fill:${Math.round(((state.scale - 0.1) / 0.9) * 100)}%` });
-        });
-        A(() => A('span color:$s-text font-variant-numeric:tabular-nums #', `${Math.round(state.scale * 100)}%`));
+    A('label display:flex align-items:center gap:0.4rem font-size:0.85em color:$s-muted', () => {
+      A('span #Scale');
+      A('input type=range min=0.1 max=1 step=0.01 bind=', A.ref(state, 'scale'), sliderStyle, () => {
+        A({ style: `--fill:${Math.round(((state.scale - 0.1) / 0.9) * 100)}%` });
       });
-      S.buttonChooser({
-        options: {
-          accepted: () => { A('#accepted'); S.addTooltip({ tip: 'Show the accepted (old) image (o)' }); },
-          current: () => { A('#current'); S.addTooltip({ tip: 'Show the current (new) image (n)' }); },
-          toggle: () => { A('#toggle'); S.addTooltip({ tip: 'Flip between accepted and current (t)' }); },
-        },
-        bind: A.ref(state, 'compareMode'),
-        attrs: '.small',
-      });
+      A(() => A('span color:$s-text font-variant-numeric:tabular-nums #', `${Math.round(state.scale * 100)}%`));
     });
   });
 }

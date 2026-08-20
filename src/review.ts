@@ -19,7 +19,6 @@ import { fileURLToPath } from 'url';
 import { areImagesEquivalent } from './visual-compare.js';
 import { compressAcceptedPool } from './webp.js';
 import {
-    eventsEquivalent,
     gcPoolFiles,
     hasLegacyAcceptedLayout,
     isGapStep,
@@ -28,7 +27,6 @@ import {
     listSpecJsonFiles,
     mergeTestRecord,
     readSpecRecords,
-    significantEvents,
     specJsonName,
     withFileLock,
     writeSpecRecords,
@@ -126,6 +124,14 @@ export function buildAlignEntries(dir: string, steps: StepRecord[]): AlignEntry[
     });
 }
 
+// THE single point deciding whether a step changed — the sidebar scan, the
+// CLI summary and the detail view all route through here, so they cannot
+// disagree. The verdict is purely visual: screenshots (and gap texts) only.
+// Events never enter into it — if the pictures match and the test is green,
+// all is well no matter which checks got it there; differing event lists are
+// a display concern (the review app offers an accepted/current flip on such
+// steps), not a change to review.
+//
 // A comparison that cannot be made is reported as a difference. The alternative —
 // letting the error escape — has the caller decide what a missing answer means,
 // and the summary view answers "unchanged": a test whose baseline is unreadable
@@ -135,10 +141,6 @@ async function entriesEquivalent(accepted: AlignEntry, current: AlignEntry): Pro
     if (accepted.kind === 'gap' || current.kind === 'gap') {
         return accepted.kind === 'gap' && current.kind === 'gap' && accepted.text === current.text;
     }
-    // A step is what happened as much as how it looked: the same screenshot
-    // reached by a different set of checks or actions is a change the
-    // reviewer should see.
-    if (!eventsEquivalent(accepted.step.events, current.step.events)) return false;
     // Equal hashes are pixel-identical by construction — no files needed.
     if (accepted.step.image === current.step.image) return true;
     if (!accepted.filePath || !current.filePath) return false;
@@ -385,26 +387,14 @@ async function getTestDetails(file: string, title: string): Promise<{
 
 // ── Accepting ──────────────────────────────────────────────────────
 
-// The baseline keeps only what identifies, orders and displays the steps; run
-// metadata (durations, console output, source lines — which shift on every
-// edit) would churn version control without informing a later comparison.
-// Event types/messages take part in the comparison; boxes and the viewport
-// are kept so the review app can point at what a baseline-only step targeted.
+// The baseline keeps the steps verbatim — events included, with their source
+// lines, durations and console output, so the review app can show the
+// accepted side of a step exactly as it once ran. Only test-level run
+// metadata (status, error, timing) is dropped: a baseline records what was
+// approved, not how the approving run went. Nothing kept here can flag a
+// later run as changed — comparison never reads events (entriesEquivalent).
 function stripForAccept(record: TestRecord): TestRecord {
-    return {
-        file: record.file,
-        title: record.title,
-        steps: record.steps.map((step) => {
-            if (isGapStep(step)) return { gap: step.gap };
-            const events = significantEvents(step.events).map(({ type, message, box }) => ({ type, message, box }));
-            return {
-                image: step.image,
-                viewport: step.viewport,
-                events: events.length > 0 ? events : undefined,
-                role: step.role,
-            };
-        }),
-    };
+    return { file: record.file, title: record.title, steps: record.steps };
 }
 
 function removeTestRecord(dir: string, file: string, title: string): void {

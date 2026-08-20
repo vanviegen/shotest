@@ -125,7 +125,7 @@ npx shotest review
 
 It serves a web app on localhost and attempts to open it in your default browser.
 
-Steps that share a screenshot are shown as one card: the image, with the list of recorded events beneath it, color-coded by type and prefixed with their source line. Browser console output appears in that list too, right between the events it arrived between — quietly for plain logs, in color for warnings and errors. The viewport areas the events involved are outlined on the image; hover the image to see it unobstructed, or hover (or tap) a single event to highlight just that one. When a step changed, the accepted and current versions are cross-faded (or shown individually — see the toolbar), and checks that the current run no longer performs are listed struck-through.
+Steps that share a screenshot are shown as one unit: the image floating on a drop shadow, with the list of recorded events right beneath it, color-coded by type and prefixed with their source line. Browser console output appears in that list too, right between the events it arrived between — quietly for plain logs, in color for warnings and errors. The viewport areas the events involved are outlined on the image; hover the image to see it unobstructed, or hover (or tap) a single event to highlight just that one. When a step changed, the accepted and current versions are cross-faded — each side showing its own event list — and the buttons on the step's status tag pin one side for a closer look. Whether a step counts as changed is decided purely from its screenshots: if the pictures match and the test is green, differing events don't flag anything, though such a step still offers the accepted/current buttons so the two event lists can be compared.
 
 An explicit `screenshot(page, name)` call records a `screenshot` event carrying the name — like any other event, it joins the previous step when the page hasn't visually changed.
 
@@ -165,7 +165,7 @@ Notes:
 - Call `splitIntoRoles(page, ...)` before the first interaction you want attributed to those roles. The first named role reuses the current page.
 - Later roles start on the same URL as the original page, but in their own browser sessions.
 - Repeating a role name within a test returns the same page instead of creating a duplicate session.
-- Steps are labeled with their role in the review app, and each role gets its own tint so the browser windows are easy to tell apart.
+- In the review app, each role's screenshots throw a drop shadow in that role's colour, so the browser windows are easy to tell apart.
 - Extra pages created by `splitIntoRoles()` are closed automatically at the end of the test.
 
 ## Recording demo videos

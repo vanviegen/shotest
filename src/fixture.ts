@@ -129,11 +129,26 @@ function getCallerLocation(): SourceLocation {
 // are clean captures, and what happened (clicks, assertions) is recorded as
 // step events in the spec JSON instead. This stylesheet only pins the page
 // down visually: no animations, no smooth scrolling.
+// Note that `*` (and `*::before`/`*::after`) reaches no other pseudo-elements:
+// a transition declared on `::details-content` (a <details> unfold) or
+// `::backdrop` (a <dialog> fade) sails right past the universal rule and
+// animates anyway. Those get rules of their own — and *separate* rules, not
+// extra items in the selector list, because a browser that doesn't know a
+// pseudo-element drops the whole rule it appears in, which would silently
+// re-enable every animation on the page.
 const STABILITY_STYLE = `
     html, body, * {
         scroll-behavior: auto !important;
     }
     *, *::before, *::after {
+        transition: none !important;
+        animation: none !important;
+    }
+    *::details-content {
+        transition: none !important;
+        animation: none !important;
+    }
+    *::backdrop {
         transition: none !important;
         animation: none !important;
     }
@@ -205,17 +220,53 @@ async function locatorEventBox(locator: Locator): Promise<EventBox | null> {
     return await locator.boundingBox({ timeout: 1000 }).catch(() => null);
 }
 
-function describeExpectation(method: string): string {
-    if (method.includes('to.be.visible')) return 'expect visible';
-    if (method.includes('to.be.hidden')) return 'expect hidden';
-    if (method.includes('to.be.enabled')) return 'expect enabled';
-    if (method.includes('to.be.disabled')) return 'expect disabled';
-    if (method.includes('to.be.checked')) return 'expect checked';
-    if (method.includes('to.have.text') || method.includes('to.contain.text')) return 'expect text';
-    if (method.includes('to.have.value')) return 'expect value';
-    if (method.includes('to.have.class') || method.includes('to.contain.class')) return 'expect class';
-    if (method.includes('to.have.count')) return 'expect count';
-    return 'expect';
+function truncate(text: string, max: number): string {
+    return text.length <= max ? text : text.slice(0, max - 1) + '…';
+}
+
+/** The expected value(s) an expect() carried, e.g. `"Welcome"`, `/\d+/`, `3`. */
+function formatExpected(options: any): string {
+    if (Array.isArray(options?.expectedText)) {
+        return options.expectedText
+            .map((value: { string?: string; regexSource?: string; regexFlags?: string }) =>
+                value.regexSource !== undefined
+                    ? `/${value.regexSource}/${value.regexFlags ?? ''}`
+                    : JSON.stringify(value.string ?? ''))
+            .join(', ');
+    }
+    if (typeof options?.expectedNumber === 'number') return String(options.expectedNumber);
+    return '';
+}
+
+/**
+ * A one-line label for a passed expect(), e.g. 'expect not visible' or
+ * `expect text "Welcome"` — built from Playwright's internal expression
+ * ("to.have.text") plus the negation flag and expected values it passes along.
+ */
+function describeExpectation(method: string, options: any): string {
+    // "to.have.attribute.value" → "attribute value"; the ".array" suffix says
+    // nothing the listed values don't.
+    let what = method.replace(/\.array$/, '').replace(/^to\.(?:be\.|have\.|contain\.)?/, '').replace(/\./g, ' ');
+    // toBeChecked() folds its variants into options rather than the method.
+    if (method === 'to.be.checked') {
+        if (options?.expectedValue?.indeterminate) what = 'indeterminate';
+        else if (options?.expectedValue?.checked === false) what = 'unchecked';
+    }
+    let label = `expect ${options?.isNot ? 'not ' : ''}${what}`;
+    // The attribute/CSS-property name for toHaveAttribute(name, ...) etc.
+    if (typeof options?.expressionArg === 'string') label += ' ' + JSON.stringify(options.expressionArg);
+    const expected = formatExpected(options);
+    if (expected) label += ' ' + truncate(expected, 100);
+    return label;
+}
+
+/**
+ * With no box to point at the element (typical for a passed negative
+ * assertion — the element is hidden or gone), name the target in the message
+ * instead, so the event row still says what it was about.
+ */
+function withTarget(message: string, box: EventBox | null, locator: Locator): string {
+    return box ? message : `${message} (${truncate(String(locator), 80)})`;
 }
 
 function describeLocatorInspection(method: string, args: any[]): string {
@@ -456,20 +507,20 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         const loc = getCallerLocation();
         const stepStartTimeMs = Date.now();
         lastStepLocation = loc;
-        const label = describeExpectation(method);
+        const label = describeExpectation(method, options);
         const failureText = `${label} failed`;
         pendingFailureText = failureText;
         try {
             const result = await (actualLocator as any)._expect(method, options);
             if (!screenshotsSuppressed()) {
                 const box = await locatorEventBox(actualLocator);
-                await takeScreenshot(actualPage, makeEvent('assert', label, loc, box), false, stepStartTimeMs);
+                await takeScreenshot(actualPage, makeEvent('assert', withTarget(label, box, actualLocator), loc, box), false, stepStartTimeMs);
             }
             pendingFailureText = '';
             return result;
         } catch (error: any) {
             const box = await locatorEventBox(actualLocator);
-            await takeScreenshot(actualPage, makeEvent('error', failureText, loc, box), false, stepStartTimeMs, true).catch(() => {});
+            await takeScreenshot(actualPage, makeEvent('error', withTarget(failureText, box, actualLocator), loc, box), false, stepStartTimeMs, true).catch(() => {});
             failureCaptured = true;
             throw error;
         }
@@ -482,7 +533,8 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         await (actualLocator as any).waitFor(options);
         if (!screenshotsSuppressed()) {
             const box = await locatorEventBox(actualLocator);
-            await takeScreenshot(actualPage, makeEvent('check', 'waitFor', loc, box), false, stepStartTimeMs);
+            const label = options?.state ? `waitFor ${options.state}` : 'waitFor';
+            await takeScreenshot(actualPage, makeEvent('check', withTarget(label, box, actualLocator), loc, box), false, stepStartTimeMs);
         }
     };
 
@@ -499,7 +551,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
                 const result = await (actualLocator as any)[method](...args);
                 if (!screenshotsSuppressed()) {
                     const box = await locatorEventBox(actualLocator);
-                    await takeScreenshot(actualPage, makeEvent('check', label, loc, box), false, stepStartTimeMs);
+                    await takeScreenshot(actualPage, makeEvent('check', withTarget(label, box, actualLocator), loc, box), false, stepStartTimeMs);
                 }
                 pendingFailureText = '';
                 return result;
