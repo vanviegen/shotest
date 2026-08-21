@@ -514,6 +514,9 @@ const eventListStyle = A.insertCss({
   '.event.console.error .msg': 'color:$s-danger font-weight:600',
   '.src': 'margin-left:auto color:$s-muted font-size:0.85em white-space:nowrap overflow:hidden text-overflow:ellipsis max-width:40%',
   '.event .dur': 'margin-left:auto white-space:nowrap font-variant-numeric:tabular-nums font-size:0.9em font-weight:700',
+  // The link standing in for a folded run of console log/warn rows.
+  '.expand': 'cursor:pointer color:$s-primary',
+  '.expand:hover': 'text-decoration:underline',
 });
 
 // Per-step (card-local) UI state: which side of the step is on show (see
@@ -566,38 +569,73 @@ function visibleMarkIndexes($ui: StepUi, $sel: ListSel, events: StepEvent[]): nu
   return events.flatMap((event, index) => event.box ? [index] : []);
 }
 
+// A run of these is routine noise, worth folding out of the way. Errors (and
+// the rarer info/debug levels) never fold — they are what the reviewer is
+// scanning for.
+function isFoldableConsole(event: StepEvent): boolean {
+  if (event.type !== 'console') return false;
+  const tone = consoleTone(event.consoleType);
+  return tone === 'log' || tone === 'warning';
+}
+
+function renderEvent(event: StepEvent, index: number, $sel: ListSel): void {
+  A('div.event', () => {
+    if (event.box) {
+      A('.boxed');
+      A('mouseenter=', () => { $sel.hovered = index; });
+      A('mouseleave=', () => { if ($sel.hovered === index) $sel.hovered = -1; });
+      A('click=', () => { $sel.pinned = $sel.pinned === index ? -1 : index; });
+      A(() => { if ($sel.pinned === index) A('.pinned'); });
+    }
+    // Console rows are chipped by their level; their source is the
+    // emitting browser location, shown at the end instead of as a line
+    // number in front.
+    const isConsole = event.type === 'console';
+    const tone = consoleTone(event.consoleType);
+    const chip = isConsole ? (tone === 'warning' ? 'warn' : tone) : event.type;
+    A('.' + (isConsole ? `console.${tone}` : event.type));
+    if (!isConsole) {
+      const line = eventLine(event);
+      if (line) A('span.line #', line);
+    }
+    A('span', chipStyle, eventChipStyles[chip] ?? plainChipStyle, '#', chip);
+    A('span.msg #', event.message);
+    if (isConsole && event.source) A('span.src #', event.source);
+    const duration = event.duration;
+    if (typeof duration === 'number' && duration >= 300) {
+      A('span.dur', `color:${duration >= 1000 ? '$s-danger' : '#d97706'}`, '#', `${Math.round(duration)}ms`);
+    }
+  });
+}
+
 function renderEvents(events: StepEvent[], $sel: ListSel): void {
   if (events.length === 0) return;
+  // Consecutive console log/warn rows collapse behind an "Expand <n>..."
+  // link, keyed by the run's start index. Rows keep their original indexes
+  // either way, so the hover/pin selection stays valid across expansion.
+  const $expandedRuns = A.proxy({} as Record<number, boolean>);
   A('div', eventListStyle, () => {
-    events.forEach((event, index) => {
-      A('div.event', () => {
-        if (event.box) {
-          A('.boxed');
-          A('mouseenter=', () => { $sel.hovered = index; });
-          A('mouseleave=', () => { if ($sel.hovered === index) $sel.hovered = -1; });
-          A('click=', () => { $sel.pinned = $sel.pinned === index ? -1 : index; });
-          A(() => { if ($sel.pinned === index) A('.pinned'); });
-        }
-        // Console rows are chipped by their level; their source is the
-        // emitting browser location, shown at the end instead of as a line
-        // number in front.
-        const isConsole = event.type === 'console';
-        const tone = consoleTone(event.consoleType);
-        const chip = isConsole ? (tone === 'warning' ? 'warn' : tone) : event.type;
-        A('.' + (isConsole ? `console.${tone}` : event.type));
-        if (!isConsole) {
-          const line = eventLine(event);
-          if (line) A('span.line #', line);
-        }
-        A('span', chipStyle, eventChipStyles[chip] ?? plainChipStyle, '#', chip);
-        A('span.msg #', event.message);
-        if (isConsole && event.source) A('span.src #', event.source);
-        const duration = event.duration;
-        if (typeof duration === 'number' && duration >= 300) {
-          A('span.dur', `color:${duration >= 1000 ? '$s-danger' : '#d97706'}`, '#', `${Math.round(duration)}ms`);
+    for (let index = 0; index < events.length;) {
+      let end = index;
+      while (end < events.length && isFoldableConsole(events[end])) end++;
+      if (end - index < 2) {
+        renderEvent(events[index], index, $sel);
+        index++;
+        continue;
+      }
+      const start = index;
+      const count = end - start;
+      A(() => {
+        if ($expandedRuns[start]) {
+          for (let i = start; i < end; i++) renderEvent(events[i], i, $sel);
+        } else {
+          A('div.event', () => {
+            A('a.msg.expand click=', () => { $expandedRuns[start] = true; }, '#', `Expand ${count}...`);
+          });
         }
       });
-    });
+      index = end;
+    }
   });
 }
 
