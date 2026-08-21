@@ -1,0 +1,159 @@
+#!/bin/sh
+# shotest-playwright: run the Playwright CLI, containerized when it matters.
+#
+# `shotest-playwright test ...` runs Playwright inside the official Playwright
+# image matching the installed @playwright/test version (via podman or docker,
+# in that order), with the project bind-mounted at its host path — the pinned
+# rendering environment that makes ShoTest's exact screenshot comparison fair.
+# Any other subcommand, and `test` with --no-container (or
+# SHOTEST_NO_CONTAINER=1), runs natively via node.
+#
+# Deliberately plain sh: a dev environment without Node.js can still run its
+# tests through this script, since node only has to exist inside the image.
+# `npx shotest test` uses this script under the hood.
+set -eu
+
+# Strip --no-container, keeping every other argument for Playwright.
+no_container=${SHOTEST_NO_CONTAINER:-}
+i=0
+n=$#
+while [ "$i" -lt "$n" ]; do
+  arg=$1
+  shift
+  if [ "$arg" = "--no-container" ]; then
+    no_container=1
+  else
+    set -- "$@" "$arg"
+  fi
+  i=$((i + 1))
+done
+first_arg=${1:-}
+
+# The real directory holding this script: the node_modules/.bin symlink is
+# followed, and pwd -P resolves directory symlinks too (a file: install links
+# the whole package directory) — mounts must use physical paths.
+resolve_script_dir() {
+  script=$0
+  while [ -L "$script" ]; do
+    link=$(readlink "$script")
+    case $link in
+      /*) script=$link ;;
+      *) script=$(dirname "$script")/$link ;;
+    esac
+  done
+  cd "$(dirname "$script")" && pwd -P
+}
+
+# Locate the installed @playwright/test: in a node_modules at or above the
+# cwd, or next to this script (a shotest checkout, or shotest's node_modules
+# sibling when installed normally).
+find_playwright() {
+  dir=$PWD
+  while :; do
+    if [ -f "$dir/node_modules/@playwright/test/package.json" ]; then
+      printf '%s\n' "$dir/node_modules/@playwright/test"
+      return 0
+    fi
+    [ "$dir" = / ] && break
+    dir=$(dirname "$dir")
+  done
+  script_dir=$(resolve_script_dir)
+  for candidate in "$script_dir/../node_modules/@playwright/test" "$script_dir/../../@playwright/test"; do
+    if [ -f "$candidate/package.json" ]; then
+      (cd "$candidate" && pwd)
+      return 0
+    fi
+  done
+  return 1
+}
+
+pw_pkg=$(find_playwright) || {
+  echo "shotest-playwright: @playwright/test not found in a node_modules directory (looked upward from $PWD)" >&2
+  exit 1
+}
+
+pw_version=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$pw_pkg/package.json" | head -n 1)
+# Note: version tags are practically stable but not contractually immutable.
+# Teams wanting byte-for-byte pinning can set SHOTEST_IMAGE to a digest
+# reference (mcr.microsoft.com/playwright@sha256:...).
+image=${SHOTEST_IMAGE:-mcr.microsoft.com/playwright:v$pw_version-noble}
+
+runner=
+if [ "$first_arg" = "test" ] && [ -z "$no_container" ]; then
+  for candidate in podman docker; do
+    if "$candidate" --version >/dev/null 2>&1; then
+      runner=$candidate
+      break
+    fi
+  done
+  if [ -z "$runner" ]; then
+    echo "ShoTest: neither podman nor docker is available — running natively." >&2
+    echo "Rendering may not match baselines made in $image." >&2
+    echo "In CI, run the job inside that image and pass --no-container; locally, install podman or docker." >&2
+  fi
+fi
+
+if [ -z "$runner" ]; then
+  command -v node >/dev/null 2>&1 || {
+    echo "shotest-playwright: node not found — install Node.js, or podman/docker for containerized 'test' runs" >&2
+    exit 1
+  }
+  exec node "$pw_pkg/cli.js" "$@"
+fi
+
+if [ -z "$pw_version" ]; then
+  echo "shotest-playwright: cannot read the @playwright/test version from $pw_pkg/package.json" >&2
+  exit 1
+fi
+
+echo "ShoTest: running tests in $runner using $image (use --no-container to run natively)"
+
+# Build the container invocation back to front, by prepending to "$@" (which
+# holds the Playwright arguments): first the image and inner command, then
+# the runner options.
+set -- "$image" node "$pw_pkg/cli.js" "$@"
+
+# Forward ShoTest's own configuration, but not the host's browser path — the
+# whole point is to use the image's browsers at /ms-playwright.
+for name in $(env | sed -n 's/^\(SHOTEST_[A-Za-z0-9_]*\)=.*/\1/p'); do
+  eval "value=\${$name:-}"
+  set -- -e "$name=$value" "$@"
+done
+
+if [ "$runner" = "podman" ]; then
+  # Rootless podman maps container root onto the invoking user, so files
+  # written to the mount come out owned by the user; disabling SELinux
+  # labeling for the container avoids relabeling the project directory.
+  set -- --security-opt label=disable "$@"
+else
+  # Docker writes to the bind mount as the container user; run as the host
+  # user so results aren't root-owned. The image has no home for that uid.
+  set -- -u "$(id -u):$(id -g)" -e HOME=/tmp/shotest-home "$@"
+fi
+
+# The shotest package and the node_modules holding @playwright/test usually
+# live inside the cwd mount, but with hoisted monorepo installs or a file:
+# link either can sit outside it — mount those too, so the config's
+# `import 'shotest'` and the Playwright CLI resolve inside the container.
+inside_pwd() {
+  case $1/ in
+    "$PWD"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+package_root=$(dirname "$(resolve_script_dir)") # bin/ -> the shotest package
+if [ "$(basename "$(dirname "$package_root")")" = "node_modules" ]; then
+  package_root=$(dirname "$package_root") # -> the node_modules holding it
+fi
+modules_dir=$(dirname "$(dirname "$pw_pkg")") # node_modules holding @playwright/test
+if ! inside_pwd "$package_root"; then
+  set -- -v "$package_root:$package_root" "$@"
+fi
+if ! inside_pwd "$modules_dir"; then
+  case $modules_dir/ in
+    "$package_root"/*) ;; # already covered by the mount above
+    *) set -- -v "$modules_dir:$modules_dir" "$@" ;;
+  esac
+fi
+
+exec "$runner" run --rm --init --ipc=host -v "$PWD:$PWD" -w "$PWD" "$@"

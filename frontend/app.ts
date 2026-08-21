@@ -60,7 +60,7 @@ interface StepEvent {
 }
 
 interface ReviewStep {
-  // Gap steps (withoutScreenshots) carry a text per side; image steps a hash
+  // Gap steps (suppressScreenshots) carry a text per side; image steps a hash
   // plus the list of events (actions, checks) recorded on that screenshot.
   acceptedGap?: string;
   currentGap?: string;
@@ -794,7 +794,7 @@ function renderStage(step: ReviewStep, fade: boolean, lists: EventList[], $ui: S
 }
 
 // A subtle placeholder for steps that deliberately produced no screenshots
-// (withoutScreenshots). It should read as "something routine happened here"
+// (suppressScreenshots). It should read as "something routine happened here"
 // without competing with the screenshots around it.
 const gapStyle = A.insertCss({
   '&': 'align-self:stretch display:flex flex-direction:column align-items:center justify-content:center gap:0.4rem border: 2px dashed $s-faint; border-radius:8px pv:1rem ph:0.75rem max-width:11rem color:$s-muted scroll-margin:1rem',
@@ -803,7 +803,7 @@ const gapStyle = A.insertCss({
 });
 
 // A gap carries no image, so its text is the only thing the reviewer can look
-// at. An empty one (withoutScreenshots('')) would otherwise draw a blank box.
+// at. An empty one (suppressScreenshots('')) would otherwise draw a blank box.
 function gapText(text: string | undefined): string {
   return text ? text : '(no description)';
 }

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   startReviewServer,
   loadTestRecords,
@@ -10,16 +11,23 @@ import {
   hasVisualChanges,
   testId,
 } from './review.js';
-import { gcPoolFiles, hasLegacyAcceptedLayout, legacyAcceptedHint } from './manifest.js';
+import {
+  gcPoolFiles,
+  hasLegacyAcceptedLayout,
+  legacyAcceptedHint,
+  type TestRecord,
+} from './manifest.js';
 
-interface VisualSummary {
+interface Summary {
   passed: number;
   changed: number;
   unchanged: number;
   noScreenshots: number;
+  failedTests: TestRecord[];
 }
 
 const require = createRequire(import.meta.url);
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function getOutputDir(): string {
   return process.env.SHOTEST_OUTPUT_DIR || 'test-results';
@@ -29,7 +37,7 @@ function getAcceptedDir(): string {
   return process.env.SHOTEST_ACCEPTED_DIR || 'test-accepted';
 }
 
-function getVisualSummary(outputDir: string, acceptedDir: string): VisualSummary | null {
+function getSummary(outputDir: string, acceptedDir: string): Summary | null {
   if (!existsSync(outputDir)) {
     return null;
   }
@@ -41,60 +49,77 @@ function getVisualSummary(outputDir: string, acceptedDir: string): VisualSummary
 
   const acceptedByKey = new Map(loadTestRecords(acceptedDir).map((test) => [testId(test), test]));
 
-  let passed = 0;
-  let changed = 0;
-  let unchanged = 0;
-  let noScreenshots = 0;
+  const summary: Summary = { passed: 0, changed: 0, unchanged: 0, noScreenshots: 0, failedTests: [] };
+  let seen = 0;
 
   for (const record of loadTestRecords(outputDir)) {
+    seen++;
+
+    if (record.status === 'skipped') {
+      continue;
+    }
+
     if (record.status !== 'passed') {
+      summary.failedTests.push(record);
       continue;
     }
 
     if (record.steps.length === 0) {
-      noScreenshots++;
+      summary.noScreenshots++;
       continue;
     }
 
-    passed++;
+    summary.passed++;
 
     const currentEntries = buildAlignEntries(record.steps);
     const acceptedEntries = buildAlignEntries(acceptedByKey.get(testId(record))?.steps ?? []);
     if (hasVisualChanges(acceptedEntries, currentEntries)) {
-      changed++;
+      summary.changed++;
     } else {
-      unchanged++;
+      summary.unchanged++;
     }
   }
 
-  if (passed === 0 && noScreenshots === 0) {
+  if (seen === 0) {
     return null;
   }
 
-  return { passed, changed, unchanged, noScreenshots };
+  return summary;
 }
 
-function printVisualSummary(): boolean {
-  const summary = getVisualSummary(getOutputDir(), getAcceptedDir());
+function printSummary(): Summary | null {
+  const summary = getSummary(getOutputDir(), getAcceptedDir());
 
   if (!summary) {
-    return false;
+    return null;
   }
 
-  const noScreenshotsText = summary.noScreenshots > 0
-    ? `, ${summary.noScreenshots} passed with no screenshots`
-    : '';
-
-  console.log(`\nShoTest visuals: ${summary.changed} changed, ${summary.unchanged} unchanged across ${summary.passed} passed test(s)${noScreenshotsText}`);
-  if (summary.changed > 0) {
-    console.log('Run "npx shotest review" to review and accept visual changes');
+  if (summary.failedTests.length > 0) {
+    console.log(`\nShoTest: ${summary.failedTests.length} failed test(s):`);
+    for (const test of summary.failedTests) {
+      const source = test.errorSource ? ` at ${test.errorSource}` : '';
+      console.log(`- ${test.file} › ${test.title} (${test.status}${source})`);
+    }
   }
-  return summary.changed > 0;
+
+  if (summary.passed > 0 || summary.noScreenshots > 0) {
+    const noScreenshotsText = summary.noScreenshots > 0
+      ? `, ${summary.noScreenshots} passed with no screenshots`
+      : '';
+
+    console.log(`\nShoTest visuals: ${summary.changed} changed, ${summary.unchanged} unchanged across ${summary.passed} passed test(s)${noScreenshotsText}`);
+    if (summary.changed > 0) {
+      console.log('Run "npx shotest review" to review and accept visual changes');
+    }
+  }
+
+  return summary;
 }
 
 // The explicit `shotest gc` sweeps both pools. Elsewhere each pool is swept
-// at the moment it can have become garbage: test-results/ after a clean full
-// run, test-accepted/ whenever the review app accepts or deletes a baseline.
+// at the moment it can have become garbage: test-results/ on every
+// `shotest collect`, test-accepted/ whenever the review app accepts or
+// deletes a baseline.
 function runGc(): void {
   const acceptedDir = getAcceptedDir();
   const legacyAccepted = hasLegacyAcceptedLayout(acceptedDir);
@@ -106,9 +131,42 @@ function runGc(): void {
   console.log(`ShoTest gc: removed ${removedResults} unreferenced file(s) from ${getOutputDir()}, ${removedAccepted} from ${acceptedDir}`);
 }
 
-function runPlaywright(argv: string[]): number {
-  const cliPath = require.resolve('@playwright/test/cli');
-  const result = spawnSync(process.execPath, [cliPath, ...argv], {
+// `shotest collect` turns results already on disk — from an earlier
+// `shotest test`, or a `shotest-playwright` run in a Node-less environment —
+// into a summary plus an exit code: 0 all good, 1 failed tests, 2 tests
+// passed but visual changes await review. Also sweeps the results pool.
+function runCollect(): number {
+  const summary = printSummary();
+  if (!summary) {
+    // Missing results (or an unreadable 1.x layout) must not pass a gate.
+    console.error(`ShoTest collect: no test results found in ${getOutputDir()}`);
+    return 1;
+  }
+
+  const removed = gcPoolFiles(getOutputDir());
+  if (removed > 0) {
+    console.log(`ShoTest gc: removed ${removed} unreferenced file(s) from ${getOutputDir()}`);
+  }
+
+  if (summary.failedTests.length > 0) return 1;
+  if (summary.changed > 0) return 2;
+  return 0;
+}
+
+/**
+ * Hand the arguments to the Playwright CLI via bin/shotest-playwright, which
+ * owns the how: `test` runs go inside the pinned Playwright container image
+ * when podman or docker is available (see the README's "Deterministic
+ * screenshots" section), everything else — and `test` with --no-container —
+ * runs natively. It is plain sh so Node-less environments can invoke it
+ * directly; Windows has no sh, so there Playwright always runs natively.
+ */
+function runPlaywright(argv: string[], noContainer: boolean): number {
+  const [command, args] = process.platform === 'win32'
+    ? [process.execPath, [require.resolve('@playwright/test/cli'), ...argv]]
+    : [path.join(packageRoot, 'bin', 'shotest-playwright'), noContainer ? [...argv, '--no-container'] : argv];
+
+  const result = spawnSync(command, args, {
     stdio: 'inherit',
     cwd: process.cwd(),
     env: process.env,
@@ -118,94 +176,13 @@ function runPlaywright(argv: string[]): number {
     throw result.error;
   }
 
-  return result.status ?? 0;
-}
-
-// ── Containerized test runs ────────────────────────────────────────
-//
-// Screenshot comparison is exact (pixel-hash equality), which is only fair
-// when every run renders identically. Rendering is a function of the browser
-// build plus the OS-level font stack, so `shotest test` runs the tests inside
-// the Playwright Docker image matching the installed @playwright/test version
-// by default. Skipped only with --no-container / SHOTEST_NO_CONTAINER=1 —
-// pass that in CI, where the job itself should already run inside the image.
-
-function playwrightVersion(): string {
-  return require('@playwright/test/package.json').version as string;
-}
-
-function containerImage(): string {
-  // Note: version tags are practically stable but not contractually
-  // immutable. Teams wanting byte-for-byte pinning can set SHOTEST_IMAGE to
-  // a digest reference (mcr.microsoft.com/playwright@sha256:...).
-  return process.env.SHOTEST_IMAGE || `mcr.microsoft.com/playwright:v${playwrightVersion()}-noble`;
-}
-
-function findContainerRunner(): string | null {
-  for (const runner of ['podman', 'docker']) {
-    const probe = spawnSync(runner, ['--version'], { stdio: 'ignore' });
-    if (!probe.error && probe.status === 0) return runner;
-  }
-  return null;
-}
-
-/**
- * Re-run `shotest test` inside the pinned Playwright image, with the project
- * mounted at its host path so every path in output and results stays valid.
- * The inner invocation is this very CLI file run by the image's node — not
- * npx, which would fall back to the registry when the local install isn't
- * visible in the mount. The inner run gets --no-container and handles
- * everything (summary, gc, --fail-on-visual-changes); we relay its status.
- */
-function runTestsInContainer(runner: string, argv: string[]): number {
-  const image = containerImage();
-  const cwd = process.cwd();
-  console.log(`ShoTest: running tests in ${runner} using ${image} (use --no-container to run natively)`);
-
-  const args = ['run', '--rm', '--init', '--ipc=host', '-v', `${cwd}:${cwd}`, '-w', cwd];
-
-  // The shotest package usually lives inside cwd (node_modules/shotest), but
-  // with hoisted monorepo installs or a file: link it can sit outside the
-  // cwd mount — mount its surrounding node_modules (or bare package root) too
-  // so the CLI and the dependencies next to it resolve inside the container.
-  const cliPath = realpathSync(process.argv[1]);
-  let packageRoot = path.dirname(path.dirname(cliPath)); // build/cli.js → package root
-  if (path.basename(path.dirname(packageRoot)) === 'node_modules') packageRoot = path.dirname(packageRoot);
-  if (!(packageRoot + path.sep).startsWith(cwd + path.sep)) args.push('-v', `${packageRoot}:${packageRoot}`);
-
-  if (runner === 'podman') {
-    // Rootless podman maps container root onto the invoking user, so files
-    // written to the mount come out owned by the user; disabling SELinux
-    // labeling for the container avoids relabeling the project directory.
-    args.push('--security-opt', 'label=disable');
-  } else {
-    // Docker writes to the bind mount as the container user; run as the host
-    // user so results aren't root-owned. The image has no home for that uid.
-    const uid = typeof process.getuid === 'function' ? process.getuid() : 0;
-    const gid = typeof process.getgid === 'function' ? process.getgid() : 0;
-    args.push('-u', `${uid}:${gid}`, '-e', 'HOME=/tmp/shotest-home');
-  }
-  for (const [key, value] of Object.entries(process.env)) {
-    // Forward ShoTest's own configuration, but not the host's browser path —
-    // the whole point is to use the image's browsers at /ms-playwright.
-    if (key.startsWith('SHOTEST_') && value !== undefined) args.push('-e', `${key}=${value}`);
-  }
-  args.push(image, 'node', cliPath, ...argv, '--no-container');
-
-  const result = spawnSync(runner, args, { stdio: 'inherit' });
-  if (result.error) throw result.error;
   return result.status ?? 1;
 }
 
 async function main(): Promise<void> {
   let argv = process.argv.slice(2);
-  let failOnVisualChanges = false;
   let noContainer = !!process.env.SHOTEST_NO_CONTAINER;
 
-  if (argv.includes('--fail-on-visual-changes')) {
-    failOnVisualChanges = true;
-    argv = argv.filter((arg) => arg !== '--fail-on-visual-changes');
-  }
   if (argv.includes('--no-container')) {
     noContainer = true;
     argv = argv.filter((arg) => arg !== '--no-container');
@@ -223,48 +200,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (firstArg === 'test' && !noContainer) {
-    const runner = findContainerRunner();
-    if (runner) {
-      // Forward the original arguments (including --fail-on-visual-changes)
-      // untouched; the containerized invocation handles the whole run.
-      process.exit(runTestsInContainer(runner, process.argv.slice(2)));
-    }
-    console.warn(
-      'ShoTest: neither podman nor docker is available — running natively.\n' +
-      `Rendering may not match baselines made in ${containerImage()}.\n` +
-      'In CI, run the job inside that image and pass --no-container; locally, install podman or docker.');
+  if (firstArg === 'collect') {
+    process.exit(runCollect());
   }
 
-  const status = runPlaywright(argv);
-
-  if (firstArg === 'test') {
-    const hasVisualChanges = printVisualSummary();
-    // A clean, unfiltered run has produced results for every test there is,
-    // so anything the spec JSONs no longer reference is garbage. Extra
-    // arguments could have filtered the run (a file, -g, --shard, ...), in
-    // which case gc would see only a partial picture — skip it then. The
-    // accepted pool is not touched here: the review app cleans it on every
-    // accept or baseline deletion.
-    if (status === 0 && argv.length === 1) {
-      const removed = gcPoolFiles(getOutputDir());
-      if (removed > 0) {
-        console.log(`ShoTest gc: removed ${removed} unreferenced file(s) from ${getOutputDir()}`);
-      }
-    }
-    if (status === 0 && failOnVisualChanges) {
-      // A gating flag must never pass because comparison was impossible.
-      if (hasLegacyAcceptedLayout(getAcceptedDir())) {
-        console.error('ShoTest: --fail-on-visual-changes: no comparison possible against the 1.x-format baseline in ' + getAcceptedDir());
-        process.exit(1);
-      }
-      if (hasVisualChanges) {
-        process.exit(1);
-      }
-    }
-  }
-
-  process.exit(status);
+  // Everything else is Playwright's, `test` included: reporting on a test
+  // run and gating on it is `shotest collect`'s job.
+  process.exit(runPlaywright(argv, noContainer));
 }
 
 try {

@@ -301,7 +301,7 @@ function alignSteps(accepted: AlignEntry[], current: AlignEntry[]): AlignedPair[
 // Whether an aligned pair is something a reviewer has to look at: one side is
 // missing (a step was added or removed), or the two sides differ. A side counts
 // as present when its field is *there* — not when it is truthy. A gap step whose
-// text is empty (withoutScreenshots('')) is still a step on that side; calling
+// text is empty (suppressScreenshots('')) is still a step on that side; calling
 // it missing reports a change the review app then shows as unchanged, leaving a
 // warning marker that cannot be inspected and an Accept button that never
 // appears. The review app's own getStepChange() applies the same rule; the two

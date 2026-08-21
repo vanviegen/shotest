@@ -309,6 +309,9 @@ let pendingFailureText = '';
 // like goto, which by itself does not screenshot: the frame right after it is
 // rarely interesting, and the next step shows where it led).
 let pendingEvents: StepEventRecord[] = [];
+// Positive: inside suppressScreenshots. forceScreenshots subtracts a million,
+// so within it the depth stays negative no matter how many suppress blocks
+// are entered — force wins regardless of nesting order.
 let suppressDepth = 0;
 let failureCaptured = false;
 
@@ -350,9 +353,12 @@ function recordConsoleEvent(consoleType: string, text: string, source?: string):
  * skips the stability and capture work, so the wrapped part runs faster.
  *
  * A failure inside the block still captures an error screenshot, and explicit
- * `screenshot(page, name)` calls still capture.
+ * `screenshot(page, name)` calls and forceScreenshots() blocks still capture.
  */
-export async function withoutScreenshots<T>(description: string, fn: () => Promise<T> | T): Promise<T> {
+export async function suppressScreenshots<T>(description: string, fn: () => Promise<T> | T): Promise<T> {
+    // Only push the gap placeholder when this call actually turns capture
+    // off: inside forceScreenshots (depth negative) suppression is inert,
+    // and real screenshots will document the block instead.
     if (suppressDepth === 0) {
         currentSteps.push({ gap: String(description) });
     }
@@ -361,6 +367,21 @@ export async function withoutScreenshots<T>(description: string, fn: () => Promi
         return await fn();
     } finally {
         suppressDepth--;
+    }
+}
+
+/**
+ * Run `fn` with screenshots always captured, overriding suppressScreenshots()
+ * blocks around it and within it alike. The common use is wrapping a helper
+ * that suppresses its own screenshots (logging in, seeding data), in the one
+ * test where that routine flow is the actual functionality under test.
+ */
+export async function forceScreenshots<T>(fn: () => Promise<T> | T): Promise<T> {
+    suppressDepth -= 1000000;
+    try {
+        return await fn();
+    } finally {
+        suppressDepth += 1000000;
     }
 }
 
@@ -414,7 +435,7 @@ function appendStep(actualPage: Page, hash: string, events: StepEventRecord[]): 
  * Take an explicitly named screenshot, recorded as a 'screenshot' event
  * carrying the name. If the page looks the same as the previous step, the
  * event simply joins that step's list. Captures even inside a
- * withoutScreenshots() block.
+ * suppressScreenshots() block.
  */
 export async function screenshot(page: Page, name: string): Promise<void> {
     await takeScreenshot(page, makeEvent('screenshot', name, getCallerLocation()), false, Date.now(), true);

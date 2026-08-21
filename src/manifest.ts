@@ -85,7 +85,7 @@ export interface ImageStepRecord {
     role?: string;
 }
 
-/** A placeholder for steps that ran without screenshots (withoutScreenshots). */
+/** A placeholder for steps that ran without screenshots (suppressScreenshots). */
 export interface GapStepRecord {
     gap: string;
 }

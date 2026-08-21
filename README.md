@@ -1,6 +1,6 @@
 # ShoTest
 
-**ShoTest 2 is here** 🎉 — screenshots are now content-hashed, tests run in a pinned container for pixel-exact comparison, and the review app was redesigned around per-step event lists with a pixel-diff view.
+**ShoTest 2 is here** 🎉 — screenshots are now content-hashed, tests run in a pinned container for pixel-exact comparison, and the review app was redesigned around per-screen event lists with a pixel-diff view.
 
 ShoTest is a small wrapper around Playwright Test that acts as a drop-in replacement and provides:
 
@@ -82,17 +82,17 @@ Most common page and locator actions are wrapped so that a screenshot is taken a
 npx shotest test
 ```
 
-This writes results to `test-results/`: one `<spec-base>.json` per spec file, plus the screenshots and HTML snapshots, named by a hash of their pixel content (so identical frames share a single file). What happened at each moment — clicks, assertions, navigations — is recorded as *events* in the JSON, each with a message, source line and the viewport box of the element involved. Steps that don't change the page share a single screenshot carrying the whole list of events. Page-level commands — `goto`, `reload`, `goBack`, `goForward`, `setViewportSize` — take no screenshot of their own: they are logged as events under the next screenshot, reading as how the page got there, and the review app shows such rows dimmed.
+This writes results to `test-results/`: one `<spec-base>.json` per spec file, plus the screenshots and HTML snapshots, named by a hash of their pixel content (so identical frames share a single file). What happened at each moment — clicks, assertions, navigations — is recorded as *events* in the JSON, each with a message, source line and the viewport box of the element involved. Steps that don't change the page share a single screenshot carrying the whole list of events.
 
 The `shotest` command forwards arguments to Playwright, so `npx shotest test --ui` maps to `playwright test --ui`.
 
-With the `--fail-on-visual-changes` flag, `shotest test` exits non-zero if the screenshots differ from the accepted baseline, even when all assertions pass — useful for enforcing visual consistency in CI.
+`npx shotest collect` summarizes the results on disk (failed tests and visual changes), cleans up unreferenced files, and exits with 0 (all good), 1 (failed tests) or 2 (tests passed, but visual changes await review) — use it after a test run, e.g. to gate CI on visual consistency.
 
 ## Deterministic screenshots
 
-Screenshot comparison is exact: two steps match only when their pixel hashes do, with no tolerance threshold. What makes that workable is a pinned rendering environment — rendering is a function of the browser build plus the OS font stack — so by default `npx shotest test` re-runs itself inside the official Playwright image matching your installed version, using `podman` or `docker` (in that order), with your project mounted at its real path. Results land in `test-results/` as usual.
+Screenshot comparison is exact: two steps match only when their pixel hashes do, with no tolerance threshold. What makes that workable is a pinned rendering environment — rendering is a function of the browser build plus the OS font stack — so by default `npx shotest test` runs Playwright inside the official Playwright image matching your installed version, using `podman` or `docker` (in that order), with your project mounted at its real path. Results land in `test-results/` as usual. (ShoTest also launches Chromium with the determinism flags its own pixel tests use, so output is stable across runs and same-architecture machines.)
 
-Stock Chromium additionally trades pixel-exactness for speed in a few timing- and CPU-dependent ways, so ShoTest launches it with the determinism flags Chromium's own pixel tests use — making output stable across runs, and across same-architecture machines.
+The container part is handled by `shotest-playwright`, a plain shell script also installed as a command: it runs the Playwright CLI in the pinned image, falling back to a native run. You can invoke it directly in dev environments that have no Node.js — node only has to exist inside the image — and follow up with `npx shotest collect` elsewhere (e.g. CI) for the summary and exit code.
 
 - Pass `--no-container` (or set `SHOTEST_NO_CONTAINER=1`) to run natively. That is the CI pattern: make the Playwright image the job's own image (GitHub Actions: `container: mcr.microsoft.com/playwright:v1.59.1-noble` on the job) and run `npx shotest test --no-container`. A machine with no container runner gets a warning and a native run.
 - Set `SHOTEST_IMAGE` to override the image, e.g. to pin a digest for byte-for-byte reproducibility.
@@ -108,13 +108,13 @@ page.describe('Create lunch talk event');
 await page.getByRole('button', { name: 'New event' }).click();
 ```
 
-Routine flows that reoccur in many tests (logging in, seeding data) would otherwise produce countless screenshots. Wrap them in `withoutScreenshots(description, fn)` to skip capture — the review tool shows a placeholder with your description instead, and the wrapped part runs faster too:
+Routine flows that reoccur in many tests (logging in, seeding data) would otherwise produce countless screenshots. Wrap them in `suppressScreenshots(description, fn)` to skip capture — the review tool shows a placeholder with your description instead, and the wrapped part runs faster too:
 
 ```ts
-import { test, withoutScreenshots } from 'shotest';
+import { test, suppressScreenshots } from 'shotest';
 
 test('create event', async ({ page }) => {
-  await withoutScreenshots('Log in as admin', async () => {
+  await suppressScreenshots('Log in as admin', async () => {
     await page.goto('/login');
     await page.getByLabel('Email').fill('admin@example.com');
     await page.getByRole('button', { name: 'Log in' }).click();
@@ -123,7 +123,7 @@ test('create event', async ({ page }) => {
 });
 ```
 
-A failure inside the block still captures an error screenshot, and explicit `screenshot(page, name)` calls still capture.
+`forceScreenshots(fn)` does the opposite: inside it screenshots are always captured, overriding `suppressScreenshots` blocks around it and within it alike. Typical use: wrapping a call to a helper that suppresses its own screenshots, in the one test where that routine flow is the actual functionality under test. A failure inside a suppressed block still captures an error screenshot, and explicit `screenshot(page, name)` calls always capture.
 
 ## Reviewing and accepting visual changes
 
@@ -135,7 +135,7 @@ npx shotest review
 
 This serves a web app on localhost and opens it in your default browser.
 
-Each screenshot is shown with its list of recorded events right beneath it, color-coded by type and prefixed with source line — browser console output included, interleaved between the events it arrived between. The viewport areas the events involved are outlined on the image; hover the image to see it unobstructed, or hover a single event to highlight just that one. When a step changed, the accepted and current versions are cross-faded, and buttons on the step's status tag pin either side or show the changed pixels as an amplified diff.
+Each screenshot is shown with its list of recorded events right beneath it, color-coded by type and prefixed with source line — browser console output included. The viewport areas the events involved are outlined on the image; hover to see it unobstructed. When a step changed, the accepted and current versions are cross-faded, and buttons on the step's status tag pin either side or show the changed pixels as an amplified diff.
 
 When you press 'Accept visuals' for a test, its screenshots are copied into `test-accepted/` (configurable through `SHOTEST_ACCEPTED_DIR`) and become the new accepted baseline. Commit this directory to version control (unlike `test-results/`). To keep it small, accepted images are recompressed to lossless WebP by a background job; hashes are computed from pixels, not file bytes, so names don't change.
 
@@ -143,7 +143,7 @@ Baselines for tests that produced no results at all are listed separately at the
 
 ## Garbage collection
 
-`npx shotest gc` deletes pool images (and HTML snapshots) in `test-results/` and `test-accepted/` that are no longer referenced by any of the JSON files there. You'll rarely need it: `test-results/` is cleaned automatically after a fully green `npx shotest test` run with no further arguments (extra arguments could mean a filtered run, which sees only part of the picture), and `test-accepted/` is cleaned whenever the review app accepts or deletes a baseline.
+`npx shotest gc` deletes pool images (and HTML snapshots) in `test-results/` and `test-accepted/` that are no longer referenced by any of the JSON files there. You'll rarely need it: `test-results/` is cleaned by every `npx shotest collect`, and `test-accepted/` is cleaned whenever the review app accepts or deletes a baseline.
 
 ## Multi-user tests
 
