@@ -691,12 +691,31 @@ function buildNavItems(): S.MenuEntry[] {
     group.push(test);
   }
 
+  // The conventional tests/ directory is noise when every spec lives there;
+  // strip it so the menu spends its width on the distinguishing part. Orphans
+  // don't count: their synthetic group label stands in for no real path.
+  const prefix = 'tests/';
+  const strip = tests.every((test) => test.orphaned || test.file.startsWith(prefix));
+
   for (const [file, groupTests] of groups) {
+    const label = strip && file.startsWith(prefix) ? file.slice(prefix.length) : file;
+    // A file with a single test needs no subtree — its row links straight to
+    // that test. (The synthetic orphan group keeps its subtree even with one
+    // entry: its label names no test, so the child row must show the title.)
+    const only = groupTests.length === 1 && !groupTests[0].orphaned ? groupTests[0] : undefined;
+    if (only) {
+      items.push({
+        icon: statusIcon(only),
+        label: () => A('span flex:1 min-width:0 overflow:hidden text-overflow:ellipsis white-space:nowrap #', label),
+        href: hrefForTest(only.id),
+      });
+      continue;
+    }
     const attention = groupTests.filter((test) => test.hasChanges).length;
     items.push({
       icon: fileStatusIcon(groupTests),
       label: () => {
-        A('span flex:1 min-width:0 overflow:hidden text-overflow:ellipsis white-space:nowrap #', file);
+        A('span flex:1 min-width:0 overflow:hidden text-overflow:ellipsis white-space:nowrap #', label);
         // A folded branch must still say its tests need looking at.
         if (attention > 0) A('span.s-s.warning', chipStyle, navBadgeStyle, '#', String(attention));
       },

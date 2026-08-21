@@ -1,6 +1,6 @@
 {
   "name": "shotest",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "description": "Playwright + visual diffs",
   "type": "module",
   "main": "./build/index.js",
