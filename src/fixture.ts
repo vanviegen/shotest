@@ -123,6 +123,29 @@ function getCallerLocation(): SourceLocation {
 
 
 
+// ── Deterministic rasterization ────────────────────────────────────
+
+// Screenshot comparison is exact, so rendering must be a pure function of the
+// page — but stock Chromium trades exactness for speed in ways that leak
+// frame-timing into the pixels. The proven one: partial raster re-rasterizes
+// only the damaged rect into a cached tile, and anti-aliased edges crossing
+// the damage boundary come out ±1–6/255 different from a full raster —
+// whether a given capture gets the partial or the full version depends on
+// how invalidations landed in frames, i.e. on timing. The rest of the set
+// pins other environment-dependent inputs, following Chromium's own pixel
+// tests: checker-imaging rasters a placeholder while an image decodes
+// (decode timing → pixels), image-animation resync ties animated images to
+// the wall clock, Skia runtime opts pick SIMD code paths by CPUID (two
+// machines, same container image, different pixels), and the color profile
+// converts every color through whatever the host claims to display.
+const CHROMIUM_DETERMINISM_ARGS = [
+    '--disable-partial-raster',
+    '--disable-checker-imaging',
+    '--disable-image-animation-resync',
+    '--disable-skia-runtime-opts',
+    '--force-color-profile=srgb',
+];
+
 // ── Stability CSS ──────────────────────────────────────────────────
 
 // Nothing is ever injected into the page for screenshots themselves — they
@@ -430,7 +453,11 @@ export async function splitIntoRoles<const Names extends readonly string[]>(page
 async function captureStep(page: Page): Promise<string | null> {
     let pngBuffer: Buffer;
     try {
-        pngBuffer = await page.screenshot({ fullPage: false });
+        // The stability stylesheet can't reach Web-Animations-API animations
+        // (element.animate() knows no CSS); this finishes those before the
+        // shot — finite ones jump to their end state, infinite ones are
+        // canceled — so a mid-flight frame can't wobble the pixels.
+        pngBuffer = await page.screenshot({ fullPage: false, animations: 'disabled' });
     } catch {
         return null; // page closed (e.g. test timed out)
     }
@@ -648,6 +675,15 @@ function getTestTitle(testInfo: TestInfo): string {
 }
 
 export const test = baseTest.extend<{ page: ShotestPage }>({
+    // Injected here rather than through defineConfig so it lands after all
+    // config/project merging, and only for the browser it belongs to.
+    launchOptions: [async ({ launchOptions, browserName }, use) => {
+        if (browserName === 'chromium') {
+            await use({ ...launchOptions, args: [...(launchOptions.args ?? []), ...CHROMIUM_DETERMINISM_ARGS] });
+        } else {
+            await use(launchOptions);
+        }
+    }, { scope: 'worker' }],
     page: async ({ page }, use, testInfo) => {
         const actualPage = page;
         const videoMode = detectVideoMode(testInfo);

@@ -92,6 +92,8 @@ With the `--fail-on-visual-changes` flag, `shotest test` exits non-zero if the s
 
 Screenshot comparison is exact: two steps match only when their pixel hashes do, with no tolerance threshold. What makes that workable is a pinned rendering environment — rendering is a function of the browser build plus the OS font stack — so by default `npx shotest test` re-runs itself inside the official Playwright image matching your installed version, using `podman` or `docker` (in that order), with your project mounted at its real path. Results land in `test-results/` as usual.
 
+Stock Chromium additionally trades pixel-exactness for speed in a few timing- and CPU-dependent ways, so ShoTest launches it with the determinism flags Chromium's own pixel tests use — making output stable across runs, and across same-architecture machines.
+
 - Pass `--no-container` (or set `SHOTEST_NO_CONTAINER=1`) to run natively. That is the CI pattern: make the Playwright image the job's own image (GitHub Actions: `container: mcr.microsoft.com/playwright:v1.59.1-noble` on the job) and run `npx shotest test --no-container`. A machine with no container runner gets a warning and a native run.
 - Set `SHOTEST_IMAGE` to override the image, e.g. to pin a digest for byte-for-byte reproducibility.
 
