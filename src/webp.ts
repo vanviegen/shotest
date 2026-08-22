@@ -20,6 +20,7 @@ import * as os from 'os';
 import * as path from 'path';
 import sharp from 'sharp';
 import { POOL_FILE_RE } from './hash.js';
+import { progressAdd, progressDone, progressStop } from './progress.js';
 
 // One core per concurrent encode; concurrency provides the parallelism.
 sharp.concurrency(1);
@@ -55,6 +56,7 @@ export async function compressAcceptedPool(dir: string): Promise<void> {
         } while (rescanRequested);
     } finally {
         running = false;
+        progressStop();
     }
 }
 
@@ -69,11 +71,16 @@ async function compressOnce(dir: string): Promise<void> {
         return;
     }
 
+    // Encoding a full pool takes a while and produces no output of its own;
+    // the bar spans every pass, so a rescan extends it instead of restarting it.
+    progressAdd('ShoTest: converting baselines to WebP', pngFiles.length);
+
     const queue = [...pngFiles];
     const workerCount = Math.min(MAX_CORES, os.availableParallelism?.() ?? os.cpus().length, queue.length);
     await Promise.all(Array.from({ length: workerCount }, async () => {
         for (let file = queue.shift(); file !== undefined; file = queue.shift()) {
             await compressFile(path.join(dir, file));
+            progressDone();
         }
     }));
 }
