@@ -138,11 +138,16 @@ function getCallerLocation(): SourceLocation {
 // the wall clock, Skia runtime opts pick SIMD code paths by CPUID (two
 // machines, same container image, different pixels), and the color profile
 // converts every color through whatever the host claims to display.
+// LCD text is the measured one: subpixel text anti-aliasing silently turns
+// off for any element the compositor promotes to its own layer (will-change,
+// a running animation, overlap with one), so the same text renders two ways
+// depending on the layer tree at capture time — grayscale AA is layer-blind.
 const CHROMIUM_DETERMINISM_ARGS = [
     '--disable-partial-raster',
     '--disable-checker-imaging',
     '--disable-image-animation-resync',
     '--disable-skia-runtime-opts',
+    '--disable-lcd-text',
     '--force-color-profile=srgb',
 ];
 
@@ -150,22 +155,22 @@ const CHROMIUM_DETERMINISM_ARGS = [
 
 // Nothing is ever injected into the page for screenshots themselves — they
 // are clean captures, and what happened (clicks, assertions) is recorded as
-// step events in the spec JSON instead. This stylesheet only pins the page
-// down visually: no animations, no smooth scrolling.
-// Note that `*` (and `*::before`/`*::after`) reaches no other pseudo-elements:
-// a transition declared on `::details-content` (a <details> unfold) or
-// `::backdrop` (a <dialog> fade) sails right past the universal rule and
-// animates anyway. Those get rules of their own — and *separate* rules, not
-// extra items in the selector list, because a browser that doesn't know a
-// pseudo-element drops the whole rule it appears in, which would silently
-// re-enable every animation on the page.
+// step events in the spec JSON instead. Animations keep their author CSS
+// (the fast-forward loop below runs them to their end instead); this CSS
+// pins only what that loop cannot reach. Smooth scrolling: a scroll glide is
+// not an Animation, so it cannot be run to its end — it must not start at
+// all. And the `::details-content` (a <details> unfold) and `::backdrop`
+// (a <dialog> fade) pseudo-elements: Chromium's getAnimations() omits their
+// transitions (measured — `::before`/`::after` are included), so they would
+// animate right through a capture. Those two get `none` outright; instant is
+// also what focus logic needs on entry, and nothing waits for a
+// pseudo-element's transitionend.
+// They stay *separate* rules, not items in one selector list, because a
+// browser that doesn't know a pseudo-element drops the whole rule it
+// appears in.
 const STABILITY_STYLE = `
     html, body, * {
         scroll-behavior: auto !important;
-    }
-    *, *::before, *::after {
-        transition: none !important;
-        animation: none !important;
     }
     *::details-content {
         transition: none !important;
@@ -180,28 +185,66 @@ const STABILITY_STYLE = `
 /**
  * Wait for the page to be visually stable enough to screenshot.
  *
- * Playwright already handles the heavy lifting — actionability waits gate every
- * click/fill, web-first assertions auto-retry, and CSS animations/transitions
- * are disabled globally by the injected overlay stylesheet. The only things
- * left that can still cause a "wobbly" screenshot are:
- *   1. Web fonts not yet loaded (text reflows mid-shot).
- *   2. The browser not having flushed the latest layout to a frame.
- *
- * So: wait (briefly) for `document.fonts.ready`, then two rAFs to ensure the
- * compositor has painted. Everything else (networkidle, MutationObserver idle
- * loops, image-load polling) was redundant and slow.
+ * Playwright's actionability waits and auto-retrying assertions cover the
+ * "is the element there" half; this covers the "has the page stopped moving"
+ * half. In order:
+ *   1. Web fonts (briefly): text reflows when a font lands mid-shot.
+ *   2. A settle loop: finish any animation that started since the injected
+ *      fast-forward loop's last pass, then wait until a frame passes with no
+ *      DOM mutations and no new animations — the window in which end-event
+ *      handlers do their cleanup (removing exited elements, dropping
+ *      will-change). Without this, captures race the app's own
+ *      async rendering and cleanup, and the loser is an extra step showing a
+ *      half-settled page — or the same page in a subtly different compositor
+ *      state, which shifts text anti-aliasing and gradient dithering by a
+ *      few channel values ("changes" no reviewer can spot).
+ *   3. Two quiet frames in a row, so the settled DOM is painted and a late
+ *      mutation burst (an app rendering asynchronously) is caught.
+ * The whole wait is capped by `timeoutMs`: a page that never goes quiet (a
+ * ticking clock) is captured as-is, as before.
  */
 export async function waitForVisualStability(page: Page, timeoutMs: number = 500) {
-    await page.evaluate((timeout: number) => new Promise<void>((resolve) => {
-        const paint = () => requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    await page.evaluate(async (timeout: number) => {
+        const deadline = performance.now() + timeout;
+        const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+
         const fonts = (document as Document & { fonts?: { ready: Promise<unknown>; status?: string } }).fonts;
         if (fonts && fonts.status !== 'loaded') {
-            const cap = setTimeout(paint, timeout);
-            fonts.ready.then(() => { clearTimeout(cap); paint(); }, () => paint());
-        } else {
-            paint();
+            await Promise.race([
+                fonts.ready.catch(() => { }),
+                new Promise((r) => setTimeout(r, timeout)),
+            ]);
         }
-    }), timeoutMs).catch(() => { });
+
+        let mutated = false;
+        const observer = new MutationObserver(() => { mutated = true; });
+        observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+        try {
+            let quietFrames = 0;
+            while (quietFrames < 2 && performance.now() < deadline) {
+                mutated = false;
+                let animations: Animation[] = [];
+                // Lingering finished animations (forwards fill) hold still:
+                // no finishing needed, and no reason to count them as unrest.
+                try { animations = document.getAnimations().filter((a) => a.playState !== 'finished'); } catch { }
+                for (const animation of animations) {
+                    // As in the injected fast-forward loop: run to the end,
+                    // cancel the endless.
+                    try { animation.finish(); } catch { try { animation.cancel(); } catch { } }
+                }
+                await frame();
+                // Apps batch DOM work behind setTimeout(0) (render queues,
+                // event debouncing), and a timer queued before this hop runs
+                // ahead of it — so work already scheduled gets to mutate, and
+                // be seen, before the frame counts as quiet. rAF hops alone
+                // can declare quiet with such a timer still pending.
+                await new Promise((r) => setTimeout(r, 0));
+                quietFrames = (mutated || animations.length > 0) ? 0 : quietFrames + 1;
+            }
+        } finally {
+            observer.disconnect();
+        }
+    }, timeoutMs).catch(() => { });
 }
 
 function stripAnsi(text: string): string {
@@ -236,10 +279,13 @@ function makeEvent(type: StepEventRecord['type'], message: string, loc: SourceLo
  * element is either present now or never will be (e.g. after a successful
  * negative assertion like not.toBeVisible). A bounded wait keeps the absent
  * case from stalling for the full default timeout; the event then simply
- * carries no box.
+ * carries no box. The page is settled before measuring — the box must mark
+ * the element where the following screenshot will show it, not mid-animation
+ * — so callers capture with alreadyStable set.
  */
-async function locatorEventBox(locator: Locator): Promise<EventBox | null> {
+async function locatorEventBox(locator: Locator, page: Page): Promise<EventBox | null> {
     await locator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+    await waitForVisualStability(page);
     return await locator.boundingBox({ timeout: 1000 }).catch(() => null);
 }
 
@@ -528,12 +574,15 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
                     // Capture *before* the action runs: the shot shows the
                     // page the action found, with the event box marking what
                     // it targeted. The action's effect shows in the next step.
+                    // Settled before measuring, so the box marks the element
+                    // at rest — where both the shot and the action find it.
                     await actualLocator.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+                    await waitForVisualStability(actualPage);
                     const box = await actualLocator.boundingBox().catch(() => null);
                     if (!box) {
                         throw new Error(failureText);
                     }
-                    await takeScreenshot(actualPage, makeEvent('action', short, loc, box), false, stepStartTimeMs);
+                    await takeScreenshot(actualPage, makeEvent('action', short, loc, box), true, stepStartTimeMs);
                 }
                 const result = await (actualLocator as any)[method](...args);
                 pendingFailureText = '';
@@ -561,14 +610,14 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         try {
             const result = await (actualLocator as any)._expect(method, options);
             if (!screenshotsSuppressed()) {
-                const box = await locatorEventBox(actualLocator);
-                await takeScreenshot(actualPage, makeEvent('assert', withTarget(label, box, actualLocator), loc, box), false, stepStartTimeMs);
+                const box = await locatorEventBox(actualLocator, actualPage);
+                await takeScreenshot(actualPage, makeEvent('assert', withTarget(label, box, actualLocator), loc, box), true, stepStartTimeMs);
             }
             pendingFailureText = '';
             return result;
         } catch (error: any) {
-            const box = await locatorEventBox(actualLocator);
-            await takeScreenshot(actualPage, makeEvent('error', withTarget(failureText, box, actualLocator), loc, box), false, stepStartTimeMs, true).catch(() => {});
+            const box = await locatorEventBox(actualLocator, actualPage);
+            await takeScreenshot(actualPage, makeEvent('error', withTarget(failureText, box, actualLocator), loc, box), true, stepStartTimeMs, true).catch(() => {});
             failureCaptured = true;
             throw error;
         }
@@ -580,9 +629,9 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         lastStepLocation = loc;
         await (actualLocator as any).waitFor(options);
         if (!screenshotsSuppressed()) {
-            const box = await locatorEventBox(actualLocator);
+            const box = await locatorEventBox(actualLocator, actualPage);
             const label = options?.state ? `waitFor ${options.state}` : 'waitFor';
-            await takeScreenshot(actualPage, makeEvent('check', withTarget(label, box, actualLocator), loc, box), false, stepStartTimeMs);
+            await takeScreenshot(actualPage, makeEvent('check', withTarget(label, box, actualLocator), loc, box), true, stepStartTimeMs);
         }
     };
 
@@ -598,14 +647,14 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             try {
                 const result = await (actualLocator as any)[method](...args);
                 if (!screenshotsSuppressed()) {
-                    const box = await locatorEventBox(actualLocator);
-                    await takeScreenshot(actualPage, makeEvent('check', withTarget(label, box, actualLocator), loc, box), false, stepStartTimeMs);
+                    const box = await locatorEventBox(actualLocator, actualPage);
+                    await takeScreenshot(actualPage, makeEvent('check', withTarget(label, box, actualLocator), loc, box), true, stepStartTimeMs);
                 }
                 pendingFailureText = '';
                 return result;
             } catch (error) {
-                const box = await locatorEventBox(actualLocator);
-                await takeScreenshot(actualPage, makeEvent('error', failureText, loc, box), false, stepStartTimeMs, true).catch(() => {});
+                const box = await locatorEventBox(actualLocator, actualPage);
+                await takeScreenshot(actualPage, makeEvent('error', failureText, loc, box), true, stepStartTimeMs, true).catch(() => {});
                 failureCaptured = true;
                 throw error;
             }
@@ -732,6 +781,36 @@ export const test = baseTest.extend<{ page: ShotestPage }>({
                 style.textContent = videoCss;
             } else {
                 style.textContent = stabilityCss;
+
+                // Fast-forward every animation and transition to its end the
+                // frame it appears, so nothing spends wall-clock time
+                // animating — which would otherwise stall actionability waits
+                // and retried assertions for the full duration. The browser
+                // dispatches the real transitionend/animationend on finish(),
+                // so app cleanup proceeds as in production, just early.
+                // Author durations stay untouched: `transition: none` would
+                // suppress those events (apps then hang on fallback timers
+                // that captures race), and a forced 1ms duration resurrects
+                // transitions an author deliberately zeroed — e.g. the common
+                // `visibility 0s` on entry, which must flip instantly because
+                // a hidden element refuses focus().
+                const fastForward = () => {
+                    try {
+                        for (const animation of document.getAnimations()) {
+                            // A finished animation lingers in getAnimations()
+                            // while a forwards fill keeps it in effect; leave
+                            // it, or finish() would re-queue finish events.
+                            if (animation.playState === 'finished') continue;
+                            // finish() throws on an animation with no end
+                            // (iterations: Infinity); cancel those, leaving
+                            // the underlying style, as
+                            // screenshot({animations:'disabled'}) would.
+                            try { animation.finish(); } catch { try { animation.cancel(); } catch { } }
+                        }
+                    } catch { }
+                    requestAnimationFrame(fastForward);
+                };
+                requestAnimationFrame(fastForward);
 
                 // The `scroll-behavior: auto !important` in that CSS only governs
                 // scrolls that don't name a behavior themselves — an explicit
