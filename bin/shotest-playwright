@@ -156,4 +156,23 @@ if ! inside_pwd "$modules_dir"; then
   esac
 fi
 
+# An npm-linked dependency (`npm link ../lib`) is a node_modules symlink whose
+# target the cwd mount does not carry, so the app fails to resolve it in the
+# container. Mount each such target at its own (physical) path; the symlink
+# then works inside exactly as it does outside.
+mounted=
+for link in "$PWD"/node_modules/* "$PWD"/node_modules/@*/*; do
+  [ -L "$link" ] || continue
+  target=$(cd "$link" 2>/dev/null && pwd -P) || continue
+  inside_pwd "$target" && continue
+  case $target/ in
+    "$package_root"/* | "$modules_dir"/*) continue ;; # already mounted above
+  esac
+  case " $mounted " in
+    *" $target "*) continue ;; # two links to one target: one mount
+  esac
+  mounted="$mounted $target"
+  set -- -v "$target:$target" "$@"
+done
+
 exec "$runner" run --rm --init --ipc=host -v "$PWD:$PWD" -w "$PWD" "$@"
