@@ -6,16 +6,16 @@
       "title": "captures browser console messages",
       "steps": [
         {
-          "image": "eab39546c9109404",
+          "image": "7b22e50dfb84447f",
           "viewport": {
             "width": 420,
             "height": 700
           },
           "events": [
             {
-              "type": "goto",
+              "type": "page",
               "message": "goto /",
-              "source": "tests/shotest.spec.js:110"
+              "source": "tests/shotest.spec.js:142"
             },
             {
               "type": "console",
@@ -36,13 +36,13 @@
                 "width": 97,
                 "height": 36
               },
-              "source": "tests/shotest.spec.js:117",
-              "duration": 118
+              "source": "tests/shotest.spec.js:149",
+              "duration": 194
             }
           ]
         },
         {
-          "image": "81183bb9df4e6b8a",
+          "image": "918fc60cb1e489c9",
           "viewport": {
             "width": 420,
             "height": 700
@@ -51,13 +51,13 @@
             {
               "type": "console",
               "consoleType": "error",
-              "message": "console error before finalx screenshot"
+              "message": "console error before final screenshot"
             },
             {
               "type": "screenshot",
               "message": "console-final",
-              "source": "tests/shotest.spec.js:123",
-              "duration": 60
+              "source": "tests/shotest.spec.js:155",
+              "duration": 52
             }
           ]
         }
@@ -68,16 +68,16 @@
       "title": "captures screenshots for locator reads and timed waits",
       "steps": [
         {
-          "image": "27af53ebe6b87c88",
+          "image": "4da8bba1d1c33963",
           "viewport": {
             "width": 420,
             "height": 700
           },
           "events": [
             {
-              "type": "goto",
+              "type": "page",
               "message": "goto /",
-              "source": "tests/shotest.spec.js:127"
+              "source": "tests/shotest.spec.js:159"
             },
             {
               "type": "check",
@@ -88,14 +88,14 @@
                 "width": 342,
                 "height": 18
               },
-              "source": "tests/shotest.spec.js:141",
-              "duration": 111
+              "source": "tests/shotest.spec.js:173",
+              "duration": 162
             },
             {
               "type": "wait",
               "message": "waitForTimeout 120ms",
-              "source": "tests/shotest.spec.js:142",
-              "duration": 163
+              "source": "tests/shotest.spec.js:174",
+              "duration": 200
             },
             {
               "type": "check",
@@ -106,8 +106,40 @@
                 "width": 342,
                 "height": 18
               },
-              "source": "tests/shotest.spec.js:143",
-              "duration": 100
+              "source": "tests/shotest.spec.js:175",
+              "duration": 118
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "tests/shotest.spec.js",
+      "title": "captures wait while busySelector matches",
+      "steps": [
+        {
+          "image": "5803f4f88a5e5605",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "page",
+              "message": "goto /",
+              "source": "tests/shotest.spec.js:104"
+            },
+            {
+              "type": "assert",
+              "message": "expect text \"ready\"",
+              "box": {
+                "x": 39,
+                "y": 134,
+                "width": 342,
+                "height": 18
+              },
+              "source": "tests/shotest.spec.js:122",
+              "duration": 175
             }
           ]
         }
@@ -118,16 +150,16 @@
       "title": "covers core wrapped actions and assertions",
       "steps": [
         {
-          "image": "eab39546c9109404",
+          "image": "7b22e50dfb84447f",
           "viewport": {
             "width": 420,
             "height": 700
           },
           "events": [
             {
-              "type": "goto",
+              "type": "page",
               "message": "goto /",
-              "source": "tests/shotest.spec.js:15"
+              "source": "tests/shotest.spec.js:16"
             },
             {
               "type": "action",
@@ -138,13 +170,13 @@
                 "width": 97,
                 "height": 36
               },
-              "source": "tests/shotest.spec.js:17",
-              "duration": 109
+              "source": "tests/shotest.spec.js:18",
+              "duration": 179
             }
           ]
         },
         {
-          "image": "81183bb9df4e6b8a",
+          "image": "918fc60cb1e489c9",
           "viewport": {
             "width": 420,
             "height": 700
@@ -159,8 +191,8 @@
                 "width": 342,
                 "height": 18
               },
-              "source": "tests/shotest.spec.js:18",
-              "duration": 90
+              "source": "tests/shotest.spec.js:19",
+              "duration": 154
             },
             {
               "type": "action",
@@ -171,13 +203,13 @@
                 "width": 342,
                 "height": 24
               },
-              "source": "tests/shotest.spec.js:21",
-              "duration": 96
+              "source": "tests/shotest.spec.js:22",
+              "duration": 143
             }
           ]
         },
         {
-          "image": "2976a33162ad2da4",
+          "image": "736506c4470cd546",
           "viewport": {
             "width": 420,
             "height": 700
@@ -192,8 +224,8 @@
                 "width": 342,
                 "height": 24
               },
-              "source": "tests/shotest.spec.js:22",
-              "duration": 95
+              "source": "tests/shotest.spec.js:23",
+              "duration": 149
             },
             {
               "type": "action",
@@ -204,13 +236,13 @@
                 "width": 342,
                 "height": 24
               },
-              "source": "tests/shotest.spec.js:23",
-              "duration": 95
+              "source": "tests/shotest.spec.js:24",
+              "duration": 161
             }
           ]
         },
         {
-          "image": "e283020f5e145b7e",
+          "image": "2bfefc9d071fc0b6",
           "viewport": {
             "width": 420,
             "height": 700
@@ -225,13 +257,13 @@
                 "width": 342,
                 "height": 24
               },
-              "source": "tests/shotest.spec.js:24",
-              "duration": 98
+              "source": "tests/shotest.spec.js:25",
+              "duration": 162
             }
           ]
         },
         {
-          "image": "b83585e53a5ba367",
+          "image": "7857f18c1a823bdc",
           "viewport": {
             "width": 420,
             "height": 700
@@ -246,8 +278,8 @@
                 "width": 342,
                 "height": 24
               },
-              "source": "tests/shotest.spec.js:25",
-              "duration": 92
+              "source": "tests/shotest.spec.js:26",
+              "duration": 118
             },
             {
               "type": "action",
@@ -258,13 +290,13 @@
                 "width": 342,
                 "height": 21
               },
-              "source": "tests/shotest.spec.js:28",
-              "duration": 97
+              "source": "tests/shotest.spec.js:29",
+              "duration": 109
             }
           ]
         },
         {
-          "image": "3f9b129e4bd2fed3",
+          "image": "57b0d1475f5ea966",
           "viewport": {
             "width": 420,
             "height": 700
@@ -279,8 +311,8 @@
                 "width": 342,
                 "height": 21
               },
-              "source": "tests/shotest.spec.js:29",
-              "duration": 95
+              "source": "tests/shotest.spec.js:30",
+              "duration": 122
             },
             {
               "type": "action",
@@ -291,13 +323,13 @@
                 "width": 13,
                 "height": 13
               },
-              "source": "tests/shotest.spec.js:32",
-              "duration": 86
+              "source": "tests/shotest.spec.js:33",
+              "duration": 155
             }
           ]
         },
         {
-          "image": "33a1a2260dc44e9e",
+          "image": "5b6f8848d8a5abb0",
           "viewport": {
             "width": 420,
             "height": 700
@@ -312,8 +344,8 @@
                 "width": 13,
                 "height": 13
               },
-              "source": "tests/shotest.spec.js:33",
-              "duration": 90
+              "source": "tests/shotest.spec.js:34",
+              "duration": 176
             },
             {
               "type": "action",
@@ -324,13 +356,13 @@
                 "width": 13,
                 "height": 13
               },
-              "source": "tests/shotest.spec.js:34",
-              "duration": 82
+              "source": "tests/shotest.spec.js:35",
+              "duration": 146
             }
           ]
         },
         {
-          "image": "754f7b348b5f12b8",
+          "image": "82cbb689cf1b2fca",
           "viewport": {
             "width": 420,
             "height": 700
@@ -345,8 +377,8 @@
                 "width": 13,
                 "height": 13
               },
-              "source": "tests/shotest.spec.js:35",
-              "duration": 95
+              "source": "tests/shotest.spec.js:36",
+              "duration": 173
             },
             {
               "type": "action",
@@ -357,13 +389,13 @@
                 "width": 95,
                 "height": 36
               },
-              "source": "tests/shotest.spec.js:38",
-              "duration": 98
+              "source": "tests/shotest.spec.js:39",
+              "duration": 91
             }
           ]
         },
         {
-          "image": "e7182e6d6a9af62c",
+          "image": "ff18c6f6edf0f836",
           "viewport": {
             "width": 420,
             "height": 700
@@ -378,13 +410,13 @@
                 "width": 342,
                 "height": 18
               },
-              "source": "tests/shotest.spec.js:39",
-              "duration": 94
+              "source": "tests/shotest.spec.js:40",
+              "duration": 117
             }
           ]
         },
         {
-          "image": "fb7eb85630e54bca",
+          "image": "3c44fbbcb8c1e901",
           "viewport": {
             "width": 420,
             "height": 700
@@ -399,13 +431,13 @@
                 "width": 139,
                 "height": 36
               },
-              "source": "tests/shotest.spec.js:42",
-              "duration": 100
+              "source": "tests/shotest.spec.js:43",
+              "duration": 196
             }
           ]
         },
         {
-          "image": "45aaa946a6648975",
+          "image": "7667244b32f6bb4d",
           "viewport": {
             "width": 420,
             "height": 700
@@ -420,7 +452,7 @@
                 "width": 342,
                 "height": 18
               },
-              "source": "tests/shotest.spec.js:43",
+              "source": "tests/shotest.spec.js:44",
               "duration": 91
             },
             {
@@ -432,13 +464,13 @@
                 "width": 76,
                 "height": 36
               },
-              "source": "tests/shotest.spec.js:45",
-              "duration": 100
+              "source": "tests/shotest.spec.js:46",
+              "duration": 153
             }
           ]
         },
         {
-          "image": "237e6df3e29fed0f",
+          "image": "24056c825c2c60fe",
           "viewport": {
             "width": 420,
             "height": 700
@@ -453,8 +485,8 @@
                 "width": 342,
                 "height": 18
               },
-              "source": "tests/shotest.spec.js:46",
-              "duration": 88
+              "source": "tests/shotest.spec.js:47",
+              "duration": 146
             },
             {
               "type": "assert",
@@ -465,14 +497,14 @@
                 "width": 342,
                 "height": 18
               },
-              "source": "tests/shotest.spec.js:47",
-              "duration": 96
+              "source": "tests/shotest.spec.js:48",
+              "duration": 119
             },
             {
               "type": "screenshot",
               "message": "core-final",
-              "source": "tests/shotest.spec.js:50",
-              "duration": 62
+              "source": "tests/shotest.spec.js:51",
+              "duration": 103
             }
           ]
         }
@@ -483,16 +515,16 @@
       "title": "covers demo helpers in non-video mode",
       "steps": [
         {
-          "image": "eab39546c9109404",
+          "image": "7b22e50dfb84447f",
           "viewport": {
             "width": 420,
             "height": 700
           },
           "events": [
             {
-              "type": "goto",
+              "type": "page",
               "message": "goto /",
-              "source": "tests/shotest.spec.js:70"
+              "source": "tests/shotest.spec.js:71"
             },
             {
               "type": "action",
@@ -503,13 +535,13 @@
                 "width": 97,
                 "height": 36
               },
-              "source": "tests/shotest.spec.js:72",
-              "duration": 115
+              "source": "tests/shotest.spec.js:73",
+              "duration": 186
             }
           ]
         },
         {
-          "image": "81183bb9df4e6b8a",
+          "image": "918fc60cb1e489c9",
           "viewport": {
             "width": 420,
             "height": 700
@@ -524,8 +556,8 @@
                 "width": 342,
                 "height": 18
               },
-              "source": "tests/shotest.spec.js:73",
-              "duration": 96
+              "source": "tests/shotest.spec.js:74",
+              "duration": 160
             },
             {
               "type": "action",
@@ -536,13 +568,13 @@
                 "width": 342,
                 "height": 24
               },
-              "source": "tests/shotest.spec.js:75",
-              "duration": 97
+              "source": "tests/shotest.spec.js:76",
+              "duration": 107
             }
           ]
         },
         {
-          "image": "9f48cdbcd1800906",
+          "image": "f94c58aaaeb8d9d6",
           "viewport": {
             "width": 420,
             "height": 700
@@ -557,13 +589,13 @@
                 "width": 342,
                 "height": 24
               },
-              "source": "tests/shotest.spec.js:76",
-              "duration": 90
+              "source": "tests/shotest.spec.js:77",
+              "duration": 116
             }
           ]
         },
         {
-          "image": "285e7126eb12cd0f",
+          "image": "c48443ac00e58bb3",
           "viewport": {
             "width": 420,
             "height": 700
@@ -572,145 +604,145 @@
             {
               "type": "wait",
               "message": "waitForTimeout 50ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 113
+              "source": "tests/shotest.spec.js:82",
+              "duration": 150
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 65
+              "source": "tests/shotest.spec.js:82",
+              "duration": 74
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 62
+              "source": "tests/shotest.spec.js:82",
+              "duration": 69
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 62
+              "source": "tests/shotest.spec.js:82",
+              "duration": 111
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 62
+              "source": "tests/shotest.spec.js:82",
+              "duration": 121
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 63
+              "source": "tests/shotest.spec.js:82",
+              "duration": 114
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 66
+              "source": "tests/shotest.spec.js:82",
+              "duration": 77
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 62
+              "source": "tests/shotest.spec.js:82",
+              "duration": 87
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 62
+              "source": "tests/shotest.spec.js:82",
+              "duration": 68
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 62
+              "source": "tests/shotest.spec.js:82",
+              "duration": 75
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 65
+              "source": "tests/shotest.spec.js:82",
+              "duration": 123
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 58
+              "source": "tests/shotest.spec.js:82",
+              "duration": 74
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 61
+              "source": "tests/shotest.spec.js:82",
+              "duration": 80
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 63
+              "source": "tests/shotest.spec.js:82",
+              "duration": 118
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 62
+              "source": "tests/shotest.spec.js:82",
+              "duration": 118
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 61
+              "source": "tests/shotest.spec.js:82",
+              "duration": 101
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 61
+              "source": "tests/shotest.spec.js:82",
+              "duration": 123
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 65
+              "source": "tests/shotest.spec.js:82",
+              "duration": 97
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 58
+              "source": "tests/shotest.spec.js:82",
+              "duration": 100
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 61
+              "source": "tests/shotest.spec.js:82",
+              "duration": 98
             },
             {
               "type": "wait",
               "message": "waitForTimeout 10ms",
-              "source": "tests/shotest.spec.js:81",
+              "source": "tests/shotest.spec.js:82",
               "duration": 61
             },
             {
               "type": "wait",
               "message": "waitForTimeout 50ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 102
+              "source": "tests/shotest.spec.js:82",
+              "duration": 104
             },
             {
               "type": "wait",
               "message": "waitForTimeout 200ms",
-              "source": "tests/shotest.spec.js:81",
-              "duration": 247
+              "source": "tests/shotest.spec.js:82",
+              "duration": 306
             }
           ]
         },
         {
-          "image": "fdbe0e39116473df",
+          "image": "6553236f26cbd274",
           "viewport": {
             "width": 420,
             "height": 700
@@ -725,14 +757,14 @@
                 "width": 342,
                 "height": 90
               },
-              "source": "tests/shotest.spec.js:82",
-              "duration": 100
+              "source": "tests/shotest.spec.js:83",
+              "duration": 165
             },
             {
               "type": "screenshot",
               "message": "demo-final",
-              "source": "tests/shotest.spec.js:84",
-              "duration": 47
+              "source": "tests/shotest.spec.js:85",
+              "duration": 96
             }
           ]
         }
@@ -743,16 +775,16 @@
       "title": "covers splitIntoRoles including repeated role names",
       "steps": [
         {
-          "image": "eab39546c9109404",
+          "image": "7b22e50dfb84447f",
           "viewport": {
             "width": 420,
             "height": 700
           },
           "events": [
             {
-              "type": "goto",
+              "type": "page",
               "message": "goto /",
-              "source": "tests/shotest.spec.js:54"
+              "source": "tests/shotest.spec.js:55"
             },
             {
               "type": "assert",
@@ -763,14 +795,14 @@
                 "width": 372,
                 "height": 37
               },
-              "source": "tests/shotest.spec.js:57",
-              "duration": 102
+              "source": "tests/shotest.spec.js:58",
+              "duration": 139
             }
           ],
           "role": "beta"
         },
         {
-          "image": "4c2d962dcb03d5c0",
+          "image": "6553236f26cbd274",
           "viewport": {
             "width": 420,
             "height": 700
@@ -784,59 +816,15 @@
                 "y": 565,
                 "width": 143,
                 "height": 36
-              },
-              "source": "tests/shotest.spec.js:59",
-              "duration": 99
-            }
-          ],
-          "role": "alpha"
-        },
-        {
-          "image": "9bbc4afb15b15be8",
-          "viewport": {
-            "width": 420,
-            "height": 700
-          },
-          "events": [
-            {
-              "type": "assert",
-              "message": "expect text \"on\"",
-              "box": {
-                "x": 39,
-                "y": 627,
-                "width": 342,
-                "height": 18
               },
               "source": "tests/shotest.spec.js:60",
-              "duration": 89
+              "duration": 246
             }
           ],
           "role": "alpha"
         },
         {
-          "image": "4c2d962dcb03d5c0",
-          "viewport": {
-            "width": 420,
-            "height": 700
-          },
-          "events": [
-            {
-              "type": "action",
-              "message": "click",
-              "box": {
-                "x": 39,
-                "y": 565,
-                "width": 143,
-                "height": 36
-              },
-              "source": "tests/shotest.spec.js:62",
-              "duration": 84
-            }
-          ],
-          "role": "beta"
-        },
-        {
-          "image": "9bbc4afb15b15be8",
+          "image": "0c2eeb3a1a55a4be",
           "viewport": {
             "width": 420,
             "height": 700
@@ -851,14 +839,58 @@
                 "width": 342,
                 "height": 18
               },
+              "source": "tests/shotest.spec.js:61",
+              "duration": 183
+            }
+          ],
+          "role": "alpha"
+        },
+        {
+          "image": "6553236f26cbd274",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "action",
+              "message": "click",
+              "box": {
+                "x": 39,
+                "y": 565,
+                "width": 143,
+                "height": 36
+              },
               "source": "tests/shotest.spec.js:63",
-              "duration": 92
+              "duration": 161
             }
           ],
           "role": "beta"
         },
         {
-          "image": "9bbc4afb15b15be8",
+          "image": "0c2eeb3a1a55a4be",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "assert",
+              "message": "expect text \"on\"",
+              "box": {
+                "x": 39,
+                "y": 627,
+                "width": 342,
+                "height": 18
+              },
+              "source": "tests/shotest.spec.js:64",
+              "duration": 170
+            }
+          ],
+          "role": "beta"
+        },
+        {
+          "image": "0c2eeb3a1a55a4be",
           "viewport": {
             "width": 420,
             "height": 700
@@ -867,14 +899,14 @@
             {
               "type": "screenshot",
               "message": "alpha-state",
-              "source": "tests/shotest.spec.js:65",
-              "duration": 50
+              "source": "tests/shotest.spec.js:66",
+              "duration": 55
             }
           ],
           "role": "alpha"
         },
         {
-          "image": "9bbc4afb15b15be8",
+          "image": "0c2eeb3a1a55a4be",
           "viewport": {
             "width": 420,
             "height": 700
@@ -883,8 +915,8 @@
             {
               "type": "screenshot",
               "message": "beta-state",
-              "source": "tests/shotest.spec.js:66",
-              "duration": 47
+              "source": "tests/shotest.spec.js:67",
+              "duration": 60
             }
           ],
           "role": "beta"
@@ -893,37 +925,94 @@
     },
     {
       "file": "tests/shotest.spec.js",
+      "title": "logs page-level commands as events without screenshots",
+      "steps": [
+        {
+          "image": "97e30388800ec19a",
+          "viewport": {
+            "width": 500,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "page",
+              "message": "setViewportSize 500×700",
+              "source": "tests/shotest.spec.js:123"
+            },
+            {
+              "type": "page",
+              "message": "goto /",
+              "source": "tests/shotest.spec.js:124"
+            },
+            {
+              "type": "page",
+              "message": "goto /?variant=1",
+              "source": "tests/shotest.spec.js:125"
+            },
+            {
+              "type": "page",
+              "message": "goBack",
+              "source": "tests/shotest.spec.js:126"
+            },
+            {
+              "type": "page",
+              "message": "goForward",
+              "source": "tests/shotest.spec.js:127"
+            },
+            {
+              "type": "page",
+              "message": "reload",
+              "source": "tests/shotest.spec.js:128"
+            },
+            {
+              "type": "assert",
+              "message": "expect visible",
+              "box": {
+                "x": 24,
+                "y": 24,
+                "width": 452,
+                "height": 37
+              },
+              "source": "tests/shotest.spec.js:129",
+              "duration": 194
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "tests/shotest.spec.js",
       "title": "negative assertions on absent elements complete quickly",
       "steps": [
         {
-          "image": "eab39546c9109404",
+          "image": "7b22e50dfb84447f",
           "viewport": {
             "width": 420,
             "height": 700
           },
           "events": [
             {
-              "type": "goto",
+              "type": "page",
               "message": "goto /",
-              "source": "tests/shotest.spec.js:150"
+              "source": "tests/shotest.spec.js:182"
             },
             {
               "type": "assert",
               "message": "expect not visible (getByText('this text exists nowhere on the page'))",
-              "source": "tests/shotest.spec.js:157",
-              "duration": 2071
+              "source": "tests/shotest.spec.js:189",
+              "duration": 2088
             },
             {
               "type": "check",
               "message": "waitFor hidden (getByText('no such element either'))",
-              "source": "tests/shotest.spec.js:158",
-              "duration": 2045
+              "source": "tests/shotest.spec.js:190",
+              "duration": 2064
             },
             {
               "type": "check",
               "message": "isHidden (getByText('still nothing'))",
-              "source": "tests/shotest.spec.js:159",
-              "duration": 2051
+              "source": "tests/shotest.spec.js:191",
+              "duration": 2065
             }
           ]
         }
@@ -937,21 +1026,21 @@
           "gap": "Prepare the counter (2x increment)"
         },
         {
-          "image": "787ae921ae4d2cdf",
+          "image": "29f1af650ca53502",
           "viewport": {
             "width": 420,
             "height": 700
           },
           "events": [
             {
-              "type": "goto",
+              "type": "page",
               "message": "goto /",
-              "source": "tests/shotest.spec.js:88"
+              "source": "tests/shotest.spec.js:89"
             },
             {
               "type": "describe",
               "message": "Verify the prepared counter",
-              "source": "tests/shotest.spec.js:96"
+              "source": "tests/shotest.spec.js:97"
             },
             {
               "type": "assert",
@@ -962,8 +1051,8 @@
                 "width": 342,
                 "height": 18
               },
-              "source": "tests/shotest.spec.js:97",
-              "duration": 107
+              "source": "tests/shotest.spec.js:98",
+              "duration": 136
             }
           ]
         }

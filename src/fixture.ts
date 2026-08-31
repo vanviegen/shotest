@@ -18,9 +18,23 @@ export interface ShotestPage extends Page {
     describe(text: string): void;
 }
 
+/** ShoTest's test options, set in the config's `use` block or via test.use(). */
+export interface ShotestTestOptions {
+    /**
+     * While this matches an element (a busy state the app marks with a class
+     * of its own — "… is typing", a pending photo swap), captures wait.
+     */
+    busySelector: string;
+}
+
 // ── Configuration ──────────────────────────────────────────────────
 
 const captureHtml = process.env.SHOTEST_CAPTURE_HTML !== 'false';
+
+// Cap on the settle wait before every capture — see waitForVisualStability.
+const SETTLE_TIMEOUT_MS = 500;
+// A busy marker may hold captures longer, but not hang the test forever.
+const BUSY_TIMEOUT_MS = 10000;
 
 type VideoMode = 'on' | 'retain-on-failure' | 'on-first-retry';
 
@@ -142,12 +156,19 @@ function getCallerLocation(): SourceLocation {
 // off for any element the compositor promotes to its own layer (will-change,
 // a running animation, overlap with one), so the same text renders two ways
 // depending on the layer tree at capture time — grayscale AA is layer-blind.
+// Disabling the GPU pins which raster path runs at all: even without a GPU
+// device, raster goes through the GPU process (SwiftShader), whose under-load
+// allocation failures drop an instance to a slightly different Skia path —
+// measured as text-only drift that never reproduces in a solo run. Font
+// hinting is host fontconfig state, pinned off like the color profile.
 const CHROMIUM_DETERMINISM_ARGS = [
     '--disable-partial-raster',
     '--disable-checker-imaging',
     '--disable-image-animation-resync',
     '--disable-skia-runtime-opts',
     '--disable-lcd-text',
+    '--disable-gpu',
+    '--font-render-hinting=none',
     '--force-color-profile=srgb',
 ];
 
@@ -202,10 +223,15 @@ const STABILITY_STYLE = `
  *      mutation burst (an app rendering asynchronously) is caught.
  * The whole wait is capped by `timeoutMs`: a page that never goes quiet (a
  * ticking clock) is captured as-is, as before.
+ *
+ * While the busySelector test option matches an element, the page is not
+ * settled — covering changes no DOM observer sees, like an <img> still
+ * decoding. Busy waits get their own, longer cap.
  */
-export async function waitForVisualStability(page: Page, timeoutMs: number = 500) {
-    await page.evaluate(async (timeout: number) => {
-        const deadline = performance.now() + timeout;
+export async function waitForVisualStability(page: Page, timeoutMs: number = SETTLE_TIMEOUT_MS) {
+    await page.evaluate(async ({ timeout, busyTimeout, busySelector }: { timeout: number; busyTimeout: number; busySelector: string }) => {
+        let deadline = performance.now() + timeout;
+        const busyDeadline = performance.now() + busyTimeout;
         const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 
         const fonts = (document as Document & { fonts?: { ready: Promise<unknown>; status?: string } }).fonts;
@@ -239,12 +265,16 @@ export async function waitForVisualStability(page: Page, timeoutMs: number = 500
                 // be seen, before the frame counts as quiet. rAF hops alone
                 // can declare quiet with such a timer still pending.
                 await new Promise((r) => setTimeout(r, 0));
-                quietFrames = (mutated || animations.length > 0) ? 0 : quietFrames + 1;
+                let busy = false;
+                if (busySelector) { try { busy = !!document.querySelector(busySelector); } catch { } }
+                // Busyness postpones the cap: a fresh settle window once it clears.
+                if (busy && performance.now() < busyDeadline) deadline = performance.now() + timeout;
+                quietFrames = (mutated || animations.length > 0 || busy) ? 0 : quietFrames + 1;
             }
         } finally {
             observer.disconnect();
         }
-    }, timeoutMs).catch(() => { });
+    }, { timeout: timeoutMs, busyTimeout: BUSY_TIMEOUT_MS, busySelector: currentBusySelector }).catch(() => { });
 }
 
 function stripAnsi(text: string): string {
@@ -348,6 +378,7 @@ function describeLocatorInspection(method: string, args: any[]): string {
 // ── Screenshot capture ─────────────────────────────────────────────
 
 let currentPoolDir = '';
+let currentBusySelector = '';
 let currentSteps: StepRecord[] = [];
 let lastStepLocation: SourceLocation | null = null;
 let pendingFailureText = '';
@@ -396,7 +427,9 @@ function recordConsoleEvent(consoleType: string, text: string, source?: string):
  * assertions, recording a single placeholder ("gap") step with the given
  * one-line description instead. Use it for routine flows that reoccur across
  * many tests (logging in, seeding data) to keep reviews focused — it also
- * skips the stability and capture work, so the wrapped part runs faster.
+ * skips the capture work, so the wrapped part runs faster. (Actions still
+ * settle first.) Also use it to await changes arriving in an undefined
+ * order (websocket pushes): no capture then falls between the arrivals.
  *
  * A failure inside the block still captures an error screenshot, and explicit
  * `screenshot(page, name)` calls and forceScreenshots() blocks still capture.
@@ -583,6 +616,10 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
                         throw new Error(failureText);
                     }
                     await takeScreenshot(actualPage, makeEvent('action', short, loc, box), true, stepStartTimeMs);
+                } else {
+                    // Skip the capture, not the settling: an action on a
+                    // still-moving page can land beside its target.
+                    await waitForVisualStability(actualPage);
                 }
                 const result = await (actualLocator as any)[method](...args);
                 pendingFailureText = '';
@@ -744,7 +781,8 @@ function getTestTitle(testInfo: TestInfo): string {
     return parts.join(' › ') || testInfo.title;
 }
 
-export const test = baseTest.extend<{ page: ShotestPage }>({
+export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>({
+    busySelector: ['', { option: true }],
     // Injected here rather than through defineConfig so it lands after all
     // config/project merging, and only for the browser it belongs to.
     launchOptions: [async ({ launchOptions, browserName }, use) => {
@@ -754,7 +792,7 @@ export const test = baseTest.extend<{ page: ShotestPage }>({
             await use(launchOptions);
         }
     }, { scope: 'worker' }],
-    page: async ({ page }, use, testInfo) => {
+    page: async ({ page, busySelector }, use, testInfo) => {
         const actualPage = page;
         const videoMode = detectVideoMode(testInfo);
 
@@ -763,6 +801,7 @@ export const test = baseTest.extend<{ page: ShotestPage }>({
         const outDir = testInfo.outputDir;
         const poolDir = path.dirname(outDir);
         currentPoolDir = poolDir;
+        currentBusySelector = busySelector;
         currentSteps = [];
         lastStepLocation = null;
         pendingFailureText = '';

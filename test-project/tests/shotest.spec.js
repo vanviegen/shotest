@@ -97,6 +97,31 @@ test('supports describe hints and screenshot suppression', async ({ page }) => {
   await expect(page.locator('#count-value')).toHaveText('2');
 });
 
+test.describe(() => {
+  test.use({ busySelector: '.busy-marker' });
+
+  test('captures wait while busySelector matches', async ({ page }) => {
+    await page.goto('/');
+
+    // The busy marker holds past the 500ms settle cap; the content change
+    // lands only as it clears, so the settle must outwait the marker.
+    await page.evaluate(() => {
+      const marker = document.createElement('div');
+      marker.className = 'busy-marker';
+      document.body.appendChild(marker);
+      window.setTimeout(() => {
+        document.getElementById('count-value').textContent = 'ready';
+        marker.remove();
+      }, 700);
+    });
+
+    const start = Date.now();
+    await waitForVisualStability(page);
+    expect(Date.now() - start).toBeGreaterThan(600);
+    await expect(page.locator('#count-value')).toHaveText('ready');
+  });
+});
+
 test('logs page-level commands as events without screenshots', async ({ page }) => {
   // All of these queue a 'page' event instead of capturing; they should show
   // up beneath the next capture (the expect below), dimmed in the review app.

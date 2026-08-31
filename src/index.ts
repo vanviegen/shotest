@@ -15,7 +15,7 @@ export * from '@playwright/test';
 
 import { defineConfig as playwrightDefineConfig } from '@playwright/test';
 import { test, expect, screenshot, waitForVisualStability, getVideoModeOverride, splitIntoRoles, suppressScreenshots, forceScreenshots } from './fixture.js';
-import type { ShotestPage, TestRecord, StepRecord, StepEventRecord } from './fixture.js';
+import type { ShotestPage, ShotestTestOptions, TestRecord, StepRecord, StepEventRecord } from './fixture.js';
 
 function applyShotestDefaults(config: Record<string, any>): Record<string, any> {
   const videoMode = getVideoModeOverride();
@@ -32,13 +32,13 @@ function applyShotestDefaults(config: Record<string, any>): Record<string, any> 
 }
 
 export function defineConfig(
-  ...configs: Parameters<typeof playwrightDefineConfig>
-): ReturnType<typeof playwrightDefineConfig> {
-  const updatedConfigs = configs.map((config) => applyShotestDefaults(config as Record<string, any>)) as Parameters<typeof playwrightDefineConfig>;
+  ...configs: Parameters<typeof playwrightDefineConfig<ShotestTestOptions>>
+): ReturnType<typeof playwrightDefineConfig<ShotestTestOptions>> {
+  const updatedConfigs = configs.map((config) => applyShotestDefaults(config as Record<string, any>)) as Parameters<typeof playwrightDefineConfig<ShotestTestOptions>>;
   return playwrightDefineConfig(...updatedConfigs);
 }
 
 export { test, expect, screenshot, waitForVisualStability, splitIntoRoles, suppressScreenshots, forceScreenshots };
-export type { ShotestPage, TestRecord, StepRecord, StepEventRecord };
+export type { ShotestPage, ShotestTestOptions, TestRecord, StepRecord, StepEventRecord };
 
 export { demoTap, demoType, demoPause, demoSwipe } from './video.js';
