@@ -95,11 +95,22 @@ interface TestDetail {
   orphaned: boolean;
 }
 
+// How the review server is doing. Everything this app offers — accepting,
+// reverting, even the images — comes from that one server, so a connection
+// that is down (or was never there) is worth stating up front rather than
+// letting clicks fail one at a time.
+//
+// 'gone' is the same silence with a known cause: under --close-on-accept the
+// server exits the moment the last change is accepted. That is the happy
+// ending, not a failure, and is worded as such.
+type Connection = 'ok' | 'lost' | 'gone';
+
 interface ReviewState {
   tests: TestSummary[];
   loadingTests: boolean;
   scale: number;
   toggleShowNew: boolean;
+  connection: Connection;
 }
 
 const state = A.proxy<ReviewState>({
@@ -107,6 +118,7 @@ const state = A.proxy<ReviewState>({
   loadingTests: true,
   scale: 0.8,
   toggleShowNew: true,
+  connection: 'ok',
 });
 
 // Detail data lives per open panel (a pinned test panel keeps showing its own
@@ -226,13 +238,65 @@ function errorMessage(error: unknown): string {
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  let response: Response;
+  try {
+    response = await fetch(url, init);
+  } catch (error) {
+    // `fetch` rejects — rather than resolving with a bad status — exactly when
+    // no answer came back at all: the server is down or unreachable.
+    if (state.connection === 'ok') state.connection = 'lost';
+    throw error;
+  }
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error((body as { error?: string } | null)?.error || `${response.status} ${response.statusText}`);
   }
   return body as T;
 }
+
+// A failed request is worth a toast only while the server is up: once the
+// connection dialog is on screen it has already given the reason, and every
+// request in flight would otherwise repeat it.
+function reportFailure(title: string, error: unknown): void {
+  if (state.connection !== 'ok') return;
+  S.toast({ title, message: errorMessage(error), type: 'danger' });
+}
+
+const PING_INTERVAL_MS = 3000;
+
+// Notice a server that goes away while the page just sits there — otherwise
+// the first sign would be a button that does nothing, possibly much later.
+async function pingServer(): Promise<void> {
+  if (state.connection === 'gone') return;
+  try {
+    await fetchJson('/api/ping');
+    // Back up. That is a new server process, quite possibly on new results,
+    // so reload rather than carry on with what this page still has.
+    if (state.connection === 'lost') location.reload();
+  } catch { }
+}
+
+setInterval(() => void pingServer(), PING_INTERVAL_MS);
+
+// The dialog is modal and cannot be dismissed: there is nothing useful to do
+// on the page behind it, and clicking it away would only invite that.
+A.derive(() => {
+  const connection = state.connection;
+  if (connection === 'ok') return;
+  void S.dialog({
+    allowCancel: false,
+    header: connection === 'gone' ? 'Review complete' : 'No connection to the review server',
+    content: () => {
+      if (connection === 'gone') {
+        A('p m:0 rich=', 'All screenshots have been accepted, and `shotest review --close-on-accept` has exited.');
+        A('p m:0 color:$s-muted #You can close this tab.');
+      } else {
+        A('p m:0 #This page cannot reach the ShoTest review server, so nothing on it can be loaded or accepted.');
+        A('p m:0 color:$s-muted rich=', 'It was probably stopped. Run `npx shotest review` again and this page will pick it up by itself.');
+      }
+    },
+  });
+});
 
 async function fetchTests(): Promise<void> {
   state.loadingTests = true;
@@ -249,7 +313,7 @@ async function fetchTests(): Promise<void> {
     // actually changed redraw — keeping the nav pane's DOM and scroll intact.
     A.copy(state, 'tests', tests);
   } catch (error) {
-    S.toast({ title: 'Could not load tests', message: errorMessage(error), type: 'danger' });
+    reportFailure('Could not load tests', error);
   } finally {
     state.loadingTests = false;
   }
@@ -258,13 +322,23 @@ async function fetchTests(): Promise<void> {
 async function acceptChanges(ctx: TestPanelCtx): Promise<void> {
   const orphaned = ctx.$local.detail?.orphaned ?? false;
   const acceptedIndex = state.tests.findIndex((test) => test.id === ctx.id);
+  let result: { closing?: boolean } | null;
   try {
-    await fetchJson(`/api/accept/${encodeURIComponent(ctx.id)}`, { method: 'POST' });
+    result = await fetchJson<{ closing?: boolean }>(`/api/accept/${encodeURIComponent(ctx.id)}`, { method: 'POST' });
   } catch (error) {
-    S.toast({ title: orphaned ? 'Delete failed' : 'Accept failed', message: errorMessage(error), type: 'danger' });
+    reportFailure(orphaned ? 'Delete failed' : 'Accept failed', error);
     return;
   }
   S.toast({ message: orphaned ? 'Stale baseline deleted' : 'Visuals accepted', type: 'success', duration: 3000 });
+
+  // Nothing left to review, and under --close-on-accept the server says so by
+  // exiting. Reloading the list or moving to a next test would just run into
+  // a closed port.
+  if (result?.closing) {
+    state.connection = 'gone';
+    return;
+  }
+
   await fetchTests();
 
   // On to the next test needing review, or back to the overview when this was
@@ -280,7 +354,7 @@ async function revertChanges(ctx: TestPanelCtx): Promise<void> {
     await fetchJson(`/api/revert/${encodeURIComponent(ctx.id)}`, { method: 'POST' });
   } catch (error) {
     ctx.$local.loading = false;
-    S.toast({ title: 'Revert failed', message: errorMessage(error), type: 'danger' });
+    reportFailure('Revert failed', error);
     return;
   }
   S.toast({ message: 'Accepted visuals reverted to git HEAD', type: 'success', duration: 3000 });
@@ -364,6 +438,9 @@ function selectRelativeTest(offset: number): void {
 
 document.addEventListener('keydown', (event) => {
   if (isTextEntryTarget(event.target)) return;
+  // A dialog is modal — 'a' must not accept a test behind the connection
+  // dialog (which is exactly when accepting cannot work).
+  if (S.isDialogOpen()) return;
 
   if (event.ctrlKey && !event.altKey && !event.metaKey) {
     if (event.key === 'ArrowUp') {
@@ -1088,7 +1165,7 @@ function drawTestPanel($panel: S.Panel<{ id: string }>): void {
         $local.detail = await fetchJson<TestDetail>(`/api/test/${encodeURIComponent(id)}`);
       } catch (error) {
         $local.detail = null;
-        S.toast({ title: 'Could not load test', message: errorMessage(error), type: 'danger' });
+        reportFailure('Could not load test', error);
       } finally {
         $local.loading = false;
       }

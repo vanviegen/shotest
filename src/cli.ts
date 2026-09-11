@@ -191,7 +191,9 @@ async function main(): Promise<void> {
   const firstArg = argv[0];
 
   if (firstArg === 'review') {
-    await startReviewServer();
+    // Exits by itself once nothing is left to review, so that waiting for the
+    // command to finish is a way to wait for a human to accept the changes.
+    await startReviewServer({ closeOnAccept: argv.includes('--close-on-accept') });
     return;
   }
 

@@ -1,0 +1,20 @@
+# Dev container image for ShoTest: Node (for building and running the CLI, the
+# review server and the frontend bundle) plus the bits Playwright's own
+# installer needs when browsers are pulled in ad hoc.
+
+FROM docker.io/library/node:22-bookworm-slim
+ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl git sudo bash procps psmisc ripgrep less nano \
+      openssh-client unzip zip xz-utils build-essential pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+# node's image already has a uid 1000 user named 'node'; TPS wants uid 1000 to
+# own its home, which it does.
+RUN echo 'node ALL=(ALL) NOPASSWD:ALL' >/etc/sudoers.d/node
+USER node
+WORKDIR /work
+
+# The review app, served by `shotest review`.
+EXPOSE 3847
+LABEL tps.service.review="npm run review"
+LABEL tps.service.test="npm test"

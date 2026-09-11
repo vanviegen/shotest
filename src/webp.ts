@@ -31,7 +31,7 @@ const MAX_CORES = 8;
 // them on every pass for the lifetime of this process.
 const keepAsPng = new Set<string>();
 
-let running = false;
+let activePass: Promise<void> | undefined;
 let rescanRequested = false;
 
 /**
@@ -39,25 +39,32 @@ let rescanRequested = false;
  * deleting the PNG once its replacement is on disk. Runs in the background;
  * calling it while a pass is active schedules a rescan after that pass, so
  * images from a fresh accept are always picked up.
+ *
+ * The returned promise resolves when the pool is fully converted — including
+ * any rescan scheduled by a concurrent call, so awaiting it is a "the pool is
+ * done" signal no matter who started the work. `shotest review
+ * --close-on-accept` awaits exactly that before exiting, so it never leaves
+ * a half-converted baseline behind.
  */
-export async function compressAcceptedPool(dir: string): Promise<void> {
+export function compressAcceptedPool(dir: string): Promise<void> {
     // Callers pass both relative and absolute paths; keepAsPng keys on the
     // full path, so normalize before anything is recorded under it.
     dir = path.resolve(dir);
-    if (running) {
+    if (activePass) {
         rescanRequested = true;
-        return;
+        return activePass;
     }
-    running = true;
-    try {
-        do {
-            rescanRequested = false;
-            await compressOnce(dir);
-        } while (rescanRequested);
-    } finally {
-        running = false;
-        progressStop();
-    }
+    return activePass = (async () => {
+        try {
+            do {
+                rescanRequested = false;
+                await compressOnce(dir);
+            } while (rescanRequested);
+        } finally {
+            activePass = undefined;
+            progressStop();
+        }
+    })();
 }
 
 async function compressOnce(dir: string): Promise<void> {

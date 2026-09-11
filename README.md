@@ -147,6 +147,10 @@ When you press 'Accept visuals' for a test, its screenshots are copied into `tes
 
 Baselines for tests that produced no results at all are listed separately at the bottom, under *not in test-results/*. Usually their test was renamed or deleted and the baseline should go — but the same thing happens when a test simply didn't run (e.g. a filtered run), so ShoTest never removes one on its own. Selecting such an entry shows what would be deleted, and 'Delete baseline' removes it.
 
+### Waiting for the reviewer
+
+`npx shotest review --close-on-accept` ends the moment nothing is left to review: when the last change has been accepted (and the accepted images have been recompressed to WebP), or immediately when the run held no changes at all. Waiting for the command to exit is then the same thing as waiting for a human to accept your visual changes — handy in a script, and the reason it exists: an AI agent can run it and block until you have had your say.
+
 ## Garbage collection
 
 `npx shotest gc` deletes pool images (and HTML snapshots) in `test-results/` and `test-accepted/` that are no longer referenced by any of the JSON files there. You'll rarely need it: `test-results/` is cleaned by every `npx shotest collect`, and `test-accepted/` is cleaned whenever the review app accepts or deletes a baseline.

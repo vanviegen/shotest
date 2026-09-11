@@ -48,6 +48,13 @@ const reviewUiPath = path.join(thisDir, '..', 'build.frontend', 'index.html');
 export interface StartReviewServerOptions {
     port?: number;
     openBrowser?: boolean;
+    /**
+     * Exit the process once nothing is left to review — right away when every
+     * test already matches its baseline, or as soon as the last change is
+     * accepted. Lets a script (or an agent) wait for human acceptance by
+     * simply waiting for `shotest review` to end.
+     */
+    closeOnAccept?: boolean;
 }
 
 // ── Screenshot files ───────────────────────────────────────────────
@@ -466,6 +473,27 @@ function acceptTest(file: string, title: string): void {
     void compressAcceptedPool(acceptedDir);
 }
 
+// ── Closing when the review is done ────────────────────────────────
+
+// Whether anything is still waiting for a human: a test whose visuals changed,
+// or a stale baseline to delete. The same verdict the review app's overview
+// counts ("changed" plus "not in test-results/"), so what the reviewer sees as
+// an empty worklist is exactly what closes the server.
+function reviewPending(): boolean {
+    return getTests().some((test) => test.hasChanges);
+}
+
+// `--close-on-accept`: once nothing is left to review, the app has no purpose
+// left, so end the process — a script or an agent that started the server can
+// then wait for it to exit instead of polling for acceptance. The WebP
+// conversion is awaited first, so the caller finds baselines it can commit as
+// they are rather than a pool that is still half PNG.
+async function exitWhenDone(acceptedDir: string, reason: string): Promise<never> {
+    console.log(`\nShoTest review: ${reason} — exiting (--close-on-accept).`);
+    await compressAcceptedPool(acceptedDir);
+    process.exit(0);
+}
+
 // ── Reverting from git ─────────────────────────────────────────────
 
 function acceptedJsonGitPath(file: string): string {
@@ -578,6 +606,7 @@ function announceServer(port: number, openBrowser: boolean) {
 export function startReviewServer(options: StartReviewServerOptions = {}): Promise<http.Server> {
     const preferredPort = options.port ?? defaultPreferredPort;
     const openBrowser = options.openBrowser ?? true;
+    const closeOnAccept = options.closeOnAccept ?? false;
     const resolvedOutputDir = resolveReviewDirectory(outputDir);
     const resolvedAcceptedDir = resolveReviewDirectory(acceptedDir);
 
@@ -611,6 +640,12 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
     // Finish any pool compression a previous session left half done.
     void compressAcceptedPool(resolvedAcceptedDir);
 
+    // Nothing to review at all: don't bother binding a port or opening a
+    // browser on an empty worklist.
+    if (closeOnAccept && !reviewPending()) {
+        return exitWhenDone(resolvedAcceptedDir, 'no changes to review');
+    }
+
     let currentPort = preferredPort;
 
     const server = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
@@ -620,6 +655,15 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
         try {
             if (req.method === 'GET' && !pathname.startsWith('/api/') && !pathname.startsWith('/image/')) {
                 serveFile(res, reviewUiPath, 'text/html; charset=utf-8');
+                return;
+            }
+
+            // The review app polls this to notice the server going away (it
+            // then says so in a dialog, rather than silently showing a page
+            // whose buttons no longer do anything). Deliberately cheaper than
+            // /api/tests, which re-reads and re-aligns every baseline.
+            if (pathname === '/api/ping') {
+                serveJson(res, { ok: true });
                 return;
             }
 
@@ -641,7 +685,17 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
                 const id = readTestId(res, acceptMatch[1]);
                 if (!id) return;
                 acceptTest(id.file, id.title);
-                serveJson(res, { ok: true });
+
+                // The review app needs to know this was the last one: it says
+                // so in a dialog instead of reporting the server's
+                // disappearance as a connection failure.
+                const closing = closeOnAccept && !reviewPending();
+                serveJson(res, { ok: true, closing });
+                if (closing) {
+                    // Only once the answer is on the wire — exiting first
+                    // would drop it.
+                    res.on('finish', () => void exitWhenDone(resolvedAcceptedDir, 'everything accepted'));
+                }
                 return;
             }
 
