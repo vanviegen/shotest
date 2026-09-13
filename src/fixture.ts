@@ -1,8 +1,9 @@
 import { test as baseTest, expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
+import { fileURLToPath } from 'url';
 import { stripPngMetadata } from './png.js';
-import { hashImagePixels } from './hash.js';
+import { diffImageBox, hashImagePixels } from './hash.js';
 import { mergeTestRecord, type StepEventRecord, type StepRecord, type TestRecord } from './manifest.js';
 
 export { expect };
@@ -25,16 +26,37 @@ export interface ShotestTestOptions {
      * of its own — "… is typing", a pending photo swap), captures wait.
      */
     busySelector: string;
+    /**
+     * Capture every frame twice, some time apart, and fail the test when the
+     * two differ — finding in one run the frames that can never be still (an
+     * animated GIF, a playing video, a canvas drawn every frame), which no
+     * wait can fix: stop capturing them (suppressScreenshots) instead. `true`
+     * puts 150ms between the two captures; a number sets the interval in
+     * milliseconds. Defaults to the SHOTEST_DETECT_UNSTABLE environment
+     * variable, read the same way.
+     */
+    detectUnstable: boolean | number;
 }
 
 // ── Configuration ──────────────────────────────────────────────────
 
 const captureHtml = process.env.SHOTEST_CAPTURE_HTML !== 'false';
 
-// Cap on the settle wait before every capture — see waitForVisualStability.
+// Cap on the settle wait before every capture — see settlePage.
 const SETTLE_TIMEOUT_MS = 500;
 // A busy marker may hold captures longer, but not hang the test forever.
 const BUSY_TIMEOUT_MS = 10000;
+// The interval between the two captures of a detectUnstable check.
+const DETECT_UNSTABLE_INTERVAL_MS = 150;
+
+/** `true`/`1`/`on` → the default interval, a number → that many ms, else off. */
+function parseDetectUnstable(value: boolean | number | string | undefined): number {
+    if (typeof value === 'number') return value > 0 ? value : 0;
+    const text = String(value ?? '').trim().toLowerCase();
+    if (!text || text === '0' || text === 'false' || text === 'off') return 0;
+    const ms = Number(text);
+    return Number.isFinite(ms) ? ms : DETECT_UNSTABLE_INTERVAL_MS;
+}
 
 type VideoMode = 'on' | 'retain-on-failure' | 'on-first-retry';
 
@@ -203,6 +225,15 @@ const STABILITY_STYLE = `
     }
 `;
 
+/** What a settle wait found: quiet, or what kept the page moving. */
+interface SettleResult {
+    settled: boolean;
+    /** When not settled: the last thing seen moving, e.g. 'the DOM kept mutating (last: attribute "style" on div.glow)'. */
+    unrest: string;
+}
+
+const SETTLED: SettleResult = { settled: true, unrest: '' };
+
 /**
  * Wait for the page to be visually stable enough to screenshot.
  *
@@ -212,27 +243,54 @@ const STABILITY_STYLE = `
  *   1. Web fonts (briefly): text reflows when a font lands mid-shot.
  *   2. A settle loop: finish any animation that started since the injected
  *      fast-forward loop's last pass, then wait until a frame passes with no
- *      DOM mutations and no new animations — the window in which end-event
- *      handlers do their cleanup (removing exited elements, dropping
- *      will-change). Without this, captures race the app's own
+ *      DOM mutations, no new animations and no scrolling — the window in
+ *      which end-event handlers do their cleanup (removing exited elements,
+ *      dropping will-change). Without this, captures race the app's own
  *      async rendering and cleanup, and the loser is an extra step showing a
  *      half-settled page — or the same page in a subtly different compositor
  *      state, which shifts text anti-aliasing and gradient dithering by a
  *      few channel values ("changes" no reviewer can spot).
  *   3. Two quiet frames in a row, so the settled DOM is painted and a late
  *      mutation burst (an app rendering asynchronously) is caught.
- * The whole wait is capped by `timeoutMs`: a page that never goes quiet (a
- * ticking clock) is captured as-is, as before.
+ * Scrolling is neither a DOM mutation nor an Animation — `el.scrollTop = y`
+ * in a requestAnimationFrame loop, a chat log re-anchoring itself a tick
+ * after a message lands — so the loop also listens for scroll events, which
+ * the browser dispatches (for every scroller, captured at the document) in
+ * the frame after the scroll, ahead of the rAF callbacks the loop hops on.
+ *
+ * The whole wait is capped by `timeoutMs`. The result says whether the page
+ * went quiet and, if not, what was last seen moving — which the capture turns
+ * into a test failure naming the culprit, since a frame of a page that never
+ * settles cannot be compared against anything.
  *
  * While the busySelector test option matches an element, the page is not
  * settled — covering changes no DOM observer sees, like an <img> still
- * decoding. Busy waits get their own, longer cap.
+ * decoding. Busy waits get their own, longer cap; `busy: false` leaves the
+ * marker out, for a settle that precedes no capture.
  */
-export async function waitForVisualStability(page: Page, timeoutMs: number = SETTLE_TIMEOUT_MS) {
-    await page.evaluate(async ({ timeout, busyTimeout, busySelector }: { timeout: number; busyTimeout: number; busySelector: string }) => {
+async function settlePage(page: Page, { timeoutMs = SETTLE_TIMEOUT_MS, busy = true }: { timeoutMs?: number; busy?: boolean } = {}): Promise<SettleResult> {
+    const settleInPage = async ({ timeout, busyTimeout, busySelector }: { timeout: number; busyTimeout: number; busySelector: string }): Promise<SettleResult> => {
         let deadline = performance.now() + timeout;
         const busyDeadline = performance.now() + busyTimeout;
         const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+
+        // 'div#log.chat.open': enough to find the element in the app.
+        const describe = (node: unknown): string => {
+            if (node === document || node === window) return 'the document';
+            const el = node instanceof Element ? node : node instanceof Node ? node.parentElement : null;
+            if (!el) return 'an unknown element';
+            const classes = typeof el.className === 'string' ? el.className.trim().split(/\s+/).filter(Boolean).slice(0, 3) : [];
+            return el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + classes.map((c) => '.' + c).join('');
+        };
+        const describeMutation = (record: MutationRecord): string =>
+            record.type === 'attributes' ? `attribute ${JSON.stringify(record.attributeName)} on ${describe(record.target)}`
+                : record.type === 'characterData' ? `text in ${describe(record.target)}`
+                    : `children of ${describe(record.target)}`;
+        const describeAnimation = (animation: Animation): string => {
+            const name = (animation as CSSAnimation).animationName ?? (animation as CSSTransition).transitionProperty;
+            const target = (animation.effect as KeyframeEffect | null)?.target;
+            return (name ? `${name} on ` : '') + describe(target);
+        };
 
         const fonts = (document as Document & { fonts?: { ready: Promise<unknown>; status?: string } }).fonts;
         if (fonts && fonts.status !== 'loaded') {
@@ -242,13 +300,21 @@ export async function waitForVisualStability(page: Page, timeoutMs: number = SET
             ]);
         }
 
-        let mutated = false;
-        const observer = new MutationObserver(() => { mutated = true; });
+        let mutation = null as MutationRecord | null;
+        let scrolled = null as EventTarget | null;
+        // Reset from a function: an assignment in the loop body would narrow
+        // both to null for the rest of the iteration, callbacks unseen.
+        const reset = () => { mutation = null; scrolled = null; };
+        const observer = new MutationObserver((records) => { mutation = records[records.length - 1]; });
         observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+        const onScroll = (event: Event) => { scrolled = event.target; };
+        document.addEventListener('scroll', onScroll, { capture: true, passive: true });
         try {
             let quietFrames = 0;
-            while (quietFrames < 2 && performance.now() < deadline) {
-                mutated = false;
+            let lastUnrest = '';
+            while (quietFrames < 2) {
+                if (performance.now() >= deadline) return { settled: false, unrest: lastUnrest };
+                reset();
                 let animations: Animation[] = [];
                 // Lingering finished animations (forwards fill) hold still:
                 // no finishing needed, and no reason to count them as unrest.
@@ -269,12 +335,42 @@ export async function waitForVisualStability(page: Page, timeoutMs: number = SET
                 if (busySelector) { try { busy = !!document.querySelector(busySelector); } catch { } }
                 // Busyness postpones the cap: a fresh settle window once it clears.
                 if (busy && performance.now() < busyDeadline) deadline = performance.now() + timeout;
-                quietFrames = (mutated || animations.length > 0 || busy) ? 0 : quietFrames + 1;
+                const unrest = mutation ? `the DOM kept mutating (last: ${describeMutation(mutation)})`
+                    : animations.length > 0 ? `animations kept starting (last: ${describeAnimation(animations[animations.length - 1])})`
+                        : scrolled ? `scrolling kept going (last: ${describe(scrolled)})`
+                            : busy ? `busySelector ${JSON.stringify(busySelector)} kept matching`
+                                : '';
+                if (unrest) lastUnrest = unrest;
+                quietFrames = unrest ? 0 : quietFrames + 1;
             }
+            return { settled: true, unrest: '' };
         } finally {
             observer.disconnect();
+            document.removeEventListener('scroll', onScroll, { capture: true });
         }
-    }, { timeout: timeoutMs, busyTimeout: BUSY_TIMEOUT_MS, busySelector: currentBusySelector }).catch(() => { });
+    };
+
+    const params = { timeout: timeoutMs, busyTimeout: BUSY_TIMEOUT_MS, busySelector: busy ? currentBusySelector : '' };
+    // A navigation mid-wait destroys the execution context — and the new
+    // document is what the capture will show, so settle that one instead.
+    // Losing it twice reads as the page not holding still either.
+    for (let attempt = 0; ; attempt++) {
+        try {
+            return await page.evaluate(settleInPage, params);
+        } catch {
+            if (page.isClosed()) return SETTLED; // nothing left to capture; the capture reports that
+            if (attempt > 0) return { settled: false, unrest: 'the page kept navigating' };
+        }
+    }
+}
+
+/**
+ * Wait for the page to settle (see settlePage), for tests that measure or
+ * capture the page themselves. Resolves to whether it did within the cap: a
+ * page that never goes quiet is reported, not waited on forever.
+ */
+export async function waitForVisualStability(page: Page, timeoutMs: number = SETTLE_TIMEOUT_MS): Promise<boolean> {
+    return (await settlePage(page, { timeoutMs })).settled;
 }
 
 function stripAnsi(text: string): string {
@@ -311,12 +407,13 @@ function makeEvent(type: StepEventRecord['type'], message: string, loc: SourceLo
  * case from stalling for the full default timeout; the event then simply
  * carries no box. The page is settled before measuring — the box must mark
  * the element where the following screenshot will show it, not mid-animation
- * — so callers capture with alreadyStable set.
+ * — and the settle's verdict is handed back for the capture to act on.
  */
-async function locatorEventBox(locator: Locator, page: Page): Promise<EventBox | null> {
+async function locatorEventBox(locator: Locator, page: Page): Promise<{ box: EventBox | null; settle: SettleResult }> {
     await locator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
-    await waitForVisualStability(page);
-    return await locator.boundingBox({ timeout: 1000 }).catch(() => null);
+    const settle = await settlePage(page);
+    const box = await locator.boundingBox({ timeout: 1000 }).catch(() => null);
+    return { box, settle };
 }
 
 function truncate(text: string, max: number): string {
@@ -379,6 +476,7 @@ function describeLocatorInspection(method: string, args: any[]): string {
 
 let currentPoolDir = '';
 let currentBusySelector = '';
+let currentDetectUnstable = 0; // ms between the two captures, 0 = off
 let currentSteps: StepRecord[] = [];
 let lastStepLocation: SourceLocation | null = null;
 let pendingFailureText = '';
@@ -464,27 +562,82 @@ export async function forceScreenshots<T>(fn: () => Promise<T> | T): Promise<T> 
     }
 }
 
+/**
+ * A capture that could not be taken at rest: the page never settled, or (with
+ * detectUnstable) two captures of it differed. Thrown after the frame has
+ * been recorded — with an error event naming the cause — so the review app
+ * shows what the page looked like.
+ */
+export class StabilityError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'StabilityError';
+    }
+}
+
+// Playwright points its report at the first frame it finds in the test file,
+// so ShoTest's own frames only get in the way. Matched by the installed
+// package path and by this file's own directory (a linked checkout).
+const ownDir = path.dirname(fileURLToPath(import.meta.url));
+function stripShotestFrames(error: any): void {
+    if (typeof error?.stack === 'string') {
+        error.stack = error.stack.split('\n')
+            .filter((line: string) => !/shotest\//.test(line) && !line.includes(ownDir))
+            .join('\n');
+    }
+}
+
+/**
+ * Settle (unless `settle` says the caller already did), capture and record
+ * a step. A capture of a page that never went quiet still gets recorded —
+ * the reviewer wants to see it — but then fails the test, unless screenshots
+ * are suppressed there: the escape hatch for frames that cannot be still.
+ * Error captures never fail on this; a failing test has its own message.
+ */
 async function takeScreenshot(
     actualPage: Page,
     event: StepEventRecord | null,
-    alreadyStable: boolean = false,
+    settle: SettleResult | null = null,
     stepStartTimeMs: number = Date.now(),
     force: boolean = false,
 ): Promise<void> {
     if (screenshotsSuppressed() && !force) return;
 
-    if (!alreadyStable) {
-        await waitForVisualStability(actualPage);
-    }
+    settle ??= await settlePage(actualPage);
 
-    const hash = await captureStep(actualPage);
-    if (!hash) return; // page closed (e.g. test timed out) — keep pending events queued
+    const capture = await captureStep(actualPage);
+    if (!capture) return; // page closed (e.g. test timed out) — keep pending events queued
 
     if (event) event.duration = Math.max(0, Date.now() - stepStartTimeMs);
     const events = pendingEvents;
     pendingEvents = [];
     if (event) events.push(event);
-    appendStep(actualPage, hash, events);
+
+    let failure: StepEventRecord | null = null;
+    let unstable = settle.settled ? '' : `Page did not settle within ${SETTLE_TIMEOUT_MS}ms: ${settle.unrest || 'it kept moving'}`;
+    if (!unstable && capture.changedBox !== undefined) {
+        unstable = `Unstable frame: a second capture ${currentDetectUnstable}ms later differed` +
+            (capture.changedBox ? ' within the marked area' : ' in size');
+    }
+    if (unstable && !screenshotsSuppressed() && event?.type !== 'error') {
+        failure = {
+            type: 'error',
+            message: unstable + '. Find what keeps the page moving and stop it under test, or ' +
+                'wrap this part in suppressScreenshots() to capture nothing here.',
+            source: event?.source,
+            box: capture.changedBox ?? undefined,
+        };
+        events.push(failure);
+    }
+    appendStep(actualPage, capture.hash, events, unstable || undefined);
+
+    if (failure) {
+        pendingFailureText = failure.message;
+        failureCaptured = true;
+        const error = new StabilityError(failure.message);
+        stripShotestFrames(error);
+        throw error;
+    }
 }
 
 /**
@@ -493,12 +646,13 @@ async function takeScreenshot(
  * a run of checks (usually ending with the action that changes the page)
  * shows as one screenshot with a list of events in the review app.
  */
-function appendStep(actualPage: Page, hash: string, events: StepEventRecord[]): void {
+function appendStep(actualPage: Page, hash: string, events: StepEventRecord[], unstable?: string): void {
     const role = getPageRole(actualPage);
     const last = currentSteps[currentSteps.length - 1];
 
     if (last && !('gap' in last) && last.image === hash && last.role === role) {
         if (events.length > 0) last.events = [...(last.events ?? []), ...events];
+        if (unstable) last.unstable = unstable;
         return;
     }
 
@@ -507,6 +661,7 @@ function appendStep(actualPage: Page, hash: string, events: StepEventRecord[]): 
         viewport: actualPage.viewportSize() ?? undefined,
         events: events.length > 0 ? events : undefined,
         role,
+        unstable,
     });
 }
 
@@ -517,7 +672,7 @@ function appendStep(actualPage: Page, hash: string, events: StepEventRecord[]): 
  * suppressScreenshots() block.
  */
 export async function screenshot(page: Page, name: string): Promise<void> {
-    await takeScreenshot(page, makeEvent('screenshot', name, getCallerLocation()), false, Date.now(), true);
+    await takeScreenshot(page, makeEvent('screenshot', name, getCallerLocation()), null, Date.now(), true);
 }
 
 export async function splitIntoRoles<const Names extends readonly string[]>(page: Page, ...names: Names): Promise<{ [K in Names[number]]: ShotestPage }> {
@@ -550,19 +705,49 @@ export async function splitIntoRoles<const Names extends readonly string[]>(page
  * return the hash. Identical frames — within this test or across tests — end
  * up as one file. HTML snapshots are keyed by the same hash.
  */
-async function captureStep(page: Page): Promise<string | null> {
-    let pngBuffer: Buffer;
+interface Capture {
+    hash: string;
+    /**
+     * detectUnstable only: where a second capture differed from this one —
+     * a box in CSS pixels, null when the two were not even the same size —
+     * or undefined when they matched (or no check ran).
+     */
+    changedBox?: EventBox | null;
+}
+
+async function shoot(page: Page): Promise<Buffer | null> {
     try {
         // The stability stylesheet can't reach Web-Animations-API animations
         // (element.animate() knows no CSS); this finishes those before the
         // shot — finite ones jump to their end state, infinite ones are
         // canceled — so a mid-flight frame can't wobble the pixels.
-        pngBuffer = await page.screenshot({ fullPage: false, animations: 'disabled' });
+        return stripPngMetadata(await page.screenshot({ fullPage: false, animations: 'disabled' }));
     } catch {
         return null; // page closed (e.g. test timed out)
     }
-    pngBuffer = stripPngMetadata(pngBuffer);
+}
+
+async function captureStep(page: Page): Promise<Capture | null> {
+    const pngBuffer = await shoot(page);
+    if (!pngBuffer) return null;
     const hash = await hashImagePixels(pngBuffer);
+
+    let changedBox: EventBox | null | undefined;
+    if (currentDetectUnstable > 0) {
+        // A frame that cannot hold still — an animated image, a video, a
+        // canvas drawn every frame — passes every DOM-based check above;
+        // only a second look tells. The box comes out in device pixels.
+        await new Promise((r) => setTimeout(r, currentDetectUnstable));
+        const again = await shoot(page);
+        if (!again) return null;
+        const diff = await diffImageBox(pngBuffer, again);
+        if (diff === null) changedBox = null;
+        else if (diff) {
+            const viewport = page.viewportSize();
+            const scale = viewport ? viewport.width / diff.imageWidth : 1;
+            changedBox = roundBox({ x: diff.x * scale, y: diff.y * scale, width: diff.width * scale, height: diff.height * scale });
+        }
+    }
 
     const basePath = path.join(currentPoolDir, hash);
     if (!fs.existsSync(basePath + '.png')) {
@@ -585,7 +770,7 @@ async function captureStep(page: Page): Promise<string | null> {
         } catch { }
     }
 
-    return hash;
+    return { hash, changedBox };
 }
 
 // ── Locator wrapping ───────────────────────────────────────────────
@@ -607,30 +792,39 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
                     // Capture *before* the action runs: the shot shows the
                     // page the action found, with the event box marking what
                     // it targeted. The action's effect shows in the next step.
-                    // Settled before measuring, so the box marks the element
-                    // at rest — where both the shot and the action find it.
-                    await actualLocator.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
-                    await waitForVisualStability(actualPage);
+                    // Settle first, then scroll the target into view, then
+                    // settle again: whether scrolling is needed at all is
+                    // decided on the page's final layout (an expansion still
+                    // opening would answer it differently from run to run),
+                    // and the box marks the element at rest — where both the
+                    // shot and the action find it. Playwright's own
+                    // actionability wait only covers the element holding
+                    // still, not the page.
+                    let settle = await settlePage(actualPage);
+                    if (settle.settled) {
+                        await actualLocator.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+                        settle = await settlePage(actualPage);
+                    }
                     const box = await actualLocator.boundingBox().catch(() => null);
                     if (!box) {
                         throw new Error(failureText);
                     }
-                    await takeScreenshot(actualPage, makeEvent('action', short, loc, box), true, stepStartTimeMs);
+                    await takeScreenshot(actualPage, makeEvent('action', short, loc, box), settle, stepStartTimeMs);
                 } else {
                     // Skip the capture, not the settling: an action on a
-                    // still-moving page can land beside its target.
-                    await waitForVisualStability(actualPage);
+                    // still-moving page can land beside its target. Nothing
+                    // is captured here, so a busy marker — which holds
+                    // captures — is not waited on.
+                    await settlePage(actualPage, { busy: false });
                 }
                 const result = await (actualLocator as any)[method](...args);
                 pendingFailureText = '';
                 return result;
             } catch (error: any) {
-                await takeScreenshot(actualPage, makeEvent('error', failureText, loc), false, stepStartTimeMs, true).catch(() => {});
-                failureCaptured = true;
-                if (error.stack) {
-                    error.stack = error.stack.split('\n')
-                        .filter((l: string) => !/shotest\//.test(l))
-                        .join('\n');
+                if (!(error instanceof StabilityError)) {
+                    await takeScreenshot(actualPage, makeEvent('error', failureText, loc), null, stepStartTimeMs, true).catch(() => {});
+                    failureCaptured = true;
+                    stripShotestFrames(error);
                 }
                 throw error;
             }
@@ -647,15 +841,17 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         try {
             const result = await (actualLocator as any)._expect(method, options);
             if (!screenshotsSuppressed()) {
-                const box = await locatorEventBox(actualLocator, actualPage);
-                await takeScreenshot(actualPage, makeEvent('assert', withTarget(label, box, actualLocator), loc, box), true, stepStartTimeMs);
+                const { box, settle } = await locatorEventBox(actualLocator, actualPage);
+                await takeScreenshot(actualPage, makeEvent('assert', withTarget(label, box, actualLocator), loc, box), settle, stepStartTimeMs);
             }
             pendingFailureText = '';
             return result;
         } catch (error: any) {
-            const box = await locatorEventBox(actualLocator, actualPage);
-            await takeScreenshot(actualPage, makeEvent('error', withTarget(failureText, box, actualLocator), loc, box), true, stepStartTimeMs, true).catch(() => {});
-            failureCaptured = true;
+            if (!(error instanceof StabilityError)) {
+                const { box, settle } = await locatorEventBox(actualLocator, actualPage);
+                await takeScreenshot(actualPage, makeEvent('error', withTarget(failureText, box, actualLocator), loc, box), settle, stepStartTimeMs, true).catch(() => {});
+                failureCaptured = true;
+            }
             throw error;
         }
     };
@@ -666,9 +862,9 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
         lastStepLocation = loc;
         await (actualLocator as any).waitFor(options);
         if (!screenshotsSuppressed()) {
-            const box = await locatorEventBox(actualLocator, actualPage);
+            const { box, settle } = await locatorEventBox(actualLocator, actualPage);
             const label = options?.state ? `waitFor ${options.state}` : 'waitFor';
-            await takeScreenshot(actualPage, makeEvent('check', withTarget(label, box, actualLocator), loc, box), true, stepStartTimeMs);
+            await takeScreenshot(actualPage, makeEvent('check', withTarget(label, box, actualLocator), loc, box), settle, stepStartTimeMs);
         }
     };
 
@@ -684,15 +880,17 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             try {
                 const result = await (actualLocator as any)[method](...args);
                 if (!screenshotsSuppressed()) {
-                    const box = await locatorEventBox(actualLocator, actualPage);
-                    await takeScreenshot(actualPage, makeEvent('check', withTarget(label, box, actualLocator), loc, box), true, stepStartTimeMs);
+                    const { box, settle } = await locatorEventBox(actualLocator, actualPage);
+                    await takeScreenshot(actualPage, makeEvent('check', withTarget(label, box, actualLocator), loc, box), settle, stepStartTimeMs);
                 }
                 pendingFailureText = '';
                 return result;
             } catch (error) {
-                const box = await locatorEventBox(actualLocator, actualPage);
-                await takeScreenshot(actualPage, makeEvent('error', failureText, loc, box), true, stepStartTimeMs, true).catch(() => {});
-                failureCaptured = true;
+                if (!(error instanceof StabilityError)) {
+                    const { box, settle } = await locatorEventBox(actualLocator, actualPage);
+                    await takeScreenshot(actualPage, makeEvent('error', failureText, loc, box), settle, stepStartTimeMs, true).catch(() => {});
+                    failureCaptured = true;
+                }
                 throw error;
             }
         };
@@ -760,7 +958,7 @@ function wrapPage(actualPage: Page): ShotestPage {
         lastStepLocation = loc;
         await actualPage.waitForTimeout(timeout);
         if (!screenshotsSuppressed()) {
-            await takeScreenshot(actualPage, makeEvent('wait', `waitForTimeout ${timeout}ms`, loc), false, stepStartTimeMs);
+            await takeScreenshot(actualPage, makeEvent('wait', `waitForTimeout ${timeout}ms`, loc), null, stepStartTimeMs);
         }
     };
 
@@ -783,6 +981,7 @@ function getTestTitle(testInfo: TestInfo): string {
 
 export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>({
     busySelector: ['', { option: true }],
+    detectUnstable: [parseDetectUnstable(process.env.SHOTEST_DETECT_UNSTABLE) || false, { option: true }],
     // Injected here rather than through defineConfig so it lands after all
     // config/project merging, and only for the browser it belongs to.
     launchOptions: [async ({ launchOptions, browserName }, use) => {
@@ -792,7 +991,7 @@ export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>(
             await use(launchOptions);
         }
     }, { scope: 'worker' }],
-    page: async ({ page, busySelector }, use, testInfo) => {
+    page: async ({ page, busySelector, detectUnstable }, use, testInfo) => {
         const actualPage = page;
         const videoMode = detectVideoMode(testInfo);
 
@@ -802,6 +1001,7 @@ export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>(
         const poolDir = path.dirname(outDir);
         currentPoolDir = poolDir;
         currentBusySelector = busySelector;
+        currentDetectUnstable = parseDetectUnstable(detectUnstable);
         currentSteps = [];
         lastStepLocation = null;
         pendingFailureText = '';
@@ -932,7 +1132,7 @@ export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>(
 
             // Only capture if our action/expect wrappers didn't already
             if (!videoMode && !failureCaptured) {
-                await takeScreenshot(actualPage, makeEvent('error', errorMessage, failureLoc), true, Date.now(), true).catch(() => {});
+                await takeScreenshot(actualPage, makeEvent('error', errorMessage, failureLoc), null, Date.now(), true).catch(() => {});
             }
 
             let currentUrl = '';

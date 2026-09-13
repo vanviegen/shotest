@@ -71,6 +71,9 @@ interface ReviewStep {
   // CSS-pixel viewport of the capture, for mapping event boxes onto the image.
   viewport?: { width: number; height: number };
   role?: string;
+  // Why the current capture was not taken at rest: the page never settled
+  // (what was last seen moving), or a detectUnstable second capture differed.
+  unstable?: string;
   changed: boolean;
 }
 
@@ -842,13 +845,19 @@ const sideTips: Record<Exclude<StepSide, 'auto'>, string> = {
   diff: 'Highlight the changed pixels; tap again to return to automatic',
 };
 
-function renderStepHeader(change: StepChange, interactive: boolean, canDiff: boolean, $ui: StepUi): void {
+function renderStepHeader(change: StepChange, interactive: boolean, canDiff: boolean, unstable: string | undefined, $ui: StepUi): void {
   A('div display:flex align-items:stretch', () => {
     const attach = interactive ? tagAttachedStyle : '';
     if (change === 'unchanged') {
       A('span', chipStyle, plainChipStyle, attach, '#', change);
     } else {
       A(`span.s-s${statusSurface[change]}`, chipStyle, attach, '#', change);
+    }
+    // A frame the page would not hold still for: whatever it shows was a
+    // matter of timing, so a difference here is not a change to review. The
+    // tooltip carries what was seen moving.
+    if (unstable) {
+      A('span.s-s.danger order:1 margin-left:0.4rem', chipStyle, '#unstable', () => S.addTooltip({ tip: unstable }));
     }
     if (!interactive) return;
     const sides = canDiff ? (['accepted', 'current', 'diff'] as const) : (['accepted', 'current'] as const);
@@ -1016,7 +1025,7 @@ function renderStep(step: ReviewStep, roles: RoleInfo, extraAttrs = ''): void {
   const lists = buildEventLists(step, dualLists);
   const $ui = A.proxy<StepUi>({ imageHovered: false, side: 'auto', autoFlips: change === 'changed' });
   A('div display:flex flex-direction:column align-items:stretch gap:0.6rem width:max-content max-width:100% scroll-margin:1rem', extraAttrs, () => {
-    renderStepHeader(change, interactive, fade, $ui);
+    renderStepHeader(change, interactive, fade, step.unstable, $ui);
     renderStage(step, fade, lists, $ui, stepShadow(roles, step.role));
     renderEventLists(lists, $ui);
   });

@@ -83,6 +83,14 @@ export interface ImageStepRecord {
     events?: StepEventRecord[];
     /** Role name assigned via splitIntoRoles(page, ...). */
     role?: string;
+    /**
+     * Set when the frame could not be captured at rest: why the page never
+     * settled (what was last seen moving), or that a detectUnstable second
+     * capture differed. Such a capture fails the test unless screenshots were
+     * suppressed there (a forced screenshot, an error capture), so this is
+     * mostly seen on those — the review app flags the step with it.
+     */
+    unstable?: string;
 }
 
 /** A placeholder for steps that ran without screenshots (suppressScreenshots). */

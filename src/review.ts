@@ -151,6 +151,8 @@ interface AlignedPair {
     currentEvents?: StepEventRecord[];
     viewport?: { width: number; height: number };
     role?: string;
+    /** Why the current capture was not taken at rest (see ImageStepRecord). */
+    unstable?: string;
     changed: boolean;
 }
 
@@ -177,6 +179,7 @@ function makeAlignedPair(
         currentEvents: currentStep?.events,
         viewport: step.viewport,
         role: step.role,
+        unstable: currentStep?.unstable,
         changed,
     };
 }

@@ -228,3 +228,90 @@ test('scripted smooth scrolling lands instantly', async ({ page }) => {
   expect(offsets.scrollTo).toBe(600);
   expect(offsets.scrollIntoView).toBe(0);
 });
+
+// A page that never goes quiet: an attention effect rewriting an attribute on
+// every animation frame. Invisible, so the captures stay pixel-identical and
+// only the settle logic is exercised. Returns a stop function.
+const startTicking = (page) => page.evaluate(() => {
+  const target = document.getElementById('count-value');
+  let tick = 0;
+  let handle = requestAnimationFrame(function loop() {
+    target.setAttribute('data-tick', String(++tick));
+    handle = requestAnimationFrame(loop);
+  });
+  window.__stopTicking = () => cancelAnimationFrame(handle);
+});
+const stopTicking = (page) => page.evaluate(() => window.__stopTicking());
+
+test('settling sees scrolling', async ({ page }) => {
+  await page.goto('/');
+
+  // A requestAnimationFrame scroll loop is neither a DOM mutation nor an
+  // Animation; without the scroll listener it passed as a still page.
+  await page.evaluate(() => {
+    const box = document.createElement('div');
+    box.id = 'scroller';
+    box.style.cssText = 'height:100px;overflow:auto';
+    box.innerHTML = '<div style="height:5000px"></div>';
+    document.body.appendChild(box);
+    let handle = requestAnimationFrame(function loop() {
+      box.scrollTop = (box.scrollTop + 7) % 4000;
+      handle = requestAnimationFrame(loop);
+    });
+    window.__stopScrolling = () => { cancelAnimationFrame(handle); box.remove(); };
+  });
+
+  const start = Date.now();
+  expect(await waitForVisualStability(page)).toBe(false);
+  expect(Date.now() - start).toBeGreaterThan(400);
+
+  await page.evaluate(() => window.__stopScrolling());
+  expect(await waitForVisualStability(page)).toBe(true);
+});
+
+test('a capture on a page that never settles fails the test, naming the culprit', async ({ page }) => {
+  await page.goto('/');
+  await startTicking(page);
+
+  const error = await expect(page.locator('#count-value')).toHaveText('0').catch((e) => e);
+  expect(error).toBeInstanceOf(Error);
+  expect(error.name).toBe('StabilityError');
+  expect(error.message).toMatch(/did not settle within 500ms: the DOM kept mutating \(last: attribute "data-tick" on p#count-value\)/);
+
+  // The escape hatch: nothing captured, nothing to fail on — actions still
+  // settle (best effort) and run.
+  await suppressScreenshots('Increment while the page keeps moving', async () => {
+    await page.getByRole('button', { name: 'Increment' }).click();
+    await expect(page.locator('#count-value')).toHaveText('1');
+  });
+  // An explicit screenshot inside it is recorded, flagged, and not failed on.
+  await suppressScreenshots('Capture the moving page anyway', async () => {
+    await screenshot(page, 'ticking');
+  });
+
+  await stopTicking(page);
+  await expect(page.locator('#count-value')).toHaveText('1');
+});
+
+test.describe(() => {
+  // Two captures 600ms apart — wide enough for the change scheduled below to
+  // land between them well ahead of the second, even on a slow machine.
+  test.use({ detectUnstable: 600 });
+
+  test('detectUnstable fails a capture whose second look differs', async ({ page }) => {
+    await page.goto('/');
+
+    // Nothing moves while the capture settles and takes its first shot; the
+    // change lands before the second. A DOM-based settle cannot know.
+    await page.evaluate(() => {
+      window.setTimeout(() => {
+        document.getElementById('count-value').style.background = '#f88';
+      }, 300);
+    });
+
+    const error = await expect(page.locator('#count-value')).toHaveText('0').catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.name).toBe('StabilityError');
+    expect(error.message).toMatch(/Unstable frame: a second capture 600ms later differed within the marked area/);
+  });
+});
