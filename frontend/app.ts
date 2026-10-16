@@ -611,9 +611,8 @@ interface StepUi {
 
 // Per-event-list state: which row is hovered or has been tapped (pinned).
 // Together with StepUi this decides which viewport boxes are drawn over the
-// screenshot — all boxed events by default; none while the image itself is
-// hovered (so it can be inspected unobstructed); only the corresponding one
-// while a row is hovered or pinned.
+// screenshot — only that of the row hovered or pinned, and none while the
+// image itself is hovered (so it can be inspected unobstructed).
 interface ListSel {
   hovered: number;
   pinned: number;
@@ -645,8 +644,7 @@ function visibleMarkIndexes($ui: StepUi, $sel: ListSel, events: StepEvent[]): nu
   // While diffing, boxes would clutter the (mostly black) difference view.
   if ($ui.imageHovered || $ui.side === 'diff') return [];
   const isolated = $sel.hovered >= 0 ? $sel.hovered : $sel.pinned;
-  if (isolated >= 0) return events[isolated]?.box ? [isolated] : [];
-  return events.flatMap((event, index) => event.box ? [index] : []);
+  return isolated >= 0 && events[isolated]?.box ? [isolated] : [];
 }
 
 // A run of these is routine noise, worth folding out of the way. Errors (and

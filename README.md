@@ -145,7 +145,7 @@ npx shotest review
 
 This serves a web app on localhost and opens it in your default browser.
 
-Each screenshot is shown with its list of recorded events right beneath it, color-coded by type and prefixed with source line — browser console output included. The viewport areas the events involved are outlined on the image; hover to see it unobstructed. When a step changed, the accepted and current versions are cross-faded, and buttons on the step's status tag pin either side or show the changed pixels as an amplified diff.
+Each screenshot is shown with its list of recorded events right beneath it, color-coded by type and prefixed with source line — browser console output included. Hovering an event (or tapping it, to pin it) outlines the viewport area it involved on the image. When a step changed, the accepted and current versions are cross-faded, and buttons on the step's status tag pin either side or show the changed pixels as an amplified diff.
 
 When you press 'Accept visuals' for a test, its screenshots are copied into `test-accepted/` (configurable through `SHOTEST_ACCEPTED_DIR`) and become the new accepted baseline. Commit this directory to version control (unlike `test-results/`). To keep it small, accepted images are recompressed to lossless WebP by a background job; hashes are computed from pixels, not file bytes, so names don't change.
 
