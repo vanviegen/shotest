@@ -3,6 +3,78 @@
   "tests": [
     {
       "file": "tests/shotest.spec.js",
+      "title": "a capture on a page that never settles fails the test, naming the culprit",
+      "steps": [
+        {
+          "image": "7b22e50dfb84447f",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "page",
+              "message": "goto /",
+              "source": "tests/shotest.spec.js:289"
+            },
+            {
+              "type": "assert",
+              "message": "expect text \"0\"",
+              "box": {
+                "x": 39,
+                "y": 134,
+                "width": 342,
+                "height": 18
+              },
+              "source": "tests/shotest.spec.js:292",
+              "duration": 596
+            },
+            {
+              "type": "error",
+              "message": "Page did not settle within 500ms: the DOM kept mutating (last: attribute \"data-tick\" on p#count-value). Find what keeps the page moving and stop it under test, or wrap this part in suppressScreenshots() to capture nothing here.",
+              "source": "tests/shotest.spec.js:292"
+            }
+          ],
+          "unstable": "Page did not settle within 500ms: the DOM kept mutating (last: attribute \"data-tick\" on p#count-value)"
+        },
+        {
+          "gap": "Increment while the page keeps moving"
+        },
+        {
+          "gap": "Capture the moving page anyway"
+        },
+        {
+          "image": "918fc60cb1e489c9",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "screenshot",
+              "message": "ticking",
+              "source": "tests/shotest.spec.js:305",
+              "duration": 539
+            },
+            {
+              "type": "assert",
+              "message": "expect text \"1\"",
+              "box": {
+                "x": 39,
+                "y": 134,
+                "width": 342,
+                "height": 18
+              },
+              "source": "tests/shotest.spec.js:309",
+              "duration": 97
+            }
+          ],
+          "unstable": "Page did not settle within 500ms: the DOM kept mutating (last: attribute \"data-tick\" on p#count-value)"
+        }
+      ]
+    },
+    {
+      "file": "tests/shotest.spec.js",
       "title": "captures browser console messages",
       "steps": [
         {
@@ -920,6 +992,143 @@
             }
           ],
           "role": "beta"
+        }
+      ]
+    },
+    {
+      "file": "tests/shotest.spec.js",
+      "title": "detectUnstable fails a capture whose second look differs",
+      "steps": [
+        {
+          "image": "7b22e50dfb84447f",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "page",
+              "message": "goto /",
+              "source": "tests/shotest.spec.js:318"
+            },
+            {
+              "type": "assert",
+              "message": "expect text \"0\"",
+              "box": {
+                "x": 39,
+                "y": 134,
+                "width": 342,
+                "height": 18
+              },
+              "source": "tests/shotest.spec.js:328",
+              "duration": 760
+            },
+            {
+              "type": "error",
+              "message": "Unstable frame: a second capture 600ms later differed within the marked area. Find what keeps the page moving and stop it under test, or wrap this part in suppressScreenshots() to capture nothing here.",
+              "source": "tests/shotest.spec.js:328",
+              "box": {
+                "x": 39,
+                "y": 134,
+                "width": 342,
+                "height": 18
+              }
+            }
+          ],
+          "unstable": "Unstable frame: a second capture 600ms later differed within the marked area"
+        }
+      ]
+    },
+    {
+      "file": "tests/shotest.spec.js",
+      "title": "keeps a hover only while the clicked element's parent is under the mouse",
+      "steps": [
+        {
+          "image": "55797b2196ee6272",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "action",
+              "message": "click",
+              "box": {
+                "x": 8,
+                "y": 8,
+                "width": 47,
+                "height": 21
+              },
+              "source": "tests/shotest.spec.js:60",
+              "duration": 126
+            }
+          ]
+        },
+        {
+          "image": "83ccedae708d8016",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "screenshot",
+              "message": "kept-hover",
+              "source": "tests/shotest.spec.js:61",
+              "duration": 54
+            },
+            {
+              "type": "assert",
+              "message": "expect css \"outline-style\" \"solid\"",
+              "box": {
+                "x": 8,
+                "y": 8,
+                "width": 47,
+                "height": 21
+              },
+              "source": "tests/shotest.spec.js:62",
+              "duration": 81
+            },
+            {
+              "type": "action",
+              "message": "click",
+              "box": {
+                "x": 8,
+                "y": 29,
+                "width": 49,
+                "height": 21
+              },
+              "source": "tests/shotest.spec.js:64",
+              "duration": 117
+            }
+          ]
+        },
+        {
+          "image": "c1bff37bac78264f",
+          "viewport": {
+            "width": 420,
+            "height": 700
+          },
+          "events": [
+            {
+              "type": "screenshot",
+              "message": "released-hover",
+              "source": "tests/shotest.spec.js:65",
+              "duration": 106
+            },
+            {
+              "type": "assert",
+              "message": "expect css \"outline-style\" \"none\"",
+              "box": {
+                "x": 8,
+                "y": 29,
+                "width": 43,
+                "height": 21
+              },
+              "source": "tests/shotest.spec.js:66",
+              "duration": 80
+            }
+          ]
         }
       ]
     },

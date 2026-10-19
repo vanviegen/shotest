@@ -175,4 +175,4 @@ for link in "$PWD"/node_modules/* "$PWD"/node_modules/@*/*; do
   set -- -v "$target:$target" "$@"
 done
 
-exec "$runner" run --rm --init --ipc=host -v "$PWD:$PWD" -w "$PWD" "$@"
+exec "$runner" run --rm --init --shm-size=1g -v "$PWD:$PWD" -w "$PWD" "$@"

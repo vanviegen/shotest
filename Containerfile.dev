@@ -8,6 +8,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git sudo bash procps psmisc ripgrep less nano \
       openssh-client unzip zip xz-utils build-essential pkg-config \
     && rm -rf /var/lib/apt/lists/*
+# The docker CLI, talking to the socket TPS serves at $DOCKER_HOST: with it,
+# `shotest test` runs in the pinned Playwright image, rendering like the
+# baselines, instead of falling back to a native browser.
+RUN curl -fsSL https://download.docker.com/linux/static/stable/$(uname -m)/docker-29.9.1.tgz \
+      | tar xz -C /usr/local/bin --strip-components=1 docker/docker
 # node's image already has a uid 1000 user named 'node'; TPS wants uid 1000 to
 # own its home, which it does.
 RUN echo 'node ALL=(ALL) NOPASSWD:ALL' >/etc/sudoers.d/node

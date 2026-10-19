@@ -50,6 +50,22 @@ test('covers core wrapped actions and assertions', async ({ page }) => {
   await screenshot(page, 'core-final');
 });
 
+test('keeps a hover only while the clicked element\'s parent is under the mouse', async ({ page }) => {
+  await page.setContent(`
+    <style>button:hover { outline: 3px solid red; }</style>
+    <div><button id="keep">Keep</button></div>
+    <div><button onclick="this.parentElement.outerHTML = '<div><button id=new>New</button></div>'">Swap</button></div>
+  `);
+
+  await page.locator('#keep').click();
+  await screenshot(page, 'kept-hover');
+  await expect(page.locator('#keep')).toHaveCSS('outline-style', 'solid');
+
+  await page.getByRole('button', { name: 'Swap' }).click();
+  await screenshot(page, 'released-hover');
+  await expect(page.locator('#new')).toHaveCSS('outline-style', 'none');
+});
+
 test('covers splitIntoRoles including repeated role names', async ({ page }) => {
   await page.goto('/');
 

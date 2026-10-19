@@ -29,7 +29,7 @@
   "scripts": {
     "build": "node --experimental-strip-types scripts/build.ts && npm run build:docs",
     "build:docs": "rm -rf skill && mkdir skill && cat skill-header.md README.md > skill/SKILL.md",
-    "test": "cd test-project && npm install && npm run test:run",
+    "test": "npm run build && cd test-project && npm install && npm run test:run",
     "review": "npm run build && SHOTEST_OUTPUT_DIR=test-project/test-results SHOTEST_ACCEPTED_DIR=test-project/test-accepted node build/cli.js review",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build"

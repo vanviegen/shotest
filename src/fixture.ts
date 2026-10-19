@@ -1,4 +1,4 @@
-import { test as baseTest, expect, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { test as baseTest, expect, type JSHandle, type Locator, type Page, type TestInfo } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -351,17 +351,68 @@ async function settlePage(page: Page, { timeoutMs = SETTLE_TIMEOUT_MS, busy = tr
     };
 
     const params = { timeout: timeoutMs, busyTimeout: BUSY_TIMEOUT_MS, busySelector: busy ? currentBusySelector : '' };
-    // A navigation mid-wait destroys the execution context — and the new
-    // document is what the capture will show, so settle that one instead.
-    // Losing it twice reads as the page not holding still either.
-    for (let attempt = 0; ; attempt++) {
-        try {
-            return await page.evaluate(settleInPage, params);
-        } catch {
-            if (page.isClosed()) return SETTLED; // nothing left to capture; the capture reports that
-            if (attempt > 0) return { settled: false, unrest: 'the page kept navigating' };
+    const settle = async (): Promise<SettleResult> => {
+        // A navigation mid-wait destroys the execution context — and the new
+        // document is what the capture will show, so settle that one instead.
+        // Losing it twice reads as the page not holding still either.
+        for (let attempt = 0; ; attempt++) {
+            try {
+                return await page.evaluate(settleInPage, params);
+            } catch {
+                if (page.isClosed()) return SETTLED; // nothing left to capture; the capture reports that
+                if (attempt > 0) return { settled: false, unrest: 'the page kept navigating' };
+            }
         }
+    };
+    const result = await settle();
+    return result.settled && await releaseStaleHover(page) ? settle() : result;
+}
+
+/** Where the last pointer action left the mouse, and the parent of the element it acted on. */
+interface PointerTarget {
+    parent: JSHandle<HTMLElement | null>;
+    x: number;
+    y: number;
+}
+
+const pointerTargets = new WeakMap<Page, PointerTarget>();
+
+/**
+ * Locate a pointer action's target before it runs: the point Playwright will
+ * act on (the centre of the box, or `position` within it) and the target's
+ * parent. `box` is the target's, if already measured with the target in view.
+ */
+async function pointerTarget(locator: Locator, box: EventBox | null, position?: { x: number; y: number }): Promise<PointerTarget | null> {
+    if (!box) {
+        await locator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+        box = await locator.boundingBox({ timeout: 1000 }).catch(() => null);
     }
+    const parent = await locator.evaluateHandle((el) => el.parentElement, undefined, { timeout: 1000 }).catch(() => null);
+    if (!box || !parent) return null;
+    return { parent, x: box.x + (position?.x ?? box.width / 2), y: box.y + (position?.y ?? box.height / 2) };
+}
+
+/**
+ * Playwright leaves the mouse where its last pointer action put it, and the
+ * browser keeps applying :hover to whatever is under it. Once the page has
+ * moved on there — the acted-on element's parent gone, or no longer what is
+ * under the pointer (a page change, a modal on top) — that hover lands on an
+ * element nobody pointed at, so the mouse is moved off the page. While the
+ * parent is still there, the hover is the one a user would see, and stays
+ * (as does a hover menu opened by it). Checked once, on the settled page
+ * after the action, by what is at the pointer: Chromium styles :hover but
+ * does not report it to matches(). Resolves to whether the mouse was moved.
+ */
+async function releaseStaleHover(page: Page): Promise<boolean> {
+    const actualPage = (page as any)._shotestActualPage ?? page;
+    const target = pointerTargets.get(actualPage);
+    if (!target) return false;
+    pointerTargets.delete(actualPage);
+    const stale = await target.parent.evaluate((parent, [x, y]) =>
+        !parent?.isConnected || !parent.contains(document.elementFromPoint(x, y)), [target.x, target.y]).catch(() => true);
+    target.parent.dispose().catch(() => {});
+    if (stale) await page.mouse.move(-1, -1).catch(() => {});
+    return stale;
 }
 
 /**
@@ -779,6 +830,8 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
     const wrapped = Object.create(actualLocator) as any;
 
     const actionMethods = ['click', 'fill', 'type', 'press', 'check', 'uncheck', 'selectOption', 'hover', 'dblclick', 'clear'];
+    // Actions that leave the mouse on their target (see releaseStaleHover).
+    const pointerMethods = ['click', 'dblclick', 'check', 'uncheck', 'hover'];
     for (const method of actionMethods) {
         wrapped[method] = async function (...args: any[]) {
             const loc = getCallerLocation();
@@ -788,6 +841,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
             const failureText = `Locator ${actualLocator} failed ${short}`;
             pendingFailureText = failureText;
             try {
+                let box: EventBox | null = null;
                 if (!screenshotsSuppressed()) {
                     // Capture *before* the action runs: the shot shows the
                     // page the action found, with the event box marking what
@@ -805,7 +859,7 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
                         await actualLocator.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
                         settle = await settlePage(actualPage);
                     }
-                    const box = await actualLocator.boundingBox().catch(() => null);
+                    box = await actualLocator.boundingBox().catch(() => null);
                     if (!box) {
                         throw new Error(failureText);
                     }
@@ -817,7 +871,12 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
                     // captures — is not waited on.
                     await settlePage(actualPage, { busy: false });
                 }
+                const pointer = pointerMethods.includes(method) ? await pointerTarget(actualLocator, box, args[0]?.position) : null;
                 const result = await (actualLocator as any)[method](...args);
+                if (pointer) {
+                    pointerTargets.get(actualPage)?.parent.dispose().catch(() => {});
+                    pointerTargets.set(actualPage, pointer);
+                }
                 pendingFailureText = '';
                 return result;
             } catch (error: any) {
