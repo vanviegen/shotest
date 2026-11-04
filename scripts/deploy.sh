@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# TPS's deploy: publish this version of shotest to npm. One question to the
-# user is the go-ahead: log in through npm's web login, and give the one-time
-# password the publish needs. The session token goes in a throwaway npmrc, so
-# the host needs no npm credentials set up.
+# TPS's deploy: publish this version of shotest to npm. Logging in through
+# npm's web login is the go-ahead; the account must not require 2FA for
+# publishing. The session token goes in a throwaway npmrc, so the host needs
+# no npm credentials set up.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -28,20 +28,18 @@ until url=$(grep -o 'https://www\.npmjs\.com/[^[:space:]]*' "$log"); do
 done
 
 answer=0
-reply=$(/tps/bin/tps-guest-tool ask-human \
-    "To publish **shotest $version**, log in to npm, then enter a one-time password from your authenticator and press *Publish*." \
-    --secret 'One-time password' \
+/tps/bin/tps-guest-tool ask-human \
+    "To publish **shotest $version**, log in to npm, then press *Publish*." \
     --button Publish --color primary --button Cancel --color neutral \
-    --button 'Log in to npm' --url "$url") || answer=$?
+    --button 'Log in to npm' --url "$url" >/dev/null || answer=$?
 if [ "$answer" != 0 ]; then
     kill "$login" 2>/dev/null || true
     [ "$answer" = 1 ] && echo 'Cancelled.' || echo "Asking failed (exit code $answer)."
     exit 1
 fi
-{ read -r _; read -r otp; } <<<"$reply"
 
 status=0
 wait "$login" || status=$?
 cat "$log"
 [ "$status" = 0 ]
-npm publish --otp="$otp"
+npm publish
