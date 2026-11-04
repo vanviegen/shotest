@@ -32,8 +32,9 @@ export const SPEC_VERSION = 3;
  * Events are display data only: whether a test changed is decided purely from
  * its screenshots (and gap texts) — see entriesEquivalent in review.ts. If
  * the pictures match and the test is green, all is well, no matter how it
- * got there; when the event lists do differ, the review app lets the
- * reviewer flip an unchanged step between its accepted and current lists.
+ * got there; an unchanged step shows the current run's events alone. The
+ * baseline's events serve to pair up steps whose look changed, and to say
+ * what happened on a changed or removed step's accepted side.
  */
 export interface StepEventRecord {
     /**

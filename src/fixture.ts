@@ -36,6 +36,13 @@ export interface ShotestTestOptions {
      * variable, read the same way.
      */
     detectUnstable: boolean | number;
+    /**
+     * Fail a test that the page raised an error during: an uncaught
+     * exception (`true`, the default), console.error output as well
+     * (`'console'`), or nothing (`false`). The test still runs to its end;
+     * the failure names the first error.
+     */
+    failOnPageError: boolean | 'console';
 }
 
 // ── Configuration ──────────────────────────────────────────────────
@@ -1041,6 +1048,7 @@ function getTestTitle(testInfo: TestInfo): string {
 export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>({
     busySelector: ['', { option: true }],
     detectUnstable: [parseDetectUnstable(process.env.SHOTEST_DETECT_UNSTABLE) || false, { option: true }],
+    failOnPageError: [true, { option: true }],
     // Injected here rather than through defineConfig so it lands after all
     // config/project merging, and only for the browser it belongs to.
     launchOptions: [async ({ launchOptions, browserName }, use) => {
@@ -1050,7 +1058,7 @@ export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>(
             await use(launchOptions);
         }
     }, { scope: 'worker' }],
-    page: async ({ page, busySelector, detectUnstable }, use, testInfo) => {
+    page: async ({ page, busySelector, detectUnstable, failOnPageError }, use, testInfo) => {
         const actualPage = page;
         const videoMode = detectVideoMode(testInfo);
 
@@ -1139,16 +1147,19 @@ export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>(
             else document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
         }, { isVideoMode: videoMode, videoCss: VIDEO_INIT_CSS, stabilityCss: STABILITY_STYLE });
 
+        const pageErrors: string[] = [];
         actualPage.on('console', (msg) => {
             const text = stripAnsi(msg.text());
             const type = msg.type();
             recordConsoleEvent(type, text, normalizeConsoleSource(msg.location()));
             console.log(`Browser ${type}: ${text}`);
+            if (failOnPageError === 'console' && type === 'error') pageErrors.push(text);
         });
         actualPage.on('pageerror', (err) => {
             const text = stripAnsi(String(err.stack || err.message || err));
             recordConsoleEvent('error', text);
             console.error('BROWSER ERROR:', text);
+            if (failOnPageError) pageErrors.push(text);
         });
 
         if (videoMode) {
@@ -1175,17 +1186,24 @@ export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>(
         }
         pendingEvents = [];
 
+        // A test that passed fails on the errors its page raised (see
+        // failOnPageError), thrown once the record says so.
+        const pageError = testInfo.status === 'passed' && pageErrors.length > 0
+            ? `The page raised ${pageErrors.length === 1 ? 'an error' : `${pageErrors.length} errors`}, the first: ${pageErrors[0]}`
+            : null;
+        const status = pageError ? 'failed' : testInfo.status;
+
         // Determine error info
         const errorObj = testInfo.error as any;
         let errorMessage: string | null = null;
         let errorSource: string | null = null;
         let errorStack: string | null = null;
 
-        if (testInfo.status === 'failed' || testInfo.status === 'timedOut') {
+        if (status === 'failed' || status === 'timedOut') {
             const rawStack = errorObj ? String(errorObj.stack || errorObj.message || '') : '';
             const failureLoc = getLocationFromStack(rawStack) || lastStepLocation || { file: testInfo.file, line: testInfo.line };
 
-            errorMessage = stripAnsi(pendingFailureText || (errorObj ? String(errorObj.message || errorObj.value || testInfo.status) : `Test ${testInfo.status}`));
+            errorMessage = stripAnsi(pendingFailureText || pageError || (errorObj ? String(errorObj.message || errorObj.value || status) : `Test ${status}`));
             errorSource = `${path.relative(process.cwd(), failureLoc.file)}:${failureLoc.line}`;
             errorStack = errorObj ? stripAnsi(rawStack) || null : null;
 
@@ -1200,7 +1218,7 @@ export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>(
             fs.mkdirSync(outDir, { recursive: true });
             fs.writeFileSync(path.join(outDir, 'error.txt'), [
                 `Test: ${testInfo.title}`,
-                `Status: ${testInfo.status}`,
+                `Status: ${status}`,
                 `Duration: ${testInfo.duration}ms`,
                 `URL: ${currentUrl}`,
                 `Source: ${errorSource}`,
@@ -1213,7 +1231,7 @@ export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>(
             file: path.relative(process.cwd(), testInfo.file),
             title: getTestTitle(testInfo),
             line: testInfo.line,
-            status: testInfo.status || 'unknown',
+            status: status || 'unknown',
             duration: testInfo.duration,
             error: errorMessage,
             errorSource: errorSource,
@@ -1221,5 +1239,6 @@ export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>(
             steps: currentSteps,
         };
         mergeTestRecord(poolDir, record);
+        if (pageError) throw new Error(pageError);
     },
 });

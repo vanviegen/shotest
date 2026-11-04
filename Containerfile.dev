@@ -5,7 +5,7 @@
 FROM docker.io/library/node:22-bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git sudo bash procps psmisc ripgrep less nano \
+      ca-certificates curl git sudo bash procps psmisc ripgrep less nano python3 \
       openssh-client unzip zip xz-utils build-essential pkg-config \
     && rm -rf /var/lib/apt/lists/*
 # The docker CLI, talking to the socket TPS serves at $DOCKER_HOST: with it,
@@ -23,3 +23,6 @@ WORKDIR /work
 EXPOSE 3847
 LABEL tps.service.review="npm run review"
 LABEL tps.service.test="npm test"
+LABEL tps.check="npm install --no-package-lock --no-audit --no-fund && npm test"
+LABEL tps.deploy="scripts/deploy.sh"
+LABEL tps.cache="/home/node/.npm"

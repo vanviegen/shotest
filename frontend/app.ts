@@ -81,10 +81,8 @@ interface ReviewStep {
 // Identity is the message alone — messages are type-prefixed by construction
 // ('click "Submit"', 'goto /'), and comparing types too would flag renamed
 // event types (2.0 baselines say 'goto' where newer runs say 'page') as
-// differing lists. Console rows are ignored: their timing shifts run to run,
-// and offering an accepted/current toggle over ambient noise would put
-// buttons on nearly every step. Boxes, sources and durations are display
-// detail, not identity.
+// differing lists. Console rows are ignored: their timing shifts run to run.
+// Boxes, sources and durations are display detail, not identity.
 function sameSignificantEvents(accepted: StepEvent[] = [], current: StepEvent[] = []): boolean {
   const a = accepted.filter((event) => event.type !== 'console');
   const c = current.filter((event) => event.type !== 'console');
@@ -600,13 +598,10 @@ const eventListStyle = A.insertCss({
 });
 
 // Per-step (card-local) UI state: which side of the step is on show (see
-// StepSide), whether 'auto' follows the global flip (only steps with a real
-// visual change pulse; an unchanged step offering side buttons stays calmly
-// on 'current'), and whether the pointer is on the screenshot itself.
+// StepSide), and whether the pointer is on the screenshot itself.
 interface StepUi {
   imageHovered: boolean;
   side: StepSide;
-  autoFlips: boolean;
 }
 
 // Per-event-list state: which row is hovered or has been tapped (pinned).
@@ -618,7 +613,7 @@ interface ListSel {
   pinned: number;
 }
 
-// One rendered event list. A step whose sides differ in events has two —
+// One rendered event list. A changed step whose sides differ in events has two —
 // one per side, shown in sync with its image; every other step has a single
 // one (see buildEventLists).
 interface EventList {
@@ -632,7 +627,7 @@ function showingSide($ui: StepUi): 'accepted' | 'current' {
   // The diff overlays the current image on the accepted one; as far as the
   // stacked images are concerned, the current side is the one on show.
   if ($ui.side === 'diff') return 'current';
-  return !$ui.autoFlips || state.toggleShowNew ? 'current' : 'accepted';
+  return state.toggleShowNew ? 'current' : 'accepted';
 }
 
 // The list whose events belong to the image side on show right now.
@@ -831,12 +826,11 @@ function imageSrc(kind: 'accepted' | 'current', hash: string): string {
   return `/image/${kind}/${hash}`;
 }
 
-// The row above a screenshot: the step's status tag, plus — when the two
-// sides differ in any way worth flipping between (a visual change, or event
-// lists that disagree on an otherwise unchanged step) — the attached
-// Accepted/Current side buttons. Steps with a real visual change get a third
-// Diff button, overlaying the sides as an amplified difference. Tapping a
-// button pins that state; tapping it again returns to auto.
+// The row above a screenshot: the step's status tag, plus — on a changed
+// step — the attached Accepted/Current side buttons. Steps whose two images
+// really differ get a third Diff button, overlaying the sides as an
+// amplified difference. Tapping a button pins that state; tapping it again
+// returns to auto.
 const sideTips: Record<Exclude<StepSide, 'auto'>, string> = {
   accepted: 'Pin the accepted (old) side; tap again to return to automatic',
   current: 'Pin the current (new) side; tap again to return to automatic',
@@ -1011,17 +1005,16 @@ function renderStep(step: ReviewStep, roles: RoleInfo, extraAttrs = ''): void {
   }
   // The step's changed/unchanged verdict is the server's, and purely visual —
   // events never enter into it, so this view and the sidebar always agree.
-  // The sides are still flippable whenever there is anything to flip between:
-  // a visual change, or event lists that disagree on an unchanged step.
-  const hasBoth = step.acceptedImage !== undefined && step.currentImage !== undefined;
-  const dualLists = hasBoth && !sameSignificantEvents(step.acceptedEvents, step.currentEvents);
-  const interactive = hasBoth && (change === 'changed' || dualLists);
+  // Only a changed step has two sides to flip between; any other step shows
+  // its one image with the current run's events where it ran.
+  const interactive = change === 'changed';
+  const dualLists = interactive && !sameSignificantEvents(step.acceptedEvents, step.currentEvents);
   // Cross-fade only when there really are two different images: flipping
   // between two equal frames reads as "no visible difference" — which a
   // single image says better.
   const fade = interactive && step.acceptedImage !== step.currentImage;
   const lists = buildEventLists(step, dualLists);
-  const $ui = A.proxy<StepUi>({ imageHovered: false, side: 'auto', autoFlips: change === 'changed' });
+  const $ui = A.proxy<StepUi>({ imageHovered: false, side: 'auto' });
   A('div display:flex flex-direction:column align-items:stretch gap:0.6rem width:max-content max-width:100% scroll-margin:1rem', extraAttrs, () => {
     renderStepHeader(change, interactive, fade, step.unstable, $ui);
     renderStage(step, fade, lists, $ui, stepShadow(roles, step.role));

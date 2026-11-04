@@ -176,6 +176,13 @@ test('captures browser console messages', async ({ page }) => {
   await screenshot(page, 'console-final');
 });
 
+test('an uncaught page exception fails the test', async ({ page }) => {
+  test.fail();
+  await page.goto('/');
+  await page.evaluate(() => { window.setTimeout(() => { throw new Error('uncaught in the page'); }); });
+  await expect(page.locator('#count-value')).toHaveText('0');
+});
+
 test('captures screenshots for locator reads and timed waits', async ({ page }) => {
   await page.goto('/');
 

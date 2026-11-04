@@ -84,6 +84,8 @@ npx shotest test
 
 This writes results to `test-results/`: one `<spec-base>.json` per spec file, plus the screenshots and HTML snapshots, named by a hash of their pixel content (so identical frames share a single file). What happened at each moment — clicks, assertions, navigations — is recorded as *events* in the JSON, each with a message, source line and the viewport box of the element involved. Steps that don't change the page share a single screenshot carrying the whole list of events.
 
+An uncaught exception in the page fails the test, once it has run to its end, with the first such error as its message. Set the `failOnPageError` test option to `'console'` to fail on `console.error` output as well, or to `false` to only record errors as events.
+
 The `shotest` command forwards arguments to Playwright, so `npx shotest test --ui` maps to `playwright test --ui`.
 
 `npx shotest collect` summarizes the results on disk (failed tests and visual changes), cleans up unreferenced files, and exits with 0 (all good), 1 (failed tests) or 2 (tests passed, but visual changes await review) — use it after a test run, e.g. to gate CI on visual consistency.
@@ -145,7 +147,7 @@ npx shotest review
 
 This serves a web app on localhost and opens it in your default browser.
 
-Each screenshot is shown with its list of recorded events right beneath it, color-coded by type and prefixed with source line — browser console output included. Hovering an event (or tapping it, to pin it) outlines the viewport area it involved on the image. When a step changed, the accepted and current versions are cross-faded, and buttons on the step's status tag pin either side or show the changed pixels as an amplified diff.
+Each screenshot is shown with its list of recorded events right beneath it, color-coded by type and prefixed with source line — browser console output included. Hovering an event (or tapping it, to pin it) outlines the viewport area it involved on the image. When a step changed, the accepted and current versions are cross-faded, each with its own event list, and buttons on the step's status tag pin either side or show the changed pixels as an amplified diff. An unchanged step shows the current run's events only.
 
 When you press 'Accept visuals' for a test, its screenshots are copied into `test-accepted/` (configurable through `SHOTEST_ACCEPTED_DIR`) and become the new accepted baseline. Commit this directory to version control (unlike `test-results/`). To keep it small, accepted images are recompressed to lossless WebP by a background job; hashes are computed from pixels, not file bytes, so names don't change.
 
