@@ -28,7 +28,9 @@ npm_web() {
         if [ -n "$url" ] && [ "$url" != "$asked" ]; then
             asked=$url
             local answer=0
-            /tps/bin/tps-guest-tool ask-human "$question $url" --option Done --option Cancel >/dev/null || answer=$?
+            /tps/bin/tps-guest-tool ask-human "$question, then press *Done*." \
+                --button Done --color primary --button Cancel --color neutral \
+                --button 'Open npm' --url "$url" >/dev/null || answer=$?
             if [ "$answer" != 0 ]; then
                 kill "$pid"
                 [ "$answer" = 1 ] && echo 'Cancelled.' || echo "Asking failed (exit code $answer)."
@@ -41,5 +43,5 @@ npm_web() {
     wait "$pid"
 }
 
-npm_web "To publish shotest $version, log in to npm at" login
-npm_web "npm wants the publish of shotest $version confirmed at" publish
+npm_web "To publish **shotest $version**, log in to npm" login
+npm_web "npm wants the publish of **shotest $version** confirmed: do so on npm" publish
