@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# TPS's deploy: publish this version of shotest to npm. Logging in through
-# npm's web login is the go-ahead; its session token goes in a throwaway
-# npmrc, so the host needs no npm credentials set up.
+# TPS's deploy: publish this version of shotest to npm. One question to the
+# user is the go-ahead: log in through npm's web login, and give the one-time
+# password the publish needs. The session token goes in a throwaway npmrc, so
+# the host needs no npm credentials set up.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -15,33 +16,32 @@ npm install --no-package-lock --no-audit --no-fund
 NPM_CONFIG_USERCONFIG=$(mktemp)
 export NPM_CONFIG_USERCONFIG
 
-# Run an npm command, handing each web authentication URL it prints to the
-# user, until it ends.
-npm_web() {
-    local question=$1 log asked='' url pid
-    shift
-    log=$(mktemp)
-    npm "$@" --auth-type=web </dev/null >"$log" 2>&1 &
-    pid=$!
-    while kill -0 "$pid" 2>/dev/null; do
-        url=$(grep -o 'https://www\.npmjs\.com/[^[:space:]]*' "$log" | tail -n 1 || true)
-        if [ -n "$url" ] && [ "$url" != "$asked" ]; then
-            asked=$url
-            local answer=0
-            /tps/bin/tps-guest-tool ask-human "$question, then press *Done*." \
-                --button Done --color primary --button Cancel --color neutral \
-                --button 'Open npm' --url "$url" >/dev/null || answer=$?
-            if [ "$answer" != 0 ]; then
-                kill "$pid"
-                [ "$answer" = 1 ] && echo 'Cancelled.' || echo "Asking failed (exit code $answer)."
-                exit 1
-            fi
-        fi
-        sleep 1
-    done
-    cat "$log"
-    wait "$pid"
-}
+log=$(mktemp)
+npm login --auth-type=web </dev/null >"$log" 2>&1 &
+login=$!
+until url=$(grep -o 'https://www\.npmjs\.com/[^[:space:]]*' "$log"); do
+    if ! kill -0 "$login" 2>/dev/null; then
+        cat "$log"
+        exit 1
+    fi
+    sleep 1
+done
 
-npm_web "To publish **shotest $version**, log in to npm" login
-npm_web "npm wants the publish of **shotest $version** confirmed: do so on npm" publish
+answer=0
+reply=$(/tps/bin/tps-guest-tool ask-human \
+    "To publish **shotest $version**, log in to npm, then enter a one-time password from your authenticator and press *Publish*." \
+    --secret 'One-time password' \
+    --button Publish --color primary --button Cancel --color neutral \
+    --button 'Log in to npm' --url "$url") || answer=$?
+if [ "$answer" != 0 ]; then
+    kill "$login" 2>/dev/null || true
+    [ "$answer" = 1 ] && echo 'Cancelled.' || echo "Asking failed (exit code $answer)."
+    exit 1
+fi
+{ read -r _; read -r otp; } <<<"$reply"
+
+status=0
+wait "$login" || status=$?
+cat "$log"
+[ "$status" = 0 ]
+npm publish --otp="$otp"
