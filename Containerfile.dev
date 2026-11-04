@@ -24,5 +24,4 @@ EXPOSE 3847
 LABEL tps.service.review="npm run review"
 LABEL tps.service.test="npm test"
 LABEL tps.check="npm install --no-package-lock --no-audit --no-fund && npm test"
-LABEL tps.deploy="scripts/deploy.sh"
 LABEL tps.cache="/home/node/.npm"
