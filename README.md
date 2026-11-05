@@ -172,6 +172,20 @@ Baselines for tests that produced no results at all are listed separately at the
 
 `npx shotest gc` deletes pool images (and HTML snapshots) in `test-results/` and `test-accepted/` that are no longer referenced by any of the JSON files there. You'll rarely need it: `test-results/` is cleaned by every `npx shotest collect`, and `test-accepted/` whenever a review is applied.
 
+### Pruning baselines from git history
+
+Superseded baselines leave the working tree, but not the repository: every commit that once held them keeps them alive, so the `.git` directory grows with each accepted change. Git only frees objects that no commit references, and the only way to change what a commit references is to rewrite it. This does exactly that, then garbage-collects:
+
+```bash
+npx shotest-prune-history
+```
+
+It removes `test-accepted/` (or `SHOTEST_ACCEPTED_DIR`) from every commit on every local branch and tag, except the most recent commits of each branch: just the tip by default, or the last `--keep <n>`. Commit hashes change from the first affected commit onwards, like after a rebase; authors, dates, messages and merges are preserved, signatures are not. `--dry-run` shows what would happen.
+
+Since the rewritten branches have to be force-pushed, and everybody else has to re-clone or reset onto them, this is something to do sparingly and in a quiet moment. Until you push, the remote still holds the old history, which is your way back (`git fetch` and `git reset --hard origin/main`) — and also the reason the space is not reclaimed locally yet: the remote-tracking refs keep the old objects alive. After the push, run `npx shotest-prune-history` once more; it finds nothing to rewrite and just collects the garbage.
+
+If rewriting is not an option, clone size can still be tamed without it: `git clone --filter=blob:none` fetches only the files of commits that are actually checked out, and `--depth 1` skips history altogether — both good fits for CI.
+
 ## Multi-user tests
 
 ShoTest can label screenshots per browser page, which makes multi-user interaction tests practical to script and review. Call `splitIntoRoles(page, ...)` before the first interaction you want attributed to a role: it repurposes the current `page` for the first role and creates additional labeled browser sessions for the later roles, opened on the same URL.

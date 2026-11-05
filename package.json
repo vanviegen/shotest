@@ -24,7 +24,8 @@
   },
   "bin": {
     "shotest": "./build/cli.js",
-    "shotest-playwright": "./bin/shotest-playwright"
+    "shotest-playwright": "./bin/shotest-playwright",
+    "shotest-prune-history": "./bin/shotest-prune-history.js"
   },
   "scripts": {
     "build": "node --experimental-strip-types scripts/build.ts && npm run build:docs",
