@@ -1,0 +1,13 @@
+{
+  "file": "tests/example.spec.js",
+  "title": "unchanged, with a comment",
+  "comments": [
+    {
+      "text": "The outline should be blue",
+      "image": "5df6de68db665a4a",
+      "events": [
+        "click"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "version": 4,
+  "file": "tests/example.spec.js",
+  "title": "unchanged, with a comment",
+  "steps": [
+    {
+      "image": "5df6de68db665a4a",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 8,
+            "y": 8,
+            "width": 47,
+            "height": 21
+          },
+          "source": "tests/example.spec.js:21",
+          "duration": 134
+        }
+      ]
+    },
+    {
+      "image": "7f732ffa14e98116",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "screenshot",
+          "message": "kept-hover",
+          "source": "tests/example.spec.js:22",
+          "duration": 55
+        },
+        {
+          "type": "assert",
+          "message": "expect css \"outline-style\" \"solid\"",
+          "box": {
+            "x": 8,
+            "y": 8,
+            "width": 47,
+            "height": 21
+          },
+          "source": "tests/example.spec.js:23",
+          "duration": 83
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 8,
+            "y": 29,
+            "width": 49,
+            "height": 21
+          },
+          "source": "tests/example.spec.js:24",
+          "duration": 113
+        }
+      ]
+    },
+    {
+      "image": "5b8f2db95ada18fd",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "screenshot",
+          "message": "released-hover",
+          "source": "tests/example.spec.js:25",
+          "duration": 105
+        },
+        {
+          "type": "assert",
+          "message": "expect css \"outline-style\" \"none\"",
+          "box": {
+            "x": 8,
+            "y": 29,
+            "width": 43,
+            "height": 21
+          },
+          "source": "tests/example.spec.js:26",
+          "duration": 82
+        }
+      ]
+    }
+  ]
+}

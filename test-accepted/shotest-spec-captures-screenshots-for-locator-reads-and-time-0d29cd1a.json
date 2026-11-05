@@ -1,0 +1,57 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "captures screenshots for locator reads and timed waits",
+  "steps": [
+    {
+      "image": "295599e79e2bccb8",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 17ms",
+          "source": "http://localhost:46555/:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/shotest.spec.js:211"
+        },
+        {
+          "type": "check",
+          "message": "textContent",
+          "box": {
+            "x": 944,
+            "y": 660,
+            "width": 56,
+            "height": 40
+          },
+          "source": "tests/shotest.spec.js:223",
+          "duration": 186
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 120ms",
+          "source": "tests/shotest.spec.js:224",
+          "duration": 214
+        },
+        {
+          "type": "check",
+          "message": "textContent",
+          "box": {
+            "x": 944,
+            "y": 660,
+            "width": 56,
+            "height": 40
+          },
+          "source": "tests/shotest.spec.js:225",
+          "duration": 130
+        }
+      ]
+    }
+  ]
+}

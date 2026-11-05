@@ -1,0 +1,456 @@
+{
+  "version": 4,
+  "file": "tests/review.spec.js",
+  "title": "navigate, align, accept, comment and apply",
+  "steps": [
+    {
+      "image": "f3d3090e09c97932",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 17ms",
+          "source": "http://localhost:39745/:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/review.spec.js:13"
+        },
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 277,
+            "y": 171,
+            "width": 274,
+            "height": 24
+          },
+          "source": "tests/review.spec.js:14",
+          "duration": 164
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 231,
+            "y": 325,
+            "width": 191,
+            "height": 38
+          },
+          "source": "tests/review.spec.js:15",
+          "duration": 161
+        }
+      ]
+    },
+    {
+      "image": "760dfa2b2813e301",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "wait",
+          "message": "waitForTimeout 300ms",
+          "source": "tests/review.spec.js:16",
+          "duration": 427
+        }
+      ]
+    },
+    {
+      "image": "809b1e3e16523fc8",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 247,
+            "y": 78,
+            "width": 260,
+            "height": 21
+          },
+          "source": "tests/review.spec.js:18",
+          "duration": 133
+        },
+        {
+          "type": "assert",
+          "message": "expect text \"unchanged\", \"removed\", \"changed\", \"unchanged\", \"new\" (getByRole('main').getByText(/^(unchanged|changed|new|removed)$/))",
+          "source": "tests/review.spec.js:22",
+          "duration": 97
+        }
+      ]
+    },
+    {
+      "image": "5264f7e21502898d",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 316,
+            "y": 371,
+            "width": 74,
+            "height": 19
+          },
+          "source": "tests/review.spec.js:25",
+          "duration": 178
+        }
+      ]
+    },
+    {
+      "image": "a3c0d6af2ed577da",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect class /pinned/",
+          "box": {
+            "x": 316,
+            "y": 371,
+            "width": 74,
+            "height": 19
+          },
+          "source": "tests/review.spec.js:26",
+          "duration": 132
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 459,
+            "y": 371,
+            "width": 40,
+            "height": 19
+          },
+          "source": "tests/review.spec.js:25",
+          "duration": 154
+        }
+      ]
+    },
+    {
+      "image": "97b42534da6b2698",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect class /pinned/",
+          "box": {
+            "x": 459,
+            "y": 371,
+            "width": 40,
+            "height": 19
+          },
+          "source": "tests/review.spec.js:26",
+          "duration": 133
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 390,
+            "y": 371,
+            "width": 69,
+            "height": 19
+          },
+          "source": "tests/review.spec.js:25",
+          "duration": 155
+        }
+      ]
+    },
+    {
+      "image": "663b8702f3d9b6a9",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect class /pinned/",
+          "box": {
+            "x": 390,
+            "y": 371,
+            "width": 69,
+            "height": 19
+          },
+          "source": "tests/review.spec.js:26",
+          "duration": 119
+        }
+      ]
+    },
+    {
+      "image": "809b1e3e16523fc8",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 899,
+            "y": 78,
+            "width": 83,
+            "height": 26
+          },
+          "source": "tests/review.spec.js:28",
+          "duration": 168
+        }
+      ]
+    },
+    {
+      "image": "4e5c79adec110c5b",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "wait",
+          "message": "waitForTimeout 300ms",
+          "source": "tests/review.spec.js:29",
+          "duration": 442
+        }
+      ]
+    },
+    {
+      "image": "2c6609ace6eda785",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 247,
+            "y": 78,
+            "width": 117,
+            "height": 21
+          },
+          "source": "tests/review.spec.js:32",
+          "duration": 134
+        }
+      ]
+    },
+    {
+      "image": "6fbd0b0f0f89836c",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 266,
+            "y": 594,
+            "width": 697,
+            "height": 39
+          },
+          "source": "tests/review.spec.js:33",
+          "duration": 145
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 247,
+            "y": 486,
+            "width": 102,
+            "height": 28
+          },
+          "source": "tests/review.spec.js:34",
+          "duration": 150
+        }
+      ]
+    },
+    {
+      "image": "c8f3e595772d0156",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "fill \"Should not throw\"",
+          "box": {
+            "x": 359,
+            "y": 343,
+            "width": 283,
+            "height": 44
+          },
+          "source": "tests/review.spec.js:35",
+          "duration": 236
+        }
+      ]
+    },
+    {
+      "image": "4bb82cb0b83b54d8",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 586,
+            "y": 404,
+            "width": 56,
+            "height": 37
+          },
+          "source": "tests/review.spec.js:36",
+          "duration": 150
+        }
+      ]
+    },
+    {
+      "image": "187177596e3508ba",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 276,
+            "y": 491,
+            "width": 267,
+            "height": 20
+          },
+          "source": "tests/review.spec.js:37",
+          "duration": 206
+        }
+      ]
+    },
+    {
+      "image": "4621648175f1172d",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 832,
+            "y": 78,
+            "width": 26,
+            "height": 26
+          },
+          "source": "tests/review.spec.js:39",
+          "duration": 164
+        }
+      ]
+    },
+    {
+      "image": "ef6b06fdf83bb67c",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 276,
+            "y": 370,
+            "width": 267,
+            "height": 20
+          },
+          "source": "tests/review.spec.js:40",
+          "duration": 214
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 549,
+            "y": 370,
+            "width": 26,
+            "height": 26
+          },
+          "source": "tests/review.spec.js:41",
+          "duration": 155
+        }
+      ]
+    },
+    {
+      "image": "f93aadaa62ba857b",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect count 0 (getByText('The outline should be blue'))",
+          "source": "tests/review.spec.js:42",
+          "duration": 2169
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 760,
+            "y": 17,
+            "width": 75,
+            "height": 26
+          },
+          "source": "tests/review.spec.js:44",
+          "duration": 164
+        }
+      ]
+    },
+    {
+      "image": "aed00bc74782252c",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 251,
+            "y": 266,
+            "width": 498,
+            "height": 43
+          },
+          "source": "tests/review.spec.js:45",
+          "duration": 211
+        }
+      ]
+    }
+  ]
+}

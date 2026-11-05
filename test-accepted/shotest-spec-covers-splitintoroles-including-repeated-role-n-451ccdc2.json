@@ -1,0 +1,160 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "covers splitIntoRoles including repeated role names",
+  "steps": [
+    {
+      "image": "863e51d9b3203ebf",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 24ms",
+          "source": "http://localhost:35619/test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goto /test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ",
+          "source": "tests/shotest.spec.js:92"
+        },
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 247,
+            "y": 78,
+            "width": 84,
+            "height": 21
+          },
+          "source": "tests/shotest.spec.js:95",
+          "duration": 183
+        }
+      ],
+      "role": "beta"
+    },
+    {
+      "image": "863e51d9b3203ebf",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 35,
+            "y": 264,
+            "width": 175,
+            "height": 37
+          },
+          "source": "tests/shotest.spec.js:97",
+          "duration": 201
+        }
+      ],
+      "role": "alpha"
+    },
+    {
+      "image": "34ff1b7eda256704",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 247,
+            "y": 78,
+            "width": 117,
+            "height": 21
+          },
+          "source": "tests/shotest.spec.js:98",
+          "duration": 162
+        }
+      ],
+      "role": "alpha"
+    },
+    {
+      "image": "863e51d9b3203ebf",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 35,
+            "y": 210,
+            "width": 175,
+            "height": 49
+          },
+          "source": "tests/shotest.spec.js:100",
+          "duration": 151
+        }
+      ],
+      "role": "beta"
+    },
+    {
+      "image": "fbe01c2763f395f9",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 276,
+            "y": 370,
+            "width": 267,
+            "height": 20
+          },
+          "source": "tests/shotest.spec.js:101",
+          "duration": 496
+        }
+      ],
+      "role": "beta"
+    },
+    {
+      "image": "34ff1b7eda256704",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "screenshot",
+          "message": "alpha-state",
+          "source": "tests/shotest.spec.js:103",
+          "duration": 95
+        }
+      ],
+      "role": "alpha"
+    },
+    {
+      "image": "fbe01c2763f395f9",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "screenshot",
+          "message": "beta-state",
+          "source": "tests/shotest.spec.js:104",
+          "duration": 70
+        }
+      ],
+      "role": "beta"
+    }
+  ]
+}

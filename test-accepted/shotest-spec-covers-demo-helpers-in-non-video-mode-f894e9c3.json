@@ -1,0 +1,309 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "covers demo helpers in non-video mode",
+  "steps": [
+    {
+      "image": "863e51d9b3203ebf",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 18ms",
+          "source": "http://localhost:34071/test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goto /test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ",
+          "source": "tests/shotest.spec.js:108"
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 35,
+            "y": 210,
+            "width": 175,
+            "height": 49
+          },
+          "source": "tests/shotest.spec.js:110",
+          "duration": 171
+        }
+      ]
+    },
+    {
+      "image": "fbe01c2763f395f9",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 276,
+            "y": 370,
+            "width": 267,
+            "height": 20
+          },
+          "source": "tests/shotest.spec.js:111",
+          "duration": 164
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 247,
+            "y": 410,
+            "width": 102,
+            "height": 28
+          },
+          "source": "tests/shotest.spec.js:113",
+          "duration": 152
+        }
+      ]
+    },
+    {
+      "image": "e3d2c35359aa7069",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "fill \"DemoUser\"",
+          "box": {
+            "x": 359,
+            "y": 343,
+            "width": 283,
+            "height": 44
+          },
+          "source": "tests/shotest.spec.js:114",
+          "duration": 245
+        }
+      ]
+    },
+    {
+      "image": "bba9445ca484583d",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect value \"DemoUser\"",
+          "box": {
+            "x": 359,
+            "y": 343,
+            "width": 283,
+            "height": 44
+          },
+          "source": "tests/shotest.spec.js:115",
+          "duration": 128
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 493,
+            "y": 404,
+            "width": 84,
+            "height": 37
+          },
+          "source": "tests/shotest.spec.js:117",
+          "duration": 167
+        }
+      ]
+    },
+    {
+      "image": "08e12e151b2ccdd5",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "wait",
+          "message": "waitForTimeout 50ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 204
+        }
+      ]
+    },
+    {
+      "image": "fbe01c2763f395f9",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 105
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 98
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 92
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 92
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 91
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 95
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 92
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 92
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 95
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 91
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 89
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 92
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 91
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 95
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 88
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 89
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 88
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 98
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 88
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 90
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 50ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 133
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 200ms",
+          "source": "tests/shotest.spec.js:120",
+          "duration": 296
+        }
+      ]
+    },
+    {
+      "image": "4cf50642854ce899",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 247,
+            "y": 61,
+            "width": 336,
+            "height": 560
+          },
+          "source": "tests/shotest.spec.js:121",
+          "duration": 145
+        },
+        {
+          "type": "screenshot",
+          "message": "demo-final",
+          "source": "tests/shotest.spec.js:123",
+          "duration": 103
+        }
+      ]
+    }
+  ]
+}

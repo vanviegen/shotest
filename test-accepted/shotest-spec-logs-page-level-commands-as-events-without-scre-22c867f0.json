@@ -1,0 +1,88 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "logs page-level commands as events without screenshots",
+  "steps": [
+    {
+      "image": "4d63ed9e9e246a79",
+      "viewport": {
+        "width": 500,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "page",
+          "message": "setViewportSize 500×700",
+          "source": "tests/shotest.spec.js:167"
+        },
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 24ms",
+          "source": "http://localhost:36983/:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/shotest.spec.js:168"
+        },
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 23ms",
+          "source": "http://localhost:36983/?variant=1:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goto /?variant=1",
+          "source": "tests/shotest.spec.js:169"
+        },
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 21ms",
+          "source": "http://localhost:36983/:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goBack",
+          "source": "tests/shotest.spec.js:170"
+        },
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 18ms",
+          "source": "http://localhost:36983/?variant=1:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goForward",
+          "source": "tests/shotest.spec.js:171"
+        },
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 17ms",
+          "source": "http://localhost:36983/?variant=1:202:13"
+        },
+        {
+          "type": "page",
+          "message": "reload",
+          "source": "tests/shotest.spec.js:172"
+        },
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 63,
+            "y": 162,
+            "width": 381,
+            "height": 24
+          },
+          "source": "tests/shotest.spec.js:173",
+          "duration": 143
+        }
+      ]
+    }
+  ]
+}

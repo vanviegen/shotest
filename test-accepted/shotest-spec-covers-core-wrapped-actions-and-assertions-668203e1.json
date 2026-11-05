@@ -1,0 +1,432 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "covers core wrapped actions and assertions",
+  "steps": [
+    {
+      "image": "863e51d9b3203ebf",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 18ms",
+          "source": "http://localhost:39751/test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goto /test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ",
+          "source": "tests/shotest.spec.js:27"
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 35,
+            "y": 264,
+            "width": 175,
+            "height": 37
+          },
+          "source": "tests/shotest.spec.js:28",
+          "duration": 189
+        }
+      ]
+    },
+    {
+      "image": "34ff1b7eda256704",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 247,
+            "y": 78,
+            "width": 117,
+            "height": 21
+          },
+          "source": "tests/shotest.spec.js:29",
+          "duration": 153
+        }
+      ]
+    },
+    {
+      "image": "18b755b0c715a080",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 247,
+            "y": 486,
+            "width": 102,
+            "height": 28
+          },
+          "source": "tests/shotest.spec.js:31",
+          "duration": 169
+        }
+      ]
+    },
+    {
+      "image": "6049daf24d7d8f18",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "fill \"Alpha\"",
+          "box": {
+            "x": 359,
+            "y": 343,
+            "width": 283,
+            "height": 44
+          },
+          "source": "tests/shotest.spec.js:33",
+          "duration": 239
+        }
+      ]
+    },
+    {
+      "image": "046b6de5a589d451",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect value \"Alpha\"",
+          "box": {
+            "x": 359,
+            "y": 343,
+            "width": 283,
+            "height": 44
+          },
+          "source": "tests/shotest.spec.js:34",
+          "duration": 130
+        },
+        {
+          "type": "action",
+          "message": "clear",
+          "box": {
+            "x": 359,
+            "y": 343,
+            "width": 283,
+            "height": 44
+          },
+          "source": "tests/shotest.spec.js:35",
+          "duration": 147
+        }
+      ]
+    },
+    {
+      "image": "6049daf24d7d8f18",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "type \"Beta\"",
+          "box": {
+            "x": 359,
+            "y": 343,
+            "width": 283,
+            "height": 44
+          },
+          "source": "tests/shotest.spec.js:36",
+          "duration": 162
+        }
+      ]
+    },
+    {
+      "image": "1e1cb35e1ad403d7",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "press \"End\"",
+          "box": {
+            "x": 359,
+            "y": 343,
+            "width": 283,
+            "height": 44
+          },
+          "source": "tests/shotest.spec.js:37",
+          "duration": 157
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 493,
+            "y": 404,
+            "width": 84,
+            "height": 37
+          },
+          "source": "tests/shotest.spec.js:38",
+          "duration": 147
+        }
+      ]
+    },
+    {
+      "image": "18b755b0c715a080",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect count 0 (getByText('Beta'))",
+          "source": "tests/shotest.spec.js:39",
+          "duration": 2155
+        },
+        {
+          "type": "action",
+          "message": "fill \"0.5\"",
+          "box": {
+            "x": 884,
+            "y": 23,
+            "width": 64,
+            "height": 14
+          },
+          "source": "tests/shotest.spec.js:42",
+          "duration": 168
+        }
+      ]
+    },
+    {
+      "image": "d366340bfc30e468",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect value \"0.5\"",
+          "box": {
+            "x": 884,
+            "y": 23,
+            "width": 64,
+            "height": 14
+          },
+          "source": "tests/shotest.spec.js:43",
+          "duration": 144
+        }
+      ]
+    },
+    {
+      "image": "56b3cc076fdf240d",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "selectOption \"mint\"",
+          "box": {
+            "x": 748,
+            "y": 654,
+            "width": 74,
+            "height": 38
+          },
+          "source": "tests/shotest.spec.js:54",
+          "duration": 161
+        }
+      ]
+    },
+    {
+      "image": "f8d0b60e592063ef",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect value \"mint\"",
+          "box": {
+            "x": 748,
+            "y": 654,
+            "width": 74,
+            "height": 38
+          },
+          "source": "tests/shotest.spec.js:55",
+          "duration": 146
+        },
+        {
+          "type": "action",
+          "message": "check",
+          "box": {
+            "x": 830,
+            "y": 659,
+            "width": 18,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:57",
+          "duration": 168
+        }
+      ]
+    },
+    {
+      "image": "6dc1b5ccf18414dd",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect checked",
+          "box": {
+            "x": 830,
+            "y": 659,
+            "width": 18,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:58",
+          "duration": 141
+        },
+        {
+          "type": "action",
+          "message": "uncheck",
+          "box": {
+            "x": 830,
+            "y": 659,
+            "width": 18,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:59",
+          "duration": 165
+        }
+      ]
+    },
+    {
+      "image": "42bbe858a17a9caf",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect not checked",
+          "box": {
+            "x": 830,
+            "y": 659,
+            "width": 18,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:60",
+          "duration": 146
+        },
+        {
+          "type": "action",
+          "message": "hover",
+          "box": {
+            "x": 35,
+            "y": 306,
+            "width": 175,
+            "height": 37
+          },
+          "source": "tests/shotest.spec.js:62",
+          "duration": 175
+        }
+      ]
+    },
+    {
+      "image": "574c13010c66bb6f",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 35,
+            "y": 157,
+            "width": 175,
+            "height": 49
+          },
+          "source": "tests/shotest.spec.js:63",
+          "duration": 175
+        }
+      ]
+    },
+    {
+      "image": "b98a36f4becc43ec",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "wait",
+          "message": "waitForTimeout 300ms",
+          "source": "tests/shotest.spec.js:64",
+          "duration": 401
+        },
+        {
+          "type": "action",
+          "message": "dblclick",
+          "box": {
+            "x": 316,
+            "y": 596,
+            "width": 74,
+            "height": 19
+          },
+          "source": "tests/shotest.spec.js:68",
+          "duration": 166
+        }
+      ]
+    },
+    {
+      "image": "da5f846714ec2bd0",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect not class /pinned/",
+          "box": {
+            "x": 316,
+            "y": 596,
+            "width": 74,
+            "height": 19
+          },
+          "source": "tests/shotest.spec.js:69",
+          "duration": 136
+        },
+        {
+          "type": "screenshot",
+          "message": "core-final",
+          "source": "tests/shotest.spec.js:72",
+          "duration": 113
+        }
+      ]
+    }
+  ]
+}

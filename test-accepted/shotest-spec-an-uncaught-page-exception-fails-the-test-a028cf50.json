@@ -1,0 +1,50 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "an uncaught page exception fails the test",
+  "steps": [
+    {
+      "image": "d42b022f6a2e52da",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 19ms",
+          "source": "http://localhost:43921/:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/shotest.spec.js:204"
+        },
+        {
+          "type": "console",
+          "consoleType": "error",
+          "message": "Error: uncaught in the page\n    at eval (eval at evaluate (:370:30), <anonymous>:3:13)"
+        },
+        {
+          "type": "assert",
+          "message": "expect text \"0\"",
+          "box": {
+            "x": 966,
+            "y": 660,
+            "width": 34,
+            "height": 40
+          },
+          "source": "tests/shotest.spec.js:207",
+          "duration": 138
+        },
+        {
+          "type": "error",
+          "message": "The page raised an error, the first: Error: uncaught in the page\n    at eval (eval at evaluate (:370:30), <anonymous>:3:13)",
+          "source": "tests/shotest.spec.js:207",
+          "duration": 85
+        }
+      ]
+    }
+  ]
+}

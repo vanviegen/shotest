@@ -1,0 +1,120 @@
+{
+  "version": 4,
+  "file": "tests/example.spec.js",
+  "title": "changed, removed and new steps",
+  "steps": [
+    {
+      "image": "b5fad775a41a8926",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/example.spec.js:11"
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 39,
+            "y": 178,
+            "width": 97,
+            "height": 36
+          },
+          "source": "tests/example.spec.js:12",
+          "duration": 137
+        }
+      ]
+    },
+    {
+      "image": "e22d631190963309",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "click \"Reset\"",
+          "box": {
+            "x": 150,
+            "y": 178,
+            "width": 97,
+            "height": 36
+          },
+          "source": "tests/example.spec.js:13",
+          "duration": 120
+        }
+      ]
+    },
+    {
+      "image": "623d48343fa21f96",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect text \"1\"",
+          "box": {
+            "x": 39,
+            "y": 134,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/example.spec.js:14",
+          "duration": 85
+        },
+        {
+          "type": "action",
+          "message": "fill \"Alpha\"",
+          "box": {
+            "x": 39,
+            "y": 314,
+            "width": 342,
+            "height": 24
+          },
+          "source": "tests/example.spec.js:15",
+          "duration": 114
+        }
+      ]
+    },
+    {
+      "image": "215625bbeb7467c3",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect value \"Alpha\"",
+          "box": {
+            "x": 39,
+            "y": 314,
+            "width": 342,
+            "height": 24
+          },
+          "source": "tests/example.spec.js:16",
+          "duration": 93
+        },
+        {
+          "type": "action",
+          "message": "clear",
+          "box": {
+            "x": 39,
+            "y": 314,
+            "width": 342,
+            "height": 24
+          },
+          "source": "tests/example.spec.js:17",
+          "duration": 116
+        }
+      ]
+    }
+  ]
+}

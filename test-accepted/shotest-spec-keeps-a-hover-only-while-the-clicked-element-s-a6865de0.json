@@ -1,0 +1,94 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "keeps a hover only while the clicked element's parent is under the mouse",
+  "steps": [
+    {
+      "image": "6e514602eb459b59",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 8,
+            "y": 8,
+            "width": 47,
+            "height": 21
+          },
+          "source": "tests/shotest.spec.js:82",
+          "duration": 144
+        }
+      ]
+    },
+    {
+      "image": "b3018ddd5ac5eda1",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "screenshot",
+          "message": "kept-hover",
+          "source": "tests/shotest.spec.js:83",
+          "duration": 63
+        },
+        {
+          "type": "assert",
+          "message": "expect css \"outline-style\" \"solid\"",
+          "box": {
+            "x": 8,
+            "y": 8,
+            "width": 47,
+            "height": 21
+          },
+          "source": "tests/shotest.spec.js:84",
+          "duration": 78
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 8,
+            "y": 29,
+            "width": 49,
+            "height": 21
+          },
+          "source": "tests/shotest.spec.js:86",
+          "duration": 117
+        }
+      ]
+    },
+    {
+      "image": "fd326c578f3057c6",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "screenshot",
+          "message": "released-hover",
+          "source": "tests/shotest.spec.js:87",
+          "duration": 112
+        },
+        {
+          "type": "assert",
+          "message": "expect css \"outline-style\" \"none\"",
+          "box": {
+            "x": 8,
+            "y": 29,
+            "width": 43,
+            "height": 21
+          },
+          "source": "tests/shotest.spec.js:88",
+          "duration": 81
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "version": 4,
+  "file": "tests/example.spec.js",
+  "title": "unchanged",
+  "steps": [
+    {
+      "image": "b5fad775a41a8926",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/example.spec.js:41"
+        },
+        {
+          "type": "assert",
+          "message": "expect not visible (getByText('this text exists nowhere on the page'))",
+          "source": "tests/example.spec.js:42",
+          "duration": 2073
+        },
+        {
+          "type": "check",
+          "message": "waitFor hidden (getByText('no such element either'))",
+          "source": "tests/example.spec.js:43",
+          "duration": 2064
+        },
+        {
+          "type": "check",
+          "message": "isHidden (getByText('still nothing'))",
+          "source": "tests/example.spec.js:44",
+          "duration": 2050
+        }
+      ]
+    }
+  ]
+}

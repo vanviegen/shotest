@@ -1,0 +1,47 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "supports describe hints and screenshot suppression",
+  "steps": [
+    {
+      "gap": "Open the failed test"
+    },
+    {
+      "image": "18b755b0c715a080",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 19ms",
+          "source": "http://localhost:33113/test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goto /test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ",
+          "source": "tests/shotest.spec.js:127"
+        },
+        {
+          "type": "describe",
+          "message": "Verify the error is shown",
+          "source": "tests/shotest.spec.js:134"
+        },
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 266,
+            "y": 542,
+            "width": 33,
+            "height": 24
+          },
+          "source": "tests/shotest.spec.js:135",
+          "duration": 138
+        }
+      ]
+    }
+  ]
+}
