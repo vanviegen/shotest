@@ -1,0 +1,41 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "supports describe hints and screenshot suppression",
+  "steps": [
+    {
+      "gap": "Prepare the counter (2x increment)"
+    },
+    {
+      "image": "29f1af650ca53502",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/shotest.spec.js:89"
+        },
+        {
+          "type": "describe",
+          "message": "Verify the prepared counter",
+          "source": "tests/shotest.spec.js:97"
+        },
+        {
+          "type": "assert",
+          "message": "expect text \"2\"",
+          "box": {
+            "x": 39,
+            "y": 134,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:98",
+          "duration": 136
+        }
+      ]
+    }
+  ]
+}

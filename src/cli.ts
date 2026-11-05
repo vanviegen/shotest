@@ -1,20 +1,18 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  startReviewServer,
-  loadTestRecords,
-  buildAlignEntries,
-  hasVisualChanges,
-  testId,
-} from './review.js';
+import { startReviewServer, testId } from './review.js';
 import {
   gcPoolFiles,
   hasLegacyAcceptedLayout,
   legacyAcceptedHint,
+  loadTestRecords,
+  migrateAcceptedDir,
+  sameVisuals,
   type TestRecord,
 } from './manifest.js';
 
@@ -71,12 +69,10 @@ function getSummary(outputDir: string, acceptedDir: string): Summary | null {
 
     summary.passed++;
 
-    const currentEntries = buildAlignEntries(record.steps);
-    const acceptedEntries = buildAlignEntries(acceptedByKey.get(testId(record))?.steps ?? []);
-    if (hasVisualChanges(acceptedEntries, currentEntries)) {
-      summary.changed++;
-    } else {
+    if (sameVisuals(acceptedByKey.get(testId(record))?.steps ?? [], record.steps)) {
       summary.unchanged++;
+    } else {
+      summary.changed++;
     }
   }
 
@@ -109,7 +105,7 @@ function printSummary(): Summary | null {
 
     console.log(`\nShoTest visuals: ${summary.changed} changed, ${summary.unchanged} unchanged across ${summary.passed} passed test(s)${noScreenshotsText}`);
     if (summary.changed > 0) {
-      console.log('Run "npx shotest review" to review and accept visual changes');
+      console.log('Run "npx shotest review" to review the visual changes');
     }
   }
 
@@ -118,8 +114,7 @@ function printSummary(): Summary | null {
 
 // The explicit `shotest gc` sweeps both pools. Elsewhere each pool is swept
 // at the moment it can have become garbage: test-results/ on every
-// `shotest collect`, test-accepted/ whenever the review app accepts or
-// deletes a baseline.
+// `shotest collect`, test-accepted/ whenever a review is applied.
 function runGc(): void {
   const acceptedDir = getAcceptedDir();
   const legacyAccepted = hasLegacyAcceptedLayout(acceptedDir);
@@ -151,6 +146,38 @@ function runCollect(): number {
   if (summary.failedTests.length > 0) return 1;
   if (summary.changed > 0) return 2;
   return 0;
+}
+
+/**
+ * A hash of the whole source tree as it is on disk — uncommitted and
+ * untracked files included, git-ignored ones not — leaving out the results
+ * and the accepted baselines, which a test run itself writes to. A test that
+ * passed on this very tree can be skipped (see addPassedTest). Undefined
+ * outside a git work tree.
+ *
+ * git does the hashing, into a scratch index: a copy of the real one, so
+ * that files whose stat data is unchanged need not be read again.
+ */
+function sourceTreeHash(): string | undefined {
+  const index = path.join(tmpdir(), `shotest-index-${process.pid}`);
+  const git = (args: string[]) => execFileSync('git', args, {
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    env: { ...process.env, GIT_INDEX_FILE: index },
+  }).trim();
+  try {
+    try {
+      copyFileSync(git(['rev-parse', '--path-format=absolute', '--git-path', 'index']), index);
+    } catch { } // no commits yet: start from an empty index
+    const excluded = [getOutputDir(), getAcceptedDir()];
+    git(['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', ...excluded]);
+    git(['add', '-A', '--', ':/', ...excluded.map((dir) => `:(exclude)${dir}`)]);
+    return git(['write-tree']);
+  } catch {
+    return undefined;
+  } finally {
+    rmSync(index, { force: true });
+  }
 }
 
 /**
@@ -187,13 +214,18 @@ async function main(): Promise<void> {
     noContainer = true;
     argv = argv.filter((arg) => arg !== '--no-container');
   }
+  if (argv[0] === 'test' && argv.includes('--all')) {
+    process.env.SHOTEST_RUN_ALL = '1';
+    argv = argv.filter((arg) => arg !== '--all');
+  }
 
   const firstArg = argv[0];
+  migrateAcceptedDir(getAcceptedDir());
 
   if (firstArg === 'review') {
-    // Exits by itself once nothing is left to review, so that waiting for the
-    // command to finish is a way to wait for a human to accept the changes.
-    await startReviewServer({ closeOnAccept: argv.includes('--close-on-accept') });
+    // Exits by itself once the review is applied or discarded, so that
+    // waiting for the command to finish is a way to wait for a human.
+    await startReviewServer();
     return;
   }
 
@@ -204,6 +236,13 @@ async function main(): Promise<void> {
 
   if (firstArg === 'collect') {
     process.exit(runCollect());
+  }
+
+  // Tests that already passed on this source tree are skipped (unless
+  // --all), and tests that pass are recorded as such for the next run.
+  if (firstArg === 'test') {
+    const tree = sourceTreeHash();
+    if (tree) process.env.SHOTEST_TREE = tree;
   }
 
   // Everything else is Playwright's, `test` included: reporting on a test

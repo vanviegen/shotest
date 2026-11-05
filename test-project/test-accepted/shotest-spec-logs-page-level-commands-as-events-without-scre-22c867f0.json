@@ -1,0 +1,58 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "logs page-level commands as events without screenshots",
+  "steps": [
+    {
+      "image": "97e30388800ec19a",
+      "viewport": {
+        "width": 500,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "page",
+          "message": "setViewportSize 500×700",
+          "source": "tests/shotest.spec.js:123"
+        },
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/shotest.spec.js:124"
+        },
+        {
+          "type": "page",
+          "message": "goto /?variant=1",
+          "source": "tests/shotest.spec.js:125"
+        },
+        {
+          "type": "page",
+          "message": "goBack",
+          "source": "tests/shotest.spec.js:126"
+        },
+        {
+          "type": "page",
+          "message": "goForward",
+          "source": "tests/shotest.spec.js:127"
+        },
+        {
+          "type": "page",
+          "message": "reload",
+          "source": "tests/shotest.spec.js:128"
+        },
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 24,
+            "y": 24,
+            "width": 452,
+            "height": 37
+          },
+          "source": "tests/shotest.spec.js:129",
+          "duration": 194
+        }
+      ]
+    }
+  ]
+}

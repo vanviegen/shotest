@@ -1,0 +1,261 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "covers demo helpers in non-video mode",
+  "steps": [
+    {
+      "image": "7b22e50dfb84447f",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/shotest.spec.js:71"
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 39,
+            "y": 178,
+            "width": 97,
+            "height": 36
+          },
+          "source": "tests/shotest.spec.js:73",
+          "duration": 186
+        }
+      ]
+    },
+    {
+      "image": "918fc60cb1e489c9",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect text \"1\"",
+          "box": {
+            "x": 39,
+            "y": 134,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:74",
+          "duration": 160
+        },
+        {
+          "type": "action",
+          "message": "fill \"DemoUser\"",
+          "box": {
+            "x": 39,
+            "y": 314,
+            "width": 342,
+            "height": 24
+          },
+          "source": "tests/shotest.spec.js:76",
+          "duration": 107
+        }
+      ]
+    },
+    {
+      "image": "f94c58aaaeb8d9d6",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect value \"DemoUser\"",
+          "box": {
+            "x": 39,
+            "y": 314,
+            "width": 342,
+            "height": 24
+          },
+          "source": "tests/shotest.spec.js:77",
+          "duration": 116
+        }
+      ]
+    },
+    {
+      "image": "c48443ac00e58bb3",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "wait",
+          "message": "waitForTimeout 50ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 150
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 74
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 69
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 111
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 121
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 114
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 77
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 87
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 68
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 75
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 123
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 74
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 80
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 118
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 118
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 101
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 123
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 97
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 100
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 98
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 61
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 50ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 104
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 200ms",
+          "source": "tests/shotest.spec.js:82",
+          "duration": 306
+        }
+      ]
+    },
+    {
+      "image": "6553236f26cbd274",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 39,
+            "y": 343,
+            "width": 342,
+            "height": 90
+          },
+          "source": "tests/shotest.spec.js:83",
+          "duration": 165
+        },
+        {
+          "type": "screenshot",
+          "message": "demo-final",
+          "source": "tests/shotest.spec.js:85",
+          "duration": 96
+        }
+      ]
+    }
+  ]
+}

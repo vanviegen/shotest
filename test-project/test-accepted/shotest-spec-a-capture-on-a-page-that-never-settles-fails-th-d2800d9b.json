@@ -1,0 +1,73 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "a capture on a page that never settles fails the test, naming the culprit",
+  "steps": [
+    {
+      "image": "7b22e50dfb84447f",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/shotest.spec.js:289"
+        },
+        {
+          "type": "assert",
+          "message": "expect text \"0\"",
+          "box": {
+            "x": 39,
+            "y": 134,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:292",
+          "duration": 596
+        },
+        {
+          "type": "error",
+          "message": "Page did not settle within 500ms: the DOM kept mutating (last: attribute \"data-tick\" on p#count-value). Find what keeps the page moving and stop it under test, or wrap this part in suppressScreenshots() to capture nothing here.",
+          "source": "tests/shotest.spec.js:292"
+        }
+      ],
+      "unstable": "Page did not settle within 500ms: the DOM kept mutating (last: attribute \"data-tick\" on p#count-value)"
+    },
+    {
+      "gap": "Increment while the page keeps moving"
+    },
+    {
+      "gap": "Capture the moving page anyway"
+    },
+    {
+      "image": "918fc60cb1e489c9",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "screenshot",
+          "message": "ticking",
+          "source": "tests/shotest.spec.js:305",
+          "duration": 539
+        },
+        {
+          "type": "assert",
+          "message": "expect text \"1\"",
+          "box": {
+            "x": 39,
+            "y": 134,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:309",
+          "duration": 97
+        }
+      ],
+      "unstable": "Page did not settle within 500ms: the DOM kept mutating (last: attribute \"data-tick\" on p#count-value)"
+    }
+  ]
+}

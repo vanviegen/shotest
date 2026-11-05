@@ -3,9 +3,16 @@
  * review server, and the CLI (gc).
  *
  * Both test-results/ and test-accepted/ are flat:
- *   <spec-base>.json   one file per spec file, listing its tests and steps
- *   <hash>.png|.webp   screenshots, named by pixel-content hash (see hash.ts)
- *   <hash>.body.html   DOM snapshots (test-results only, when enabled)
+ *   <test-base>.json           one file per test, listing its steps
+ *   <hash>.png|.webp           screenshots, named by pixel-content hash (see hash.ts)
+ *   <hash>.body.html           DOM snapshots (test-results only, when enabled)
+ * test-accepted/ also holds:
+ *   <test-base>.comments.json  review comments on a test not accepted yet
+ *   <tree-hash>.passed         the tests that passed against their baseline
+ *                              at that source tree (see sourceTreeHash)
+ *
+ * One file per test (rather than per spec file) keeps branches that accept
+ * different tests from conflicting when they are merged.
  *
  * Screenshots are clean captures of the page; what happened at each moment
  * (clicks, assertions, navigations) is recorded as *events* on the step, with
@@ -16,15 +23,17 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash } from 'crypto';
 import { POOL_FILE_RE } from './hash.js';
 
 /**
- * The spec JSON format version. Bumped whenever the step shape changes in a
+ * The test JSON format version. Bumped whenever the record shape changes in a
  * way older readers (or this reader, for older files) cannot handle; files
  * carrying another version — including the versionless pre-event format —
- * are ignored, so their tests read as "no data yet".
+ * are ignored, so their tests read as "no data yet". Version 3 baselines
+ * (one JSON per spec file) are split up by migrateAcceptedDir.
  */
-export const SPEC_VERSION = 3;
+export const RECORD_VERSION = 4;
 
 /**
  * Something that happened while the page looked like the step's screenshot.
@@ -117,74 +126,202 @@ export interface TestRecord {
     errorSource?: string | null;
     errorStack?: string | null;
     steps: StepRecord[];
+    /** The source tree the test ran on (see sourceTreeHash). Results only. */
+    tree?: string;
+    /**
+     * Results only: the test did not run, as it already passed on this very
+     * source tree; its steps are the baseline's, whose images stay in the
+     * accepted pool.
+     */
+    cached?: boolean;
 }
 
-export interface SpecRecords {
-    version: number;
-    tests: TestRecord[];
+export type TestIdentity = Pick<TestRecord, 'file' | 'title'>;
+
+/** How a test is named to people: in stamps and in the review's report. */
+export function testName(test: TestIdentity): string {
+    return `${test.file} › ${test.title}`;
 }
 
-// ── Spec JSON files ────────────────────────────────────────────────
+// ── Test JSON files ────────────────────────────────────────────────
 
-/** "tests/my.spec.ts" → "my.spec.json" */
-export function specJsonName(specFile: string): string {
-    const base = path.basename(specFile);
-    return base.replace(/\.[cm]?[jt]sx?$/, '') + '.json';
+/**
+ * The file name stem for a test: readable, and unique through a hash of the
+ * full identity — "my.spec.ts", "Login works" → "my-spec-login-works-1a2b3c4d".
+ */
+export function testFileBase(test: TestIdentity): string {
+    const slug = (path.basename(test.file).replace(/\.[cm]?[jt]sx?$/, '') + ' ' + test.title)
+        .toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60).replace(/^-|-$/g, '');
+    const hash = createHash('sha256').update(test.file + '\0' + test.title).digest('hex').slice(0, 8);
+    return `${slug}-${hash}`;
 }
 
-export function listSpecJsonFiles(dir: string): string[] {
+const COMMENTS_SUFFIX = '.comments.json';
+
+export function listTestJsonFiles(dir: string): string[] {
     if (!fs.existsSync(dir)) return [];
-    return fs.readdirSync(dir).filter((file) => file.endsWith('.json') && !file.startsWith('.')).sort();
+    return fs.readdirSync(dir)
+        .filter((file) => file.endsWith('.json') && !file.endsWith(COMMENTS_SUFFIX) && !file.startsWith('.'))
+        .sort();
 }
 
 /**
- * Read a spec JSON, or null when it is unreadable *or from another format
+ * Read a test JSON, or null when it is unreadable *or from another format
  * version*. Old-format files thus act as if their tests never existed —
- * accepting a test rebuilds its spec file from scratch (see mergeTestRecord)
- * and gc drops the images only the old file referenced.
+ * accepting a test writes a fresh file, and gc drops the images only the old
+ * file referenced.
  */
-export function readSpecRecords(jsonPath: string): SpecRecords | null {
+export function readTestRecord(jsonPath: string): TestRecord | null {
     try {
-        const data = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
-        if (data?.version === SPEC_VERSION && Array.isArray(data?.tests)) return data as SpecRecords;
+        const { version, ...record } = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+        if (version === RECORD_VERSION && typeof record.title === 'string' && Array.isArray(record.steps)) return record as TestRecord;
     } catch { }
     return null;
 }
 
-/** Whether a spec JSON exists but was ignored by readSpecRecords (old format). */
-export function isOutdatedSpecJson(jsonPath: string): boolean {
-    return fs.existsSync(jsonPath) && readSpecRecords(jsonPath) === null;
+/** Whether a test JSON exists but was ignored by readTestRecord (old format). */
+export function isOutdatedTestJson(jsonPath: string): boolean {
+    return fs.existsSync(jsonPath) && readTestRecord(jsonPath) === null;
 }
 
-export function writeSpecRecords(jsonPath: string, records: SpecRecords): void {
-    // Atomic replace, so a concurrent reader never sees a torn file.
-    const tmpPath = jsonPath + '.tmp' + process.pid;
-    fs.writeFileSync(tmpPath, JSON.stringify(records, null, 2) + '\n', 'utf-8');
-    fs.renameSync(tmpPath, jsonPath);
+export function loadTestRecords(dir: string): TestRecord[] {
+    return listTestJsonFiles(dir).flatMap((file) => readTestRecord(path.join(dir, file)) ?? []);
 }
 
-function testKey(record: Pick<TestRecord, 'file' | 'title'>): string {
-    return record.file + '\0' + record.title;
+export function findTestRecord(dir: string, test: TestIdentity): TestRecord | undefined {
+    return readTestRecord(path.join(dir, testFileBase(test) + '.json')) ?? undefined;
+}
+
+// Atomic replace, so a concurrent reader never sees a torn file.
+function writeFileAtomic(filePath: string, text: string): void {
+    const tmpPath = filePath + '.tmp' + process.pid;
+    fs.writeFileSync(tmpPath, text, 'utf-8');
+    fs.renameSync(tmpPath, filePath);
+}
+
+function writeJson(jsonPath: string, data: unknown): void {
+    writeFileAtomic(jsonPath, JSON.stringify(data, null, 2) + '\n');
+}
+
+export function writeTestRecord(dir: string, record: TestRecord): void {
+    fs.mkdirSync(dir, { recursive: true });
+    writeJson(path.join(dir, testFileBase(record) + '.json'), { version: RECORD_VERSION, ...record });
+}
+
+export function removeTestRecord(dir: string, test: TestIdentity): void {
+    fs.rmSync(path.join(dir, testFileBase(test) + '.json'), { force: true });
 }
 
 /**
- * Insert or replace one test's record in its spec JSON. Safe across Playwright
- * worker processes: guarded by an on-disk lock around the read-modify-write.
+ * Whether two step lists look the same: equal images (pixel-identical, as
+ * they are named by a hash of their pixels) and gap texts, in the same order.
+ * Events never enter into it — if the pictures match and the test is green,
+ * all is well no matter which checks got it there.
+ *
+ * "Same screenshot" means pixel-identical, with no tolerance: screenshots are
+ * deterministic within one rendering environment (pinned browser build,
+ * software rasterization, animations disabled, fonts awaited); keeping that
+ * environment pinned across machines is what the containerized `shotest
+ * test` is for (see the README's "Deterministic screenshots" section).
  */
-export function mergeTestRecord(dir: string, record: TestRecord): void {
+export function sameVisuals(a: StepRecord[], b: StepRecord[]): boolean {
+    const key = (step: StepRecord) => isGapStep(step) ? 'gap:' + step.gap : step.image;
+    return a.length === b.length && a.every((step, i) => key(step) === key(b[i]));
+}
+
+/**
+ * Split version 3 baselines — one JSON per spec file, listing its tests — into
+ * one file per test. Leaves anything else alone.
+ */
+export function migrateAcceptedDir(dir: string): void {
+    for (const file of listTestJsonFiles(dir)) {
+        const jsonPath = path.join(dir, file);
+        let data: any;
+        try { data = JSON.parse(fs.readFileSync(jsonPath, 'utf-8')); } catch { continue; }
+        if (data?.version !== 3 || !Array.isArray(data.tests)) continue;
+        for (const record of data.tests) writeTestRecord(dir, record);
+        fs.rmSync(jsonPath);
+    }
+}
+
+// ── Review comments ────────────────────────────────────────────────
+
+/**
+ * A reviewer's remark on a screenshot of a test that was not accepted. It
+ * outlives the run it was made on: a later run reattaches it to the step with
+ * the same image, or else to the step with the same significant events (the
+ * same moment in the test, its look changed).
+ */
+export interface ReviewComment {
+    text: string;
+    /** The screenshot commented on. */
+    image: string;
+    /** That step's significant (non-console) event messages. */
+    events: string[];
+}
+
+interface CommentsFile extends TestIdentity {
+    comments: ReviewComment[];
+}
+
+function commentsPath(dir: string, test: TestIdentity): string {
+    return path.join(dir, testFileBase(test) + COMMENTS_SUFFIX);
+}
+
+export function readComments(dir: string, test: TestIdentity): ReviewComment[] {
+    try {
+        return (JSON.parse(fs.readFileSync(commentsPath(dir, test), 'utf-8')) as CommentsFile).comments ?? [];
+    } catch {
+        return [];
+    }
+}
+
+/** Store a test's comments; none at all removes the file. */
+export function writeComments(dir: string, test: TestIdentity, comments: ReviewComment[]): void {
+    if (comments.length === 0) {
+        fs.rmSync(commentsPath(dir, test), { force: true });
+        return;
+    }
     fs.mkdirSync(dir, { recursive: true });
-    const jsonPath = path.join(dir, specJsonName(record.file));
-    withFileLock(jsonPath, () => {
-        // An unreadable or old-format file is discarded wholesale: its records
-        // could not be read as baselines anyway, and mixing formats in one
-        // file would leave it unreadable forever.
-        const records = readSpecRecords(jsonPath) ?? { version: SPEC_VERSION, tests: [] };
-        const index = records.tests.findIndex((test) => testKey(test) === testKey(record));
-        if (index >= 0) records.tests[index] = record;
-        else records.tests.push(record);
-        records.tests.sort((a, b) =>
-            a.file.localeCompare(b.file) || (a.line ?? 0) - (b.line ?? 0) || a.title.localeCompare(b.title));
-        writeSpecRecords(jsonPath, records);
+    const data: CommentsFile = { file: test.file, title: test.title, comments };
+    writeJson(commentsPath(dir, test), data);
+}
+
+// ── Pass stamps ────────────────────────────────────────────────────
+
+/**
+ * Stamps record which tests passed, looking exactly like their baseline, on
+ * a source tree: `<tree-hash>.passed` lists their names, one per line. A
+ * test listed for the tree a run is on can be skipped — nothing it depends
+ * on changed. Only the current tree's stamp is ever useful, so writing one
+ * deletes the others. Naming the file after the tree means two branches
+ * never write the same file, so merging them does not conflict.
+ */
+const STAMP_SUFFIX = '.passed';
+
+function stampPath(dir: string, tree: string): string {
+    return path.join(dir, tree + STAMP_SUFFIX);
+}
+
+export function readPassedTests(dir: string, tree: string): Set<string> {
+    try {
+        return new Set(fs.readFileSync(stampPath(dir, tree), 'utf-8').split('\n').filter(Boolean));
+    } catch {
+        return new Set();
+    }
+}
+
+/** Add a test to the stamp of `tree`. Safe across Playwright worker processes. */
+export function addPassedTest(dir: string, tree: string, test: TestIdentity): void {
+    fs.mkdirSync(dir, { recursive: true });
+    const stamp = stampPath(dir, tree);
+    withFileLock(stamp, () => {
+        const names = readPassedTests(dir, tree);
+        names.add(testName(test));
+        writeFileAtomic(stamp, [...names].sort().join('\n') + '\n');
+        for (const file of fs.readdirSync(dir)) {
+            if (file.endsWith(STAMP_SUFFIX) && file !== tree + STAMP_SUFFIX) fs.rmSync(path.join(dir, file), { force: true });
+        }
     });
 }
 
@@ -228,22 +365,19 @@ export function withFileLock<T>(filePath: string, fn: () => T): T {
 
 export function collectReferencedHashes(dir: string): Set<string> {
     const hashes = new Set<string>();
-    for (const jsonFile of listSpecJsonFiles(dir)) {
-        const records = readSpecRecords(path.join(dir, jsonFile));
-        for (const test of records?.tests ?? []) {
-            for (const step of test.steps) {
-                if (!isGapStep(step)) hashes.add(step.image);
-            }
+    for (const test of loadTestRecords(dir)) {
+        for (const step of test.steps) {
+            if (!isGapStep(step)) hashes.add(step.image);
         }
     }
     return hashes;
 }
 
 /**
- * Delete pool files (hash-named images and HTML snapshots) that no spec JSON
+ * Delete pool files (hash-named images and HTML snapshots) that no test JSON
  * in `dir` references. Only files matching the pool naming pattern are ever
  * touched; everything else (Playwright's per-test directories, .last-run.json,
- * the spec JSONs themselves) is left alone.
+ * the test JSONs, comments and stamps) is left alone.
  */
 export function gcPoolFiles(dir: string): number {
     if (!fs.existsSync(dir)) return 0;
@@ -274,6 +408,6 @@ export function hasLegacyAcceptedLayout(dir: string): boolean {
 
 export function legacyAcceptedHint(dir: string): string {
     return `${dir} contains subdirectories, which looks like the ShoTest 1.x per-test layout. ` +
-        `ShoTest 2.x stores baselines as flat content-hashed images plus one JSON per spec file and cannot read the old layout. ` +
+        `ShoTest 2.x and later store baselines as flat content-hashed images plus JSON files and cannot read the old layout. ` +
         `Delete the directory (e.g. "rm -rf ${dir}"), rerun your tests, and re-accept the baselines.`;
 }

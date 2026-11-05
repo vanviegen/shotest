@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import { fileURLToPath } from 'url';
 import { stripPngMetadata } from './png.js';
 import { diffImageBox, hashImagePixels } from './hash.js';
-import { mergeTestRecord, type StepEventRecord, type StepRecord, type TestRecord } from './manifest.js';
+import { addPassedTest, findTestRecord, readPassedTests, sameVisuals, testName, writeTestRecord, type StepEventRecord, type StepRecord, type TestRecord } from './manifest.js';
 
 export { expect };
 export type { Page };
@@ -205,7 +205,7 @@ const CHROMIUM_DETERMINISM_ARGS = [
 
 // Nothing is ever injected into the page for screenshots themselves — they
 // are clean captures, and what happened (clicks, assertions) is recorded as
-// step events in the spec JSON instead. Animations keep their author CSS
+// step events in the test JSON instead. Animations keep their author CSS
 // (the fast-forward loop below runs them to their end instead); this CSS
 // pins only what that loop cannot reach. Smooth scrolling: a scroll glide is
 // not an Animation, so it cannot be run to its end — it must not start at
@@ -1045,7 +1045,13 @@ function getTestTitle(testInfo: TestInfo): string {
     return parts.join(' › ') || testInfo.title;
 }
 
-export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>({
+// The source tree this run is on, as hashed by `shotest test` (see
+// sourceTreeHash in cli.ts); unset when it could not tell.
+const sourceTree = process.env.SHOTEST_TREE || undefined;
+const runAll = !!process.env.SHOTEST_RUN_ALL;
+const acceptedDir = process.env.SHOTEST_ACCEPTED_DIR || 'test-accepted';
+
+export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage; skipUnchanged: void }>({
     busySelector: ['', { option: true }],
     detectUnstable: [parseDetectUnstable(process.env.SHOTEST_DETECT_UNSTABLE) || false, { option: true }],
     failOnPageError: [true, { option: true }],
@@ -1058,12 +1064,30 @@ export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>(
             await use(launchOptions);
         }
     }, { scope: 'worker' }],
+    // A test that already passed on this very source tree, looking just like
+    // its baseline (see addPassedTest), has nothing new to show: it is
+    // skipped, with the baseline's steps recorded as its result.
+    skipUnchanged: [async ({}, use, testInfo) => {
+        const identity = { file: path.relative(process.cwd(), testInfo.file), title: getTestTitle(testInfo) };
+        if (sourceTree && !runAll && readPassedTests(acceptedDir, sourceTree).has(testName(identity))) {
+            writeTestRecord(path.dirname(testInfo.outputDir), {
+                ...identity,
+                line: testInfo.line,
+                status: 'passed',
+                steps: findTestRecord(acceptedDir, identity)?.steps ?? [],
+                tree: sourceTree,
+                cached: true,
+            });
+            testInfo.skip(true, 'passed on this source tree before');
+        }
+        await use();
+    }, { auto: true }],
     page: async ({ page, busySelector, detectUnstable, failOnPageError }, use, testInfo) => {
         const actualPage = page;
         const videoMode = detectVideoMode(testInfo);
 
         // Playwright's per-test output dir sits directly under the root results
-        // dir; the flat screenshot pool and spec JSONs live in that root.
+        // dir; the flat screenshot pool and test JSONs live in that root.
         const outDir = testInfo.outputDir;
         const poolDir = path.dirname(outDir);
         currentPoolDir = poolDir;
@@ -1237,8 +1261,12 @@ export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage }>(
             errorSource: errorSource,
             errorStack: errorStack,
             steps: currentSteps,
+            tree: sourceTree,
         };
-        mergeTestRecord(poolDir, record);
+        writeTestRecord(poolDir, record);
+        if (sourceTree && status === 'passed' && sameVisuals(findTestRecord(acceptedDir, record)?.steps ?? [], record.steps)) {
+            addPassedTest(acceptedDir, sourceTree, record);
+        }
         if (pageError) throw new Error(pageError);
     },
 });

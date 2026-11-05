@@ -1,0 +1,51 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "captures screenshots for locator reads and timed waits",
+  "steps": [
+    {
+      "image": "4da8bba1d1c33963",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/shotest.spec.js:159"
+        },
+        {
+          "type": "check",
+          "message": "textContent",
+          "box": {
+            "x": 39,
+            "y": 134,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:173",
+          "duration": 162
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 120ms",
+          "source": "tests/shotest.spec.js:174",
+          "duration": 200
+        },
+        {
+          "type": "check",
+          "message": "textContent",
+          "box": {
+            "x": 39,
+            "y": 134,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:175",
+          "duration": 118
+        }
+      ]
+    }
+  ]
+}

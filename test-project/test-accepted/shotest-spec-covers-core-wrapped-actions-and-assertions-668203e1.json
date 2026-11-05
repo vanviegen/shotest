@@ -1,0 +1,366 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "covers core wrapped actions and assertions",
+  "steps": [
+    {
+      "image": "7b22e50dfb84447f",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/shotest.spec.js:16"
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 39,
+            "y": 178,
+            "width": 97,
+            "height": 36
+          },
+          "source": "tests/shotest.spec.js:18",
+          "duration": 179
+        }
+      ]
+    },
+    {
+      "image": "918fc60cb1e489c9",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect text \"1\"",
+          "box": {
+            "x": 39,
+            "y": 134,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:19",
+          "duration": 154
+        },
+        {
+          "type": "action",
+          "message": "fill \"Alpha\"",
+          "box": {
+            "x": 39,
+            "y": 314,
+            "width": 342,
+            "height": 24
+          },
+          "source": "tests/shotest.spec.js:22",
+          "duration": 143
+        }
+      ]
+    },
+    {
+      "image": "736506c4470cd546",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect value \"Alpha\"",
+          "box": {
+            "x": 39,
+            "y": 314,
+            "width": 342,
+            "height": 24
+          },
+          "source": "tests/shotest.spec.js:23",
+          "duration": 149
+        },
+        {
+          "type": "action",
+          "message": "clear",
+          "box": {
+            "x": 39,
+            "y": 314,
+            "width": 342,
+            "height": 24
+          },
+          "source": "tests/shotest.spec.js:24",
+          "duration": 161
+        }
+      ]
+    },
+    {
+      "image": "2bfefc9d071fc0b6",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "type \"Beta\"",
+          "box": {
+            "x": 39,
+            "y": 314,
+            "width": 342,
+            "height": 24
+          },
+          "source": "tests/shotest.spec.js:25",
+          "duration": 162
+        }
+      ]
+    },
+    {
+      "image": "7857f18c1a823bdc",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "press \"End\"",
+          "box": {
+            "x": 39,
+            "y": 314,
+            "width": 342,
+            "height": 24
+          },
+          "source": "tests/shotest.spec.js:26",
+          "duration": 118
+        },
+        {
+          "type": "action",
+          "message": "selectOption \"mint\"",
+          "box": {
+            "x": 39,
+            "y": 376,
+            "width": 342,
+            "height": 21
+          },
+          "source": "tests/shotest.spec.js:29",
+          "duration": 109
+        }
+      ]
+    },
+    {
+      "image": "57b0d1475f5ea966",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect value \"mint\"",
+          "box": {
+            "x": 39,
+            "y": 376,
+            "width": 342,
+            "height": 21
+          },
+          "source": "tests/shotest.spec.js:30",
+          "duration": 122
+        },
+        {
+          "type": "action",
+          "message": "check",
+          "box": {
+            "x": 43,
+            "y": 410,
+            "width": 13,
+            "height": 13
+          },
+          "source": "tests/shotest.spec.js:33",
+          "duration": 155
+        }
+      ]
+    },
+    {
+      "image": "5b6f8848d8a5abb0",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect checked",
+          "box": {
+            "x": 43,
+            "y": 410,
+            "width": 13,
+            "height": 13
+          },
+          "source": "tests/shotest.spec.js:34",
+          "duration": 176
+        },
+        {
+          "type": "action",
+          "message": "uncheck",
+          "box": {
+            "x": 43,
+            "y": 410,
+            "width": 13,
+            "height": 13
+          },
+          "source": "tests/shotest.spec.js:35",
+          "duration": 146
+        }
+      ]
+    },
+    {
+      "image": "82cbb689cf1b2fca",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect not checked",
+          "box": {
+            "x": 43,
+            "y": 410,
+            "width": 13,
+            "height": 13
+          },
+          "source": "tests/shotest.spec.js:36",
+          "duration": 173
+        },
+        {
+          "type": "action",
+          "message": "hover",
+          "box": {
+            "x": 39,
+            "y": 604,
+            "width": 95,
+            "height": 36
+          },
+          "source": "tests/shotest.spec.js:39",
+          "duration": 91
+        }
+      ]
+    },
+    {
+      "image": "ff18c6f6edf0f836",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect text \"hovered\"",
+          "box": {
+            "x": 39,
+            "y": 666,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:40",
+          "duration": 117
+        }
+      ]
+    },
+    {
+      "image": "3c44fbbcb8c1e901",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "dblclick",
+          "box": {
+            "x": 39,
+            "y": 332,
+            "width": 139,
+            "height": 36
+          },
+          "source": "tests/shotest.spec.js:43",
+          "duration": 196
+        }
+      ]
+    },
+    {
+      "image": "7667244b32f6bb4d",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect text \"doubled\"",
+          "box": {
+            "x": 39,
+            "y": 394,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:44",
+          "duration": 91
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 39,
+            "y": 58,
+            "width": 76,
+            "height": 36
+          },
+          "source": "tests/shotest.spec.js:46",
+          "duration": 153
+        }
+      ]
+    },
+    {
+      "image": "24056c825c2c60fe",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "check",
+          "message": "waitFor",
+          "box": {
+            "x": 39,
+            "y": 120,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:47",
+          "duration": 146
+        },
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 39,
+            "y": 120,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:48",
+          "duration": 119
+        },
+        {
+          "type": "screenshot",
+          "message": "core-final",
+          "source": "tests/shotest.spec.js:51",
+          "duration": 103
+        }
+      ]
+    }
+  ]
+}

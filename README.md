@@ -1,11 +1,11 @@
 # ShoTest
 
-**ShoTest 2 is here** 🎉 — screenshots are now content-hashed, tests run in a pinned container for pixel-exact comparison, and the review app was redesigned around per-screen event lists with a pixel-diff view.
+**ShoTest 3 is here** 🎉 — a review is now applied in one go, with comments on screenshots for whoever makes the next round of changes (an AI agent, say), and tests that already passed on an unchanged source tree are skipped.
 
 ShoTest is a small wrapper around Playwright Test that acts as a drop-in replacement and provides:
 
 - Automatic screenshots at every step of your test, with the actions taken and elements verified logged as events alongside each screenshot.
-- A local web app for browsing test results, comparing changes against the stored baseline, and accepting intentional changes.
+- A local web app for browsing test results, comparing changes against the stored baseline, accepting intentional changes and commenting on the others.
 - Deterministic rendering: tests run in the official Playwright container image by default, so screenshot comparison can be exact.
 - HTML snapshots at every step, for debugging (by coding agents).
 - Helpers for recording demo videos with visible interactions and natural delays.
@@ -82,11 +82,19 @@ Most common page and locator actions are wrapped so that a screenshot is taken a
 npx shotest test
 ```
 
-This writes results to `test-results/`: one `<spec-base>.json` per spec file, plus the screenshots and HTML snapshots, named by a hash of their pixel content (so identical frames share a single file). What happened at each moment — clicks, assertions, navigations — is recorded as *events* in the JSON, each with a message, source line and the viewport box of the element involved. Steps that don't change the page share a single screenshot carrying the whole list of events.
+This writes results to `test-results/`: one JSON file per test, plus the screenshots and HTML snapshots, named by a hash of their pixel content (so identical frames share a single file). What happened at each moment — clicks, assertions, navigations — is recorded as *events* in the JSON, each with a message, source line and the viewport box of the element involved. Steps that don't change the page share a single screenshot carrying the whole list of events.
 
 An uncaught exception in the page fails the test, once it has run to its end, with the first such error as its message. Set the `failOnPageError` test option to `'console'` to fail on `console.error` output as well, or to `false` to only record errors as events.
 
 The `shotest` command forwards arguments to Playwright, so `npx shotest test --ui` maps to `playwright test --ui`.
+
+### Skipping unchanged tests
+
+A test that passed looking exactly like its accepted baseline is recorded as such for the source tree it ran on: `test-accepted/<tree-hash>.passed` lists those tests. The tree hash covers every file git would see — uncommitted and untracked ones included, ignored ones not — except `test-results/` and `test-accepted/`. When `npx shotest test` runs on a tree whose stamp lists a test, it skips that test, recording the baseline's steps as its result. Change any file and everything runs again; `npx shotest test --all` (or `SHOTEST_RUN_ALL=1`) runs everything regardless. Outside a git work tree nothing is skipped.
+
+Only the current tree's stamp is kept, and since its name is the tree's hash, branches never write the same stamp, so merging them does not conflict on it.
+
+A test run writes a new stamp whenever its tree has none yet. Where a check must leave the work tree as it found it (a merge gate, say), add `test-accepted/*.passed` to `.gitignore`: skipping then only spans runs on one machine.
 
 `npx shotest collect` summarizes the results on disk (failed tests and visual changes), cleans up unreferenced files, and exits with 0 (all good), 1 (failed tests) or 2 (tests passed, but visual changes await review) — use it after a test run, e.g. to gate CI on visual consistency.
 
@@ -149,17 +157,19 @@ This serves a web app on localhost and opens it in your default browser.
 
 Each screenshot is shown with its list of recorded events right beneath it, color-coded by type and prefixed with source line — browser console output included. Hovering an event (or tapping it, to pin it) outlines the viewport area it involved on the image. When a step changed, the accepted and current versions are cross-faded, each with its own event list, and buttons on the step's status tag pin either side or show the changed pixels as an amplified diff. An unchanged step shows the current run's events only.
 
-When you press 'Accept visuals' for a test, its screenshots are copied into `test-accepted/` (configurable through `SHOTEST_ACCEPTED_DIR`) and become the new accepted baseline. Commit this directory to version control (unlike `test-results/`). To keep it small, accepted images are recompressed to lossless WebP by a background job; hashes are computed from pixels, not file bytes, so names don't change.
+For each test with changes, either press 'Accept' (or `a`) to take its new screenshots as the baseline, or leave comments on the screenshots that are not right. A test you leave alone stays undecided. Nothing is written until you press 'Apply' in the top bar; 'Discard' drops the whole review instead. Applying accepts the marked tests: their screenshots are copied into `test-accepted/` (configurable through `SHOTEST_ACCEPTED_DIR`) and become the new baseline. Commit this directory to version control (unlike `test-results/`). To keep it small, accepted images are recompressed to lossless WebP — starting as soon as a test is marked accepted, so applying has little left to wait for; hashes are computed from pixels, not file bytes, so names don't change.
 
-Baselines for tests that produced no results at all are listed separately at the bottom, under *not in test-results/*. Usually their test was renamed or deleted and the baseline should go — but the same thing happens when a test simply didn't run (e.g. a filtered run), so ShoTest never removes one on its own. Selecting such an entry shows what would be deleted, and 'Delete baseline' removes it.
+Comments are stored in `test-accepted/` too (as `<test>.comments.json`), so they reach whoever works on the next round, in whichever checkout. They stay until the test is accepted (which asks first) or they are removed one by one. A later run puts each comment on the step showing the same screenshot, or else on the step with the same actions and checks; comments on screenshots a run no longer has are shown above the test's steps.
+
+Baselines for tests that produced no results at all are listed separately at the bottom, under *not in test-results/*. Usually their test was renamed or deleted and the baseline should go — but the same thing happens when a test simply didn't run (e.g. a filtered run), so ShoTest never removes one on its own. Selecting such an entry shows what would be deleted, and 'Delete baseline' marks it for deletion.
 
 ### Waiting for the reviewer
 
-`npx shotest review --close-on-accept` ends the moment nothing is left to review: when the last change has been accepted (and the accepted images have been recompressed to WebP), or immediately when the run held no changes at all. Waiting for the command to exit is then the same thing as waiting for a human to accept your visual changes — handy in a script, and the reason it exists: an AI agent can run it and block until you have had your say.
+`npx shotest review` ends once the review is applied or discarded — or right away, when there are no changes and no comments to look at. It then prints every test whose changes were not accepted or that has comments, with each comment, the step it is on and the paths of that step's screenshots, and exits with 0 when nothing is left (1 otherwise). Waiting for the command is thus waiting for a human's verdict, which is how an AI agent can hand its visual changes over and pick up the comments.
 
 ## Garbage collection
 
-`npx shotest gc` deletes pool images (and HTML snapshots) in `test-results/` and `test-accepted/` that are no longer referenced by any of the JSON files there. You'll rarely need it: `test-results/` is cleaned by every `npx shotest collect`, and `test-accepted/` is cleaned whenever the review app accepts or deletes a baseline.
+`npx shotest gc` deletes pool images (and HTML snapshots) in `test-results/` and `test-accepted/` that are no longer referenced by any of the JSON files there. You'll rarely need it: `test-results/` is cleaned by every `npx shotest collect`, and `test-accepted/` whenever a review is applied.
 
 ## Multi-user tests
 
@@ -221,6 +231,7 @@ For test recording:
 - `SHOTEST_VIDEO`: Enables Playwright video recording for the run. Set it to `on`, `retain-on-failure`, or `on-first-retry`; set it to `off` to disable it.
 - `SHOTEST_DEMO`: Whether the demo helper functions emulate user behavior (`on` or `off`, defaults to auto-detecting video recording or headed mode)
 - `SHOTEST_NO_CONTAINER`: Set to `1` to run tests natively instead of in the Playwright container
+- `SHOTEST_RUN_ALL`: Set to `1` to run tests that already passed on the current source tree too (like `--all`)
 - `SHOTEST_IMAGE`: Container image to run tests in (defaults to the Playwright image matching your installed version)
 
 For the review server:

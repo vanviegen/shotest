@@ -11,9 +11,11 @@ import {
   eye,
   house,
   loaderCircle,
+  messageSquarePlus,
+  messageSquareText,
   trash2,
   triangleAlert,
-  undo2,
+  x,
 } from 'staffa/icons.js';
 
 type ConsoleTone = 'error' | 'warning' | 'info' | 'debug' | 'log';
@@ -32,6 +34,9 @@ interface TestSummary {
   hasChanges: boolean;
   // An accepted baseline with no matching test in test-results.
   orphaned: boolean;
+  // Marked accepted in this review (applied only once the review is).
+  accepted: boolean;
+  comments: number;
 }
 
 interface TestRecord {
@@ -89,22 +94,30 @@ function sameSignificantEvents(accepted: StepEvent[] = [], current: StepEvent[] 
   return a.length === c.length && a.every((event, i) => event.message === c[i].message);
 }
 
+interface ReviewComment {
+  text: string;
+  // The step it is on, by index; none when this run no longer has the
+  // screenshot it was made on.
+  step?: number;
+}
+
 interface TestDetail {
   manifest: TestRecord | null;
   steps: ReviewStep[];
-  canRevert: boolean;
   orphaned: boolean;
+  accepted: boolean;
+  comments: ReviewComment[];
 }
 
 // How the review server is doing. Everything this app offers — accepting,
-// reverting, even the images — comes from that one server, so a connection
+// commenting, even the images — comes from that one server, so a connection
 // that is down (or was never there) is worth stating up front rather than
 // letting clicks fail one at a time.
 //
-// 'gone' is the same silence with a known cause: under --close-on-accept the
-// server exits the moment the last change is accepted. That is the happy
-// ending, not a failure, and is worded as such.
-type Connection = 'ok' | 'lost' | 'gone';
+// 'applied' and 'discarded' are the same silence with a known cause: the
+// server exits once the review is applied or discarded. That is the ending,
+// not a failure, and is worded as such.
+type Connection = 'ok' | 'lost' | 'applied' | 'discarded';
 
 interface ReviewState {
   tests: TestSummary[];
@@ -268,7 +281,7 @@ const PING_INTERVAL_MS = 3000;
 // Notice a server that goes away while the page just sits there — otherwise
 // the first sign would be a button that does nothing, possibly much later.
 async function pingServer(): Promise<void> {
-  if (state.connection === 'gone') return;
+  if (state.connection === 'applied' || state.connection === 'discarded') return;
   try {
     await fetchJson('/api/ping');
     // Back up. That is a new server process, quite possibly on new results,
@@ -286,11 +299,13 @@ A.derive(() => {
   if (connection === 'ok') return;
   void S.dialog({
     allowCancel: false,
-    header: connection === 'gone' ? 'Review complete' : 'No connection to the review server',
+    header: connection === 'lost' ? 'No connection to the review server' : `Review ${connection}`,
     content: () => {
-      if (connection === 'gone') {
-        A('p m:0 rich=', 'All screenshots have been accepted, and `shotest review --close-on-accept` has exited.');
-        A('p m:0 color:$s-muted #You can close this tab.');
+      if (connection !== 'lost') {
+        A('p m:0 #', connection === 'applied'
+          ? 'Your decisions and comments have been written to the accepted baselines.'
+          : 'Nothing was changed.');
+        A('p m:0 color:$s-muted #Please close this window.');
       } else {
         A('p m:0 #This page cannot reach the ShoTest review server, so nothing on it can be loaded or accepted.');
         A('p m:0 color:$s-muted rich=', 'It was probably stopped. Run `npx shotest review` again and this page will pick it up by itself.');
@@ -320,58 +335,114 @@ async function fetchTests(): Promise<void> {
   }
 }
 
-async function acceptChanges(ctx: TestPanelCtx): Promise<void> {
-  const orphaned = ctx.$local.detail?.orphaned ?? false;
+// A test with visual changes to review that has neither been accepted nor
+// commented on (a comment says "not like this").
+function isUndecided(test: TestSummary): boolean {
+  return test.hasChanges && !test.accepted && test.comments === 0;
+}
+
+async function setAccepted(ctx: TestPanelCtx, accepted: boolean): Promise<void> {
+  const comments = ctx.$local.detail?.comments.length ?? 0;
+  if (accepted && comments > 0
+    && !await S.confirm(`Accepting this test removes its ${comments === 1 ? 'comment' : `${comments} comments`}, once the review is applied.`)) return;
   const acceptedIndex = state.tests.findIndex((test) => test.id === ctx.id);
-  let result: { closing?: boolean } | null;
   try {
-    result = await fetchJson<{ closing?: boolean }>(`/api/accept/${encodeURIComponent(ctx.id)}`, { method: 'POST' });
+    await fetchJson(`/api/accepted/${encodeURIComponent(ctx.id)}`, { method: accepted ? 'PUT' : 'DELETE' });
   } catch (error) {
-    reportFailure(orphaned ? 'Delete failed' : 'Accept failed', error);
+    reportFailure('Could not save that', error);
     return;
   }
-  S.toast({ message: orphaned ? 'Stale baseline deleted' : 'Visuals accepted', type: 'success', duration: 3000 });
-
-  // Nothing left to review, and under --close-on-accept the server says so by
-  // exiting. Reloading the list or moving to a next test would just run into
-  // a closed port.
-  if (result?.closing) {
-    state.connection = 'gone';
-    return;
-  }
-
   await fetchTests();
+  if (!accepted) {
+    await ctx.reload();
+    return;
+  }
 
   // On to the next test needing review, or back to the overview when this was
   // the last one. Everything navigates by swapping the whole (single-pane)
   // stack, the same thing every link does under `linkNavigation: 'open'`.
-  const next = findNextUnacceptedTestId(Math.max(0, acceptedIndex));
+  const next = findNextUndecidedTestId(Math.max(0, acceptedIndex));
   void shell.openPanelStack(next ? hrefForTest(next) : '/');
 }
 
-async function revertChanges(ctx: TestPanelCtx): Promise<void> {
-  ctx.$local.loading = true;
+async function addComment(ctx: TestPanelCtx, step: number): Promise<void> {
+  const text = (await S.prompt('Comment on this screenshot'))?.trim();
+  if (!text) return;
   try {
-    await fetchJson(`/api/revert/${encodeURIComponent(ctx.id)}`, { method: 'POST' });
+    await fetchJson(`/api/comments/${encodeURIComponent(ctx.id)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step, text }),
+    });
   } catch (error) {
-    ctx.$local.loading = false;
-    reportFailure('Revert failed', error);
+    reportFailure('Could not save the comment', error);
     return;
   }
-  S.toast({ message: 'Accepted visuals reverted to git HEAD', type: 'success', duration: 3000 });
-  await fetchTests();
-  await ctx.reload();
+  await Promise.all([fetchTests(), ctx.reload()]);
 }
 
-function findNextUnacceptedTestId(startIndex: number): string | null {
+async function removeComment(ctx: TestPanelCtx, index: number): Promise<void> {
+  try {
+    await fetchJson(`/api/comments/${encodeURIComponent(ctx.id)}/${index}`, { method: 'DELETE' });
+  } catch (error) {
+    reportFailure('Could not remove the comment', error);
+    return;
+  }
+  await Promise.all([fetchTests(), ctx.reload()]);
+}
+
+function findNextUndecidedTestId(startIndex: number): string | null {
   const { tests } = state;
   for (let i = startIndex; i < tests.length; i += 1) {
-    if (tests[i].hasChanges) return tests[i].id;
+    if (isUndecided(tests[i])) return tests[i].id;
   }
   for (let i = 0; i < Math.min(startIndex, tests.length); i += 1) {
-    if (tests[i].hasChanges) return tests[i].id;
+    if (isUndecided(tests[i])) return tests[i].id;
   }
   return null;
+}
+
+// Applying writes the decisions to test-accepted/, after waiting for the
+// screenshots still being converted to WebP; the dialog shows how far that
+// got. Either way of ending the review ends the server too.
+async function applyReview(): Promise<void> {
+  const $progress = A.proxy({ done: 0, total: 0 });
+  const poll = setInterval(() => {
+    fetchJson<{ done: number; total: number }>('/api/progress').then((progress) => A.copy($progress, progress), () => { });
+  }, 300);
+  let closeDialog = () => { };
+  void S.dialog({
+    allowCancel: false,
+    header: 'Applying the review',
+    content: (close) => {
+      closeDialog = close;
+      A('p m:0 #Converting the accepted screenshots to WebP…');
+      A('div h:6px r:99px background:$s-faint overflow:hidden', () => {
+        A('div h:100% background:$s-primary', () => {
+          A({ style: `width:${$progress.total ? Math.round(($progress.done / $progress.total) * 100) : 0}%` });
+        });
+      });
+    },
+  });
+  try {
+    await fetchJson('/api/apply', { method: 'POST' });
+    state.connection = 'applied';
+  } catch (error) {
+    reportFailure('Could not apply the review', error);
+  } finally {
+    clearInterval(poll);
+    closeDialog();
+  }
+}
+
+async function discardReview(): Promise<void> {
+  if (!await S.confirm('Discard every decision and comment made in this review?')) return;
+  try {
+    await fetchJson('/api/discard', { method: 'POST' });
+    state.connection = 'discarded';
+  } catch (error) {
+    reportFailure('Could not discard the review', error);
+  }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -396,6 +467,12 @@ function getStepChange(step: ReviewStep): StepChange {
 
 function detailHasChanges(detail: TestDetail | null): boolean {
   return (detail?.steps ?? []).some((step) => getStepChange(step) !== 'unchanged');
+}
+
+// Accepting takes the new visuals as the baseline and drops the comments, so
+// it is offered wherever there is either.
+function canAccept(detail: TestDetail | null): boolean {
+  return !!detail && (detail.accepted || detailHasChanges(detail) || detail.comments.length > 0);
 }
 
 function testIsFailed(status: string | undefined): boolean {
@@ -459,12 +536,9 @@ document.addEventListener('keydown', (event) => {
   const key = event.key.toLowerCase();
   const ctx = currentTestCtx();
 
-  if (key === 'a' && ctx && !ctx.$local.loading && detailHasChanges(ctx.$local.detail)) {
+  if (key === 'a' && ctx && !ctx.$local.loading && canAccept(ctx.$local.detail)) {
     event.preventDefault();
-    void acceptChanges(ctx);
-  } else if (key === 'r' && ctx && !ctx.$local.loading && ctx.$local.detail?.canRevert) {
-    event.preventDefault();
-    void revertChanges(ctx);
+    void setAccepted(ctx, !ctx.$local.detail!.accepted);
   }
 });
 
@@ -715,6 +789,8 @@ function renderEvents(events: StepEvent[], $sel: ListSel): void {
 // ── Rendering: nav ──────────────────────────────────────────────────
 
 function statusIcon(test: TestSummary): () => void {
+  if (test.accepted) return () => check({ size: '1.1em', color: 'var(--s-primary)' });
+  if (test.comments > 0) return () => messageSquareText({ size: '1.1em', color: 'var(--s-danger)' });
   if (test.orphaned) return () => trash2({ size: '1.1em', color: 'var(--s-danger)' });
   if (test.hasChanges) return () => circleAlert({ size: '1.1em', color: 'var(--s-warning)' });
   if (testIsFailed(test.status)) return () => triangleAlert({ size: '1.1em', color: 'var(--s-danger)' });
@@ -726,7 +802,8 @@ function statusIcon(test: TestSummary): () => void {
 // (Orphans all live in one synthetic group, so their trash icon never has to
 // compete with a real file's statuses.)
 function fileStatusIcon(groupTests: TestSummary[]): () => void {
-  if (groupTests.some((test) => test.hasChanges)) return () => circleAlert({ size: '1.1em', color: 'var(--s-warning)' });
+  if (groupTests.some(isUndecided)) return () => circleAlert({ size: '1.1em', color: 'var(--s-warning)' });
+  if (groupTests.some((test) => test.comments > 0)) return () => messageSquareText({ size: '1.1em', color: 'var(--s-danger)' });
   if (groupTests.some((test) => test.orphaned)) return () => trash2({ size: '1.1em', color: 'var(--s-danger)' });
   if (groupTests.some((test) => testIsFailed(test.status))) return () => triangleAlert({ size: '1.1em', color: 'var(--s-danger)' });
   return () => circleCheck({ size: '1.1em', color: 'var(--s-success)' });
@@ -784,7 +861,7 @@ function buildNavItems(): S.MenuEntry[] {
       });
       continue;
     }
-    const attention = groupTests.filter((test) => test.hasChanges).length;
+    const attention = groupTests.filter(isUndecided).length;
     items.push({
       icon: fileStatusIcon(groupTests),
       label: () => {
@@ -997,7 +1074,35 @@ function renderEventLists(lists: EventList[], $ui: StepUi): void {
   });
 }
 
-function renderStep(step: ReviewStep, roles: RoleInfo, extraAttrs = ''): void {
+// A step's comments, each removable, plus the button adding one. Also used
+// for the comments whose screenshot this run no longer has (`step` unset).
+const commentStyle = A.insertCss({
+  '&': 'display:flex align-items:flex-start gap:0.4rem pv:0.3rem ph:0.5rem r:6px font-size:0.85em white-space:pre-wrap word-break:break-word',
+  '.text': 'flex:1',
+});
+
+function renderComments(ctx: TestPanelCtx, comments: ReviewComment[], step?: number): void {
+  comments.forEach((comment, index) => {
+    if (comment.step !== step) return;
+    A('div.s-s.danger', commentStyle, () => {
+      messageSquareText({ size: '1.1em' });
+      A('span.text #', comment.text);
+      S.iconButton({ icon: x, ariaLabel: 'Remove comment', attrs: '.small', click: () => void removeComment(ctx, index) });
+    });
+  });
+  if (step === undefined) return;
+  A('div', () => {
+    S.button({
+      content: 'Comment',
+      icon: messageSquarePlus,
+      attrs: '.neutral.small',
+      click: () => void addComment(ctx, step),
+    });
+  });
+}
+
+function renderStep(ctx: TestPanelCtx, detail: TestDetail, index: number, roles: RoleInfo, extraAttrs = ''): void {
+  const step = detail.steps[index];
   const change = getStepChange(step);
   if (isGapStep(step)) {
     renderGapStep(step, change, extraAttrs);
@@ -1019,10 +1124,12 @@ function renderStep(step: ReviewStep, roles: RoleInfo, extraAttrs = ''): void {
     renderStepHeader(change, interactive, fade, step.unstable, $ui);
     renderStage(step, fade, lists, $ui, stepShadow(roles, step.role));
     renderEventLists(lists, $ui);
+    renderComments(ctx, detail.comments, index);
   });
 }
 
-function renderSteps(steps: ReviewStep[], markerClass: string): void {
+function renderSteps(ctx: TestPanelCtx, detail: TestDetail, markerClass: string): void {
+  const { steps } = detail;
   if (steps.length === 0) {
     A('div color:$s-muted #No screenshots taken');
     return;
@@ -1032,12 +1139,12 @@ function renderSteps(steps: ReviewStep[], markerClass: string): void {
   // Row gap well above the image↔events gap inside a step, so an event list
   // reads as belonging to the screenshot above it, not the one below.
   A('div display:flex flex-wrap:wrap column-gap:2.5rem row-gap:3rem align-items:flex-start pt:0.5rem', () => {
-    steps.forEach((step, index) => {
+    steps.forEach((_, index) => {
       // Tag the first screenshot that needs review, so the panel can scroll it
       // into view. The panel already opens at the top; only mark when the
       // first change sits somewhere below it.
       const mark = index === firstChanged && index > 0 ? `.${markerClass}` : '';
-      renderStep(step, roles, mark);
+      renderStep(ctx, detail, index, roles, mark);
     });
   });
 }
@@ -1066,23 +1173,20 @@ function renderTestActions(ctx: TestPanelCtx, detail: TestDetail): void {
     disabled: !next,
     attrs: '.small',
   });
-  if (detailHasChanges(detail)) {
+  if (canAccept(detail)) {
     S.button({
       content: () => {
-        A(detail.orphaned ? '#Delete baseline' : '#Accept visuals');
-        S.addTooltip({ tip: detail.orphaned ? 'Delete this stale baseline (a)' : 'Accept the new visuals as the baseline (a)' });
+        const label = detail.accepted ? 'Accepted' : detail.orphaned ? 'Delete baseline' : 'Accept';
+        A('#', label);
+        S.addTooltip({
+          tip: detail.accepted ? 'Undo accepting this test (a)'
+            : detail.orphaned ? 'Delete this stale baseline once the review is applied (a)'
+              : 'Accept the new visuals as the baseline once the review is applied (a)',
+        });
       },
-      icon: detail.orphaned ? trash2 : check,
-      attrs: detail.orphaned ? '.danger.small' : '.small',
-      click: () => void acceptChanges(ctx),
-    });
-  }
-  if (detail.canRevert) {
-    S.button({
-      content: () => { A('#Revert'); S.addTooltip({ tip: 'Revert accepted visuals to git HEAD (r)' }); },
-      icon: undo2,
-      attrs: '.neutral.small',
-      click: () => void revertChanges(ctx),
+      icon: detail.orphaned && !detail.accepted ? trash2 : check,
+      attrs: detail.accepted ? '.success.small' : detail.orphaned ? '.danger.small' : '.small',
+      click: () => void setAccepted(ctx, !detail.accepted),
     });
   }
 }
@@ -1129,7 +1233,7 @@ function renderOrphanNotice(): void {
     S.box({
       attrs: warningBorder,
       header: () => A('span color:$s-warning #Baseline without a test'),
-      content: `This accepted baseline has no matching test in \`test-results/\`, so no test of that identity ran. It was most likely renamed or deleted — but a filtered run (\`-g\`, a file argument, \`--shard\`), a skipped test, or an interrupted run looks exactly the same from here. Deleting removes the baseline shown below (its images are garbage-collected if nothing else references them).`,
+      content: `This accepted baseline has no matching test in \`test-results/\`, so no test of that identity ran. It was most likely renamed or deleted — but a filtered run (\`-g\`, a file argument, \`--shard\`), a skipped test, or an interrupted run looks exactly the same from here. Deleting removes the baseline shown below once the review is applied (its images are garbage-collected if nothing else references them).`,
     });
   });
 }
@@ -1205,7 +1309,13 @@ function drawTestPanel($panel: S.Panel<{ id: string }>): void {
     }
     renderTestHeader(ctx, detail);
     if (detail.orphaned) renderOrphanNotice();
-    renderSteps(detail.steps, markerClass);
+    if (detail.comments.some((comment) => comment.step === undefined)) {
+      A('div display:flex flex-direction:column gap:0.4rem margin-bottom:1rem', () => {
+        A('div font-size:0.85em color:$s-muted #On screenshots this run no longer has:');
+        renderComments(ctx, detail.comments);
+      });
+    }
+    renderSteps(ctx, detail, markerClass);
     if (detail.manifest?.error) renderErrorBox(detail.manifest);
   });
 }
@@ -1241,7 +1351,9 @@ function drawHomePanel($panel: S.Panel<{}>): void {
       const changed = real.filter((test) => test.hasChanges).length;
       const failed = real.filter((test) => testIsFailed(test.status)).length;
       const orphaned = tests.length - real.length;
-      const needsReview = changed + orphaned;
+      const accepted = tests.filter((test) => test.accepted).length;
+      const commented = tests.filter((test) => test.comments > 0).length;
+      const undecided = tests.filter(isUndecided).length;
 
       if (tests.length === 0 && !state.loadingTests) {
         S.box({
@@ -1261,19 +1373,26 @@ function drawHomePanel($panel: S.Panel<{}>): void {
           if (orphaned > 0) {
             drawStatRow(() => trash2({ size: '1.1em', color: 'var(--s-danger)' }), 'stale baselines', orphaned);
           }
+          drawStatRow(() => check({ size: '1.1em', color: accepted ? 'var(--s-primary)' : 'var(--s-muted)' }), 'accepted in this review', accepted);
+          drawStatRow(() => messageSquareText({ size: '1.1em', color: commented ? 'var(--s-danger)' : 'var(--s-muted)' }), 'with comments', commented);
         },
       });
 
-      const first = findNextUnacceptedTestId(0);
-      if (needsReview > 0 && first) {
+      const first = findNextUndecidedTestId(0);
+      if (undecided > 0 && first) {
         A('div', () => {
           // A real link: under `linkNavigation: 'open'` it swaps the pane like
           // every other click, and middle-click/copy-link work for free.
           S.button({
-            content: `Start reviewing (${needsReview})`,
+            content: `Start reviewing (${undecided})`,
             icon: eye,
             href: hrefForTest(first),
           });
+        });
+      } else if (changed + orphaned > 0) {
+        A('div display:flex align-items:center gap:0.5rem color:$s-success font-weight:600', () => {
+          circleCheck({ size: '1.2em' });
+          A('span #Every change is decided on. Apply the review to write it down.');
         });
       } else if (real.length > 0) {
         A('div display:flex align-items:center gap:0.5rem color:$s-success font-weight:600', () => {
@@ -1287,8 +1406,7 @@ function drawHomePanel($panel: S.Panel<{}>): void {
       header: 'Keyboard shortcuts',
       contentAttrs: 'display:flex flex-direction:column gap:0.4rem',
       content: () => {
-        drawShortcutRow(['a'], 'accept the new visuals');
-        drawShortcutRow(['r'], 'revert accepted visuals to git HEAD');
+        drawShortcutRow(['a'], 'accept the new visuals, or undo that');
         drawShortcutRow(['Ctrl', '↑/↓'], 'previous / next test');
         drawShortcutRow(['Esc'], 'jump to the test list');
       },
@@ -1298,7 +1416,17 @@ function drawHomePanel($panel: S.Panel<{}>): void {
 
 // ── Toolbar (top bar menu slot) ─────────────────────────────────────
 
+// Ending the review is always at hand. Apply is the obvious next step once
+// nothing is left undecided, and a quiet one before that.
 function drawToolbar(): void {
+  A(() => {
+    const undecided = state.tests.filter(isUndecided).length;
+    A('div display:flex align-items:center gap:0.5rem', () => {
+      if (undecided > 0) A('span font-size:0.85em color:$s-muted #', `${undecided} undecided`);
+      S.button({ content: 'Discard', attrs: '.neutral.outlined.small', click: () => void discardReview() });
+      S.button({ content: 'Apply', icon: check, attrs: undecided > 0 ? '.neutral.small' : '.small', click: () => void applyReview() });
+    });
+  });
   A(() => {
     // The scale control only means something while a test is on screen.
     if (route.current.p[0] !== 'test') return;

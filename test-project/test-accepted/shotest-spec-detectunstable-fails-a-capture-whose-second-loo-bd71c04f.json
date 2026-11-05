@@ -1,0 +1,45 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "detectUnstable fails a capture whose second look differs",
+  "steps": [
+    {
+      "image": "7b22e50dfb84447f",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/shotest.spec.js:318"
+        },
+        {
+          "type": "assert",
+          "message": "expect text \"0\"",
+          "box": {
+            "x": 39,
+            "y": 134,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:328",
+          "duration": 760
+        },
+        {
+          "type": "error",
+          "message": "Unstable frame: a second capture 600ms later differed within the marked area. Find what keeps the page moving and stop it under test, or wrap this part in suppressScreenshots() to capture nothing here.",
+          "source": "tests/shotest.spec.js:328",
+          "box": {
+            "x": 39,
+            "y": 134,
+            "width": 342,
+            "height": 18
+          }
+        }
+      ],
+      "unstable": "Unstable frame: a second capture 600ms later differed within the marked area"
+    }
+  ]
+}

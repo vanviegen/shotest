@@ -1,0 +1,33 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "captures wait while busySelector matches",
+  "steps": [
+    {
+      "image": "5803f4f88a5e5605",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/shotest.spec.js:104"
+        },
+        {
+          "type": "assert",
+          "message": "expect text \"ready\"",
+          "box": {
+            "x": 39,
+            "y": 134,
+            "width": 342,
+            "height": 18
+          },
+          "source": "tests/shotest.spec.js:122",
+          "duration": 175
+        }
+      ]
+    }
+  ]
+}
