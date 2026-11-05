@@ -1,0 +1,15 @@
+tests/shotest.spec.js › a capture on a page that never settles fails the test, naming the culprit
+tests/shotest.spec.js › captures browser console messages
+tests/shotest.spec.js › captures screenshots for locator reads and timed waits
+tests/shotest.spec.js › captures wait while busySelector matches
+tests/shotest.spec.js › covers core wrapped actions and assertions
+tests/shotest.spec.js › covers demo helpers in non-video mode
+tests/shotest.spec.js › covers splitIntoRoles including repeated role names
+tests/shotest.spec.js › detectUnstable fails a capture whose second look differs
+tests/shotest.spec.js › keeps a hover only while the clicked element's parent is under the mouse
+tests/shotest.spec.js › logs page-level commands as events without screenshots
+tests/shotest.spec.js › negative assertions on absent elements complete quickly
+tests/shotest.spec.js › passes without screenshots when only using plain page methods
+tests/shotest.spec.js › scripted smooth scrolling lands instantly
+tests/shotest.spec.js › settling sees scrolling
+tests/shotest.spec.js › supports describe hints and screenshot suppression

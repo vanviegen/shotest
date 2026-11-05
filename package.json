@@ -1,6 +1,6 @@
 {
   "name": "shotest",
-  "version": "3.0.0",
+  "version": "2.10.0",
   "description": "Playwright + visual diffs",
   "type": "module",
   "main": "./build/index.js",
@@ -32,8 +32,7 @@
     "test": "npm run build && cd test-project && npm install && npm run test:run",
     "review": "npm run build && SHOTEST_OUTPUT_DIR=test-project/test-results SHOTEST_ACCEPTED_DIR=test-project/test-accepted node build/cli.js review",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run build",
-    "postpublish": "git update-ref refs/tps/deployed HEAD"
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@playwright/test": "^1.62.1",

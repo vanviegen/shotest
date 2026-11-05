@@ -1,6 +1,7 @@
 # ShoTest
 
-**ShoTest 3 is here** 🎉 — a review is now applied in one go, with comments on screenshots for whoever makes the next round of changes (an AI agent, say), and tests that already passed on an unchanged source tree are skipped.
+
+**ShoTest 2 is here** 🎉 — screenshots are now content-hashed, tests run in a pinned container for pixel-exact comparison, and the review app was redesigned around per-screen event lists with a pixel-diff view.
 
 ShoTest is a small wrapper around Playwright Test that acts as a drop-in replacement and provides:
 
@@ -94,7 +95,7 @@ A test that passed looking exactly like its accepted baseline is recorded as suc
 
 Only the current tree's stamp is kept, and since its name is the tree's hash, branches never write the same stamp, so merging them does not conflict on it.
 
-A test run writes a new stamp whenever its tree has none yet. Where a check must leave the work tree as it found it (a merge gate, say), add `test-accepted/*.passed` to `.gitignore`: skipping then only spans runs on one machine.
+Commit the stamps along with the baselines: a tree tested once, on any machine, then need not be tested again.
 
 `npx shotest collect` summarizes the results on disk (failed tests and visual changes), cleans up unreferenced files, and exits with 0 (all good), 1 (failed tests) or 2 (tests passed, but visual changes await review) — use it after a test run, e.g. to gate CI on visual consistency.
 

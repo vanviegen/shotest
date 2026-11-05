@@ -616,10 +616,11 @@ function announceServer(port: number, openBrowser: boolean) {
         return;
     }
 
-    // Try to open browser
+    // Try to open browser; inside a TPS task, ask TPS to show the user the page.
     try {
         const platform = process.platform;
-        if (platform === 'linux') execSync(`xdg-open ${url}`, { stdio: 'ignore' });
+        if (fs.existsSync('/tps/guest-tool')) execSync(`/tps/guest-tool request-human-views ${port}`, { stdio: 'ignore' });
+        else if (platform === 'linux') execSync(`xdg-open ${url}`, { stdio: 'ignore' });
         else if (platform === 'darwin') execSync(`open ${url}`, { stdio: 'ignore' });
         else if (platform === 'win32') execSync(`start ${url}`, { stdio: 'ignore' });
     } catch { }

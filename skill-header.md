@@ -25,5 +25,14 @@ When you create new UI features:
 3. If you are capable of viewing images, review images at some carefully selected points in the test flow, in order for you to see your new/changed features.
 4. Fix any issues (test or visual; humans like things to look good!) and repeat from 1 until satisfaction.
 
+## Setting up ShoTest in TPS
+
+When the project is managed by TPS (there is a `/tps/guest-tool`), set it up in its `Containerfile.dev` so that work only lands once its visuals are accepted:
+
+- Install the static docker CLI in the image, so `shotest test` runs in the pinned Playwright container (through TPS's `$DOCKER_HOST`) and renders like the baselines.
+- `EXPOSE 3847`, the review app's port. Inside TPS, `shotest review` asks TPS to show the user that page.
+- `LABEL tps.test="npm install && npx shotest test && npx shotest review"`: the test then passes only once the tests pass and the user has accepted every visual change (with nothing to review, `shotest review` ends right away).
+- Ignore `test-results/` in `.gitignore`, and commit `test-accepted/`, its `.passed` stamps included: TPS commits what the test writes, so a later run on the same tree skips what already passed.
+
 What follows is the README.md from `shotest`:
 

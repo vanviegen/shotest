@@ -1,0 +1,29 @@
+# Publishes every version pushed to main that npm does not have yet, through
+# npm's trusted publishing (OIDC): no token is stored anywhere.
+name: Publish
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Publish unless npm has this version
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          if [ -n "$(npm view "shotest@$version" version)" ]; then
+            echo "shotest $version is on npm already."
+          else
+            npm install --no-package-lock --no-audit --no-fund
+            npm publish
+          fi
