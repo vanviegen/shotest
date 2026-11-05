@@ -30,8 +30,8 @@ When you create new UI features:
 When the project is managed by TPS (there is a `/tps/guest-tool`), set it up in its `Containerfile.dev` so that work only lands once its visuals are accepted:
 
 - Install the static docker CLI in the image, so `shotest test` runs in the pinned Playwright container (through TPS's `$DOCKER_HOST`) and renders like the baselines.
-- `EXPOSE 3847`, the review app's port. Inside TPS, `shotest review` asks TPS to show the user that page.
-- `LABEL tps.test="npm install && npx shotest test && npx shotest review"`: the test then passes only once the tests pass and the user has accepted every visual change (with nothing to review, `shotest review` ends right away).
+- `EXPOSE 3847`, the review app's port.
+- `LABEL tps.test="npm install && npx shotest test && /tps/guest-tool request-human-views 3847 && trap '/tps/guest-tool request-human-views' EXIT && npx shotest review"`: the test then passes only once the tests pass and the user has accepted every visual change (with nothing to review, `shotest review` ends right away). While the review runs, TPS points the user at its page; the trap withdraws that request once it ends.
 - Ignore `test-results/` in `.gitignore`, and commit `test-accepted/`, its `.passed` stamps included: TPS commits what the test writes, so a later run on the same tree skips what already passed.
 
 What follows is the README.md from `shotest`:

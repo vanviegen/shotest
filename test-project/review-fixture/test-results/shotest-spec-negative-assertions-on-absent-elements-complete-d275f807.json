@@ -1,0 +1,46 @@
+{
+  "version": 4,
+  "file": "tests/shotest.spec.js",
+  "title": "negative assertions on absent elements complete quickly",
+  "line": 209,
+  "status": "passed",
+  "duration": 6221,
+  "error": null,
+  "errorSource": null,
+  "errorStack": null,
+  "steps": [
+    {
+      "image": "7b22e50dfb84447f",
+      "viewport": {
+        "width": 420,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/shotest.spec.js:210"
+        },
+        {
+          "type": "assert",
+          "message": "expect not visible (getByText('this text exists nowhere on the page'))",
+          "source": "tests/shotest.spec.js:217",
+          "duration": 2073
+        },
+        {
+          "type": "check",
+          "message": "waitFor hidden (getByText('no such element either'))",
+          "source": "tests/shotest.spec.js:218",
+          "duration": 2064
+        },
+        {
+          "type": "check",
+          "message": "isHidden (getByText('still nothing'))",
+          "source": "tests/shotest.spec.js:219",
+          "duration": 2050
+        }
+      ]
+    }
+  ],
+  "tree": "4bddba129473003faae334aadc3b1a292002f469"
+}

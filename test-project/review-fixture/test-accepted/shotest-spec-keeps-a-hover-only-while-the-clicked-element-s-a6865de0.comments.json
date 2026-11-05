@@ -1,0 +1,13 @@
+{
+  "file": "tests/shotest.spec.js",
+  "title": "keeps a hover only while the clicked element's parent is under the mouse",
+  "comments": [
+    {
+      "text": "The outline should be blue",
+      "image": "55797b2196ee6272",
+      "events": [
+        "click"
+      ]
+    }
+  ]
+}

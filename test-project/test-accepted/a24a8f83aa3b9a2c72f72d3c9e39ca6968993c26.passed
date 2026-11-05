@@ -1,3 +1,5 @@
+tests/review.spec.js › review: discard
+tests/review.spec.js › review: navigate, align, accept, comment and apply
 tests/shotest.spec.js › a capture on a page that never settles fails the test, naming the culprit
 tests/shotest.spec.js › captures browser console messages
 tests/shotest.spec.js › captures screenshots for locator reads and timed waits

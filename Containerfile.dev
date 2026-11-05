@@ -22,8 +22,9 @@ WORKDIR /work
 # The review app, served by `shotest review`.
 EXPOSE 3847
 LABEL tps.service.review="npm run review"
-# Passes once the tests do and the user has accepted every visual change.
-LABEL tps.test="npm install --no-package-lock --no-audit --no-fund && npm test && npm run review"
+# Passes once the tests do and the user has accepted every visual change,
+# pointing the user at the review app for as long as it runs.
+LABEL tps.test="npm install --no-package-lock --no-audit --no-fund && npm test && /tps/guest-tool request-human-views 3847 && trap '/tps/guest-tool request-human-views' EXIT && npm run review"
 # Pushing is the release: GitHub Actions publishes to npm what is pushed.
 LABEL tps.deploy="git push origin HEAD:main"
 LABEL tps.cache="/home/node/.npm"
