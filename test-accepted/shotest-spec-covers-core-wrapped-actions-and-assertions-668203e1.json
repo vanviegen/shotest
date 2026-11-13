@@ -13,8 +13,8 @@
         {
           "type": "console",
           "consoleType": "debug",
-          "message": "Aberdeen queue took 21ms",
-          "source": "http://localhost:45379/test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ:202:13"
+          "message": "Aberdeen queue took 19ms",
+          "source": "http://localhost:33143/test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ:202:13"
         },
         {
           "type": "page",
@@ -31,7 +31,7 @@
             "height": 37
           },
           "source": "tests/shotest.spec.js:28",
-          "duration": 188
+          "duration": 226
         }
       ]
     },
@@ -52,7 +52,7 @@
             "height": 21
           },
           "source": "tests/shotest.spec.js:29",
-          "duration": 183
+          "duration": 175
         }
       ]
     },
@@ -73,7 +73,7 @@
             "height": 28
           },
           "source": "tests/shotest.spec.js:31",
-          "duration": 167
+          "duration": 186
         }
       ]
     },
@@ -94,7 +94,7 @@
             "height": 44
           },
           "source": "tests/shotest.spec.js:33",
-          "duration": 239
+          "duration": 240
         }
       ]
     },
@@ -115,7 +115,7 @@
             "height": 44
           },
           "source": "tests/shotest.spec.js:34",
-          "duration": 125
+          "duration": 149
         },
         {
           "type": "action",
@@ -127,7 +127,7 @@
             "height": 44
           },
           "source": "tests/shotest.spec.js:35",
-          "duration": 150
+          "duration": 161
         }
       ]
     },
@@ -148,7 +148,7 @@
             "height": 44
           },
           "source": "tests/shotest.spec.js:36",
-          "duration": 158
+          "duration": 163
         }
       ]
     },
@@ -169,7 +169,7 @@
             "height": 44
           },
           "source": "tests/shotest.spec.js:37",
-          "duration": 147
+          "duration": 155
         },
         {
           "type": "action",
@@ -181,7 +181,7 @@
             "height": 37
           },
           "source": "tests/shotest.spec.js:38",
-          "duration": 161
+          "duration": 179
         }
       ]
     },
@@ -196,7 +196,7 @@
           "type": "assert",
           "message": "expect count 0 (getByText('Beta'))",
           "source": "tests/shotest.spec.js:39",
-          "duration": 2153
+          "duration": 2171
         },
         {
           "type": "action",
@@ -208,7 +208,7 @@
             "height": 14
           },
           "source": "tests/shotest.spec.js:42",
-          "duration": 155
+          "duration": 179
         }
       ]
     },
@@ -229,12 +229,12 @@
             "height": 14
           },
           "source": "tests/shotest.spec.js:43",
-          "duration": 131
+          "duration": 178
         }
       ]
     },
     {
-      "image": "29bc008278a1cd29",
+      "image": "61764378e411e7b1",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -250,12 +250,12 @@
             "height": 38
           },
           "source": "tests/shotest.spec.js:54",
-          "duration": 180
+          "duration": 186
         }
       ]
     },
     {
-      "image": "e1751a875f56da27",
+      "image": "39508339f8904fc9",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -271,7 +271,7 @@
             "height": 38
           },
           "source": "tests/shotest.spec.js:55",
-          "duration": 133
+          "duration": 159
         },
         {
           "type": "action",
@@ -283,12 +283,12 @@
             "height": 18
           },
           "source": "tests/shotest.spec.js:57",
-          "duration": 191
+          "duration": 198
         }
       ]
     },
     {
-      "image": "38e1b8e6a8e12bc5",
+      "image": "e935a46bf4e94358",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -304,7 +304,7 @@
             "height": 18
           },
           "source": "tests/shotest.spec.js:58",
-          "duration": 128
+          "duration": 171
         },
         {
           "type": "action",
@@ -316,12 +316,12 @@
             "height": 18
           },
           "source": "tests/shotest.spec.js:59",
-          "duration": 174
+          "duration": 199
         }
       ]
     },
     {
-      "image": "d9ec472eca0dcafc",
+      "image": "da12fd2330ca0cde",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -337,7 +337,7 @@
             "height": 18
           },
           "source": "tests/shotest.spec.js:60",
-          "duration": 136
+          "duration": 158
         },
         {
           "type": "action",
@@ -349,12 +349,12 @@
             "height": 37
           },
           "source": "tests/shotest.spec.js:62",
-          "duration": 165
+          "duration": 198
         }
       ]
     },
     {
-      "image": "5a98cfce24fdd474",
+      "image": "81eb0684dd0e2719",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -370,12 +370,12 @@
             "height": 49
           },
           "source": "tests/shotest.spec.js:63",
-          "duration": 165
+          "duration": 194
         }
       ]
     },
     {
-      "image": "b483858debb39e88",
+      "image": "73dd5384b570c393",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -385,7 +385,7 @@
           "type": "wait",
           "message": "waitForTimeout 300ms",
           "source": "tests/shotest.spec.js:64",
-          "duration": 387
+          "duration": 414
         },
         {
           "type": "action",
@@ -397,12 +397,12 @@
             "height": 19
           },
           "source": "tests/shotest.spec.js:68",
-          "duration": 151
+          "duration": 190
         }
       ]
     },
     {
-      "image": "d57fc5d326fa0060",
+      "image": "4f55760b5ffcbd5b",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -418,13 +418,13 @@
             "height": 19
           },
           "source": "tests/shotest.spec.js:69",
-          "duration": 121
+          "duration": 167
         },
         {
           "type": "screenshot",
           "message": "core-final",
           "source": "tests/shotest.spec.js:72",
-          "duration": 96
+          "duration": 126
         }
       ]
     }

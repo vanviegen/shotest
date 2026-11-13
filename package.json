@@ -6,6 +6,10 @@
   "main": "./build/index.js",
   "types": "./build/index.d.ts",
   "author": "Frank van Viegen BV",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vanviegen/shotest.git"
+  },
   "files": [
     "bin",
     "build",
