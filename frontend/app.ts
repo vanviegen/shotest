@@ -422,7 +422,7 @@ async function applyReview(): Promise<void> {
       A('p m:0 #Converting the accepted screenshots to WebP…');
       A('div h:6px r:99px background:$s-faint overflow:hidden', () => {
         A('div h:100% background:$s-primary', () => {
-          A({ style: `width:${$progress.total ? Math.round(($progress.done / $progress.total) * 100) : 0}%` });
+          A('w:', `${$progress.total ? Math.round(($progress.done / $progress.total) * 100) : 0}%`);
         });
       });
     },

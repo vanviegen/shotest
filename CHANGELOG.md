@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.10.1 (2026-11-13)
+
+- The progress bar shown while a review is applied now fills up, instead of staying empty.
+
 ## 2.10.0 (2026-11-13)
 
 - A review is applied in one go: mark tests as accepted or comment on their screenshots, then press Apply to write it all to `test-accepted/`, or Discard to drop it.
