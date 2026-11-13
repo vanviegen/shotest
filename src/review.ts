@@ -15,11 +15,12 @@
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
+import { createRequire } from 'module';
+import * as os from 'os';
 import { fileURLToPath } from 'url';
 import { compressImages, conversionProgress } from './webp.js';
 import {
-    addPassedTest,
     findTestRecord,
     gcPoolFiles,
     hasLegacyAcceptedLayout,
@@ -41,6 +42,7 @@ import {
     type TestIdentity,
     type TestRecord,
 } from './manifest.js';
+import { sourceTreeHash } from './tree.js';
 
 // ── Configuration ──────────────────────────────────────────────────
 
@@ -49,6 +51,7 @@ const acceptedDir = process.env.SHOTEST_ACCEPTED_DIR || 'test-accepted';
 const defaultPreferredPort = Number.parseInt(process.env.SHOTEST_PORT || '3847', 10);
 const maxPortAttempts = 10;
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 const reviewUiPath = path.join(thisDir, '..', 'build.frontend', 'index.html');
 
 export interface StartReviewServerOptions {
@@ -338,13 +341,42 @@ interface TestSummary {
     status: string;
     hasChanges: boolean;
     orphaned: boolean;
+    /** The result is of a source tree other than the one under review. */
+    stale: boolean;
     accepted: boolean;
     comments: number;
 }
 
+// Set when the review starts: the source tree under review (see
+// sourceTreeHash), and the names of the tests there are (see listTests).
+// Undefined when it cannot tell.
+let currentTree: string | undefined;
+let existingTests: Set<string> | undefined;
+
+/**
+ * The names of the tests there are, as Playwright lists them with the
+ * project's own config — so a test missing from them is gone, and not
+ * merely left out of a run. Undefined when Playwright could not list them.
+ */
+function listTests(): Set<string> | undefined {
+    const listFile = path.join(os.tmpdir(), `shotest-list-${process.pid}.json`);
+    try {
+        execFileSync(process.execPath, [
+            require.resolve('@playwright/test/cli'), 'test', '--list', `--reporter=${path.join(thisDir, 'list-reporter.js')}`,
+        ], { stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, SHOTEST_LIST_FILE: listFile } });
+        return new Set(JSON.parse(fs.readFileSync(listFile, 'utf-8')));
+    } catch (error) {
+        const stderr = (error as { stderr?: Buffer }).stderr?.toString().trim();
+        console.warn(`ShoTest review: could not list the tests, so no baseline is offered for deletion${stderr ? `:\n${stderr}` : ''}`);
+        return undefined;
+    } finally {
+        fs.rmSync(listFile, { force: true });
+    }
+}
+
 // Stands in for the source file of an orphaned baseline (whose spec may no
 // longer exist), grouping them together at the bottom of the review app's list.
-const orphanedGroupLabel = 'not in test-results/';
+const orphanedGroupLabel = 'tests that are gone';
 
 function getTests(): TestSummary[] {
     const currentTests = loadTestRecords(outputDir);
@@ -358,6 +390,7 @@ function getTests(): TestSummary[] {
         status: orphaned ? 'orphaned' : record.status ?? 'unknown',
         hasChanges,
         orphaned,
+        stale: !orphaned && !!record.tree && !!currentTree && record.tree !== currentTree,
         accepted: isAccepted(testId(record)),
         comments: commentsOf(record).length,
     });
@@ -365,14 +398,13 @@ function getTests(): TestSummary[] {
     const tests = currentTests.map((record) =>
         summary(record, !sameVisuals(acceptedByKey.get(testId(record))?.steps ?? [], record.steps), false));
 
-    // Baselines without a matching test in test-results: the test was renamed
-    // or deleted — or it simply wasn't part of this run. Listing them (last) is
+    // Baselines whose test is gone: renamed or deleted. Listing them (last) is
     // what makes them deletable from the review app; nothing else ever cleans
     // them up, so otherwise they linger in version control forever.
     const currentKeys = new Set(currentTests.map((test) => testId(test)));
     for (const record of acceptedTests) {
         if (currentKeys.has(testId(record)) || record.steps.length === 0) continue;
-        tests.push(summary(record, true, true));
+        if (existingTests && !existingTests.has(testName(record))) tests.push(summary(record, true, true));
     }
 
     return tests.sort((a, b) =>
@@ -496,8 +528,6 @@ async function applyReview(): Promise<void> {
             fs.copyFileSync(path.join(outputDir, sourceFile), path.join(acceptedDir, sourceFile));
         }
         writeTestRecord(acceptedDir, stripForAccept(record));
-        // The test now passes against its baseline on the tree it ran on.
-        if (record.status === 'passed' && record.tree) addPassedTest(acceptedDir, record.tree, record);
     }
 
     for (const [id, comments] of Object.entries(session.comments)) {
@@ -545,6 +575,7 @@ export function printReviewReport(): number {
             .map(([change, count]) => `${count} ${change}`);
         const status = testIsFailed(test.status) ? [test.status] : [];
         console.log(`\n- ${testName(identity)}${[...status, ...counts].length ? ` (${[...status, ...counts].join(', ')} step(s))` : ''}`);
+        if (test.stale) console.log('  - Ran on code that has changed since: rerun it to see how it looks now.');
         for (const comment of detail.comments) {
             const step = comment.step === undefined ? undefined : detail.steps[comment.step];
             if (!step) {
@@ -637,6 +668,8 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
     const resolvedOutputDir = resolveReviewDirectory(outputDir);
     const resolvedAcceptedDir = resolveReviewDirectory(acceptedDir);
 
+    currentTree = sourceTreeHash([outputDir, acceptedDir]);
+
     console.log('ShoTest review');
     console.log(`- output-dir: ${resolvedOutputDir}`);
     console.log(`- accepted-dir: ${resolvedAcceptedDir}`);
@@ -648,6 +681,8 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
     if (hasLegacyAcceptedLayout(resolvedAcceptedDir)) {
         throw new Error('ShoTest Review: ' + legacyAcceptedHint(acceptedDir));
     }
+
+    existingTests = listTests();
 
     // Test JSONs from an older format version are ignored, so their tests
     // read as never-accepted (all steps "new") — accepting rebuilds them in

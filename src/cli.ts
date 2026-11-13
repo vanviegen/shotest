@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cacheDir, pruneCache } from './cache.js';
 import { startReviewServer, testId } from './review.js';
+import { sourceTreeHash } from './tree.js';
 import {
   gcPoolFiles,
   hasLegacyAcceptedLayout,
@@ -149,38 +150,6 @@ function runCollect(): number {
 }
 
 /**
- * A hash of the whole source tree as it is on disk — uncommitted and
- * untracked files included, git-ignored ones not — leaving out the results
- * and the accepted baselines, which a test run itself writes to. A test that
- * passed on this very tree can be skipped (see addPassedTest). Undefined
- * outside a git work tree.
- *
- * git does the hashing, into a scratch index: a copy of the real one, so
- * that files whose stat data is unchanged need not be read again.
- */
-function sourceTreeHash(): string | undefined {
-  const index = path.join(tmpdir(), `shotest-index-${process.pid}`);
-  const git = (args: string[]) => execFileSync('git', args, {
-    encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'ignore'],
-    env: { ...process.env, GIT_INDEX_FILE: index },
-  }).trim();
-  try {
-    try {
-      copyFileSync(git(['rev-parse', '--path-format=absolute', '--git-path', 'index']), index);
-    } catch { } // no commits yet: start from an empty index
-    const excluded = [getOutputDir(), getAcceptedDir()];
-    git(['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', ...excluded]);
-    git(['add', '-A', '--', ':/', ...excluded.map((dir) => `:(exclude)${dir}`)]);
-    return git(['write-tree']);
-  } catch {
-    return undefined;
-  } finally {
-    rmSync(index, { force: true });
-  }
-}
-
-/**
  * Hand the arguments to the Playwright CLI via bin/shotest-playwright, which
  * owns the how: `test` runs go inside the pinned Playwright container image
  * when podman or docker is available (see the README's "Deterministic
@@ -238,16 +207,25 @@ async function main(): Promise<void> {
     process.exit(runCollect());
   }
 
-  // Tests that already passed on this source tree are skipped (unless
-  // --all), and tests that pass are recorded as such for the next run.
-  if (firstArg === 'test') {
-    const tree = sourceTreeHash();
-    if (tree) process.env.SHOTEST_TREE = tree;
-  }
-
   // Everything else is Playwright's, `test` included: reporting on a test
   // run and gating on it is `shotest collect`'s job.
-  process.exit(runPlaywright(argv, noContainer));
+  if (firstArg !== 'test') process.exit(runPlaywright(argv, noContainer));
+
+  // Tests that already passed on this source tree are skipped (unless
+  // --all), their results coming from the cache, where those of the tests
+  // that pass are kept for the next run.
+  const cache = cacheDir();
+  const tree = sourceTreeHash([getOutputDir(), getAcceptedDir()]);
+  try {
+    mkdirSync(cache, { recursive: true });
+    if (tree) {
+      process.env.SHOTEST_TREE = tree;
+      process.env.SHOTEST_CACHE_DIR = cache;
+    }
+  } catch { } // nowhere to keep a cache (no writable home, say): every test runs
+  const status = runPlaywright(argv, noContainer);
+  pruneCache(cache);
+  process.exit(status);
 }
 
 try {

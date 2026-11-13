@@ -113,6 +113,9 @@ echo "ShoTest: running tests in $runner using $image (use --no-container to run 
 # the runner options.
 set -- "$image" node "$pw_pkg/cli.js" "$@"
 
+# What renders is part of the result cache's key.
+set -- -e "SHOTEST_RENDERER=$image" "$@"
+
 # Forward ShoTest's own configuration, but not the host's browser path — the
 # whole point is to use the image's browsers at /ms-playwright.
 for name in $(env | sed -n 's/^\(SHOTEST_[A-Za-z0-9_]*\)=.*/\1/p'); do
@@ -154,6 +157,12 @@ if ! inside_pwd "$modules_dir"; then
     "$package_root"/*) ;; # already covered by the mount above
     *) set -- -v "$modules_dir:$modules_dir" "$@" ;;
   esac
+fi
+
+# The result cache, which lives outside the project as a rule.
+cache_dir=${SHOTEST_CACHE_DIR:-}
+if [ -d "$cache_dir" ] && ! inside_pwd "$cache_dir"; then
+  set -- -v "$cache_dir:$cache_dir" "$@"
 fi
 
 # An npm-linked dependency (`npm link ../lib`) is a node_modules symlink whose

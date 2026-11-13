@@ -4,7 +4,8 @@ import * as fs from 'fs';
 import { fileURLToPath } from 'url';
 import { stripPngMetadata } from './png.js';
 import { diffImageBox, hashImagePixels } from './hash.js';
-import { addPassedTest, findTestRecord, readPassedTests, sameVisuals, testName, writeTestRecord, type StepEventRecord, type StepRecord, type TestRecord } from './manifest.js';
+import { cacheResultsDir, restoreResult, storeResult } from './cache.js';
+import { testTitle, writeTestRecord, type StepEventRecord, type StepRecord, type TestRecord } from './manifest.js';
 
 export { expect };
 export type { Page };
@@ -1034,22 +1035,26 @@ function wrapPage(actualPage: Page): ShotestPage {
 // ── Test fixture ───────────────────────────────────────────────────
 
 function getTestTitle(testInfo: TestInfo): string {
-    // titlePath leads with the file name and (if set) project name — in an
-    // order that has varied between Playwright versions — followed by the
-    // describe blocks and the test title. Keep the describe blocks, so two
-    // same-named tests in different describes stay distinct.
-    const parts = testInfo.titlePath.filter(Boolean);
-    while (parts.length > 1 && (parts[0] === testInfo.project.name || parts[0].endsWith(path.basename(testInfo.file)))) {
-        parts.shift();
-    }
-    return parts.join(' › ') || testInfo.title;
+    return testTitle(testInfo.titlePath, testInfo.project.name, testInfo.file);
 }
 
 // The source tree this run is on, as hashed by `shotest test` (see
-// sourceTreeHash in cli.ts); unset when it could not tell.
+// sourceTreeHash); unset when it could not tell.
 const sourceTree = process.env.SHOTEST_TREE || undefined;
 const runAll = !!process.env.SHOTEST_RUN_ALL;
-const acceptedDir = process.env.SHOTEST_ACCEPTED_DIR || 'test-accepted';
+
+/**
+ * Where the result cache keeps this run's results (see cache.ts), or
+ * undefined when the run has no use for it: its source tree is unknown, or
+ * it is in video mode, which captures nothing.
+ */
+function cachedResultsDir(testInfo: TestInfo): string | undefined {
+    if (!sourceTree || !process.env.SHOTEST_CACHE_DIR || detectVideoMode(testInfo)) return undefined;
+    // What renders: the container image `shotest test` runs in, or else the
+    // Playwright that is installed.
+    const renderer = process.env.SHOTEST_RENDERER || `native-${testInfo.config.version}`;
+    return cacheResultsDir(process.env.SHOTEST_CACHE_DIR, sourceTree, renderer);
+}
 
 export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage; skipUnchanged: void }>({
     busySelector: ['', { option: true }],
@@ -1064,20 +1069,12 @@ export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage; sk
             await use(launchOptions);
         }
     }, { scope: 'worker' }],
-    // A test that already passed on this very source tree, looking just like
-    // its baseline (see addPassedTest), has nothing new to show: it is
-    // skipped, with the baseline's steps recorded as its result.
+    // A test that already passed on this very source tree has nothing new to
+    // show: it is skipped, with its result taken from the cache.
     skipUnchanged: [async ({}, use, testInfo) => {
         const identity = { file: path.relative(process.cwd(), testInfo.file), title: getTestTitle(testInfo) };
-        if (sourceTree && !runAll && readPassedTests(acceptedDir, sourceTree).has(testName(identity))) {
-            writeTestRecord(path.dirname(testInfo.outputDir), {
-                ...identity,
-                line: testInfo.line,
-                status: 'passed',
-                steps: findTestRecord(acceptedDir, identity)?.steps ?? [],
-                tree: sourceTree,
-                cached: true,
-            });
+        const cached = cachedResultsDir(testInfo);
+        if (cached && !runAll && restoreResult(identity, cached, path.dirname(testInfo.outputDir))) {
             testInfo.skip(true, 'passed on this source tree before');
         }
         await use();
@@ -1264,9 +1261,8 @@ export const test = baseTest.extend<ShotestTestOptions & { page: ShotestPage; sk
             tree: sourceTree,
         };
         writeTestRecord(poolDir, record);
-        if (sourceTree && status === 'passed' && sameVisuals(findTestRecord(acceptedDir, record)?.steps ?? [], record.steps)) {
-            addPassedTest(acceptedDir, sourceTree, record);
-        }
+        const cached = cachedResultsDir(testInfo);
+        if (cached && status === 'passed') storeResult(record, poolDir, cached);
         if (pageError) throw new Error(pageError);
     },
 });

@@ -13,8 +13,8 @@
         {
           "type": "console",
           "consoleType": "debug",
-          "message": "Aberdeen queue took 24ms",
-          "source": "http://localhost:39051/:202:13"
+          "message": "Aberdeen queue took 19ms",
+          "source": "http://localhost:44921/:202:13"
         },
         {
           "type": "page",
@@ -31,7 +31,7 @@
             "height": 40
           },
           "source": "tests/shotest.spec.js:322",
-          "duration": 647
+          "duration": 639
         },
         {
           "type": "error",
@@ -48,7 +48,7 @@
       "gap": "Capture the moving page anyway"
     },
     {
-      "image": "fa58c62ecf421d63",
+      "image": "cbfad45069a46ecc",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -58,7 +58,7 @@
           "type": "screenshot",
           "message": "ticking",
           "source": "tests/shotest.spec.js:335",
-          "duration": 578
+          "duration": 579
         },
         {
           "type": "assert",
@@ -70,7 +70,7 @@
             "height": 40
           },
           "source": "tests/shotest.spec.js:339",
-          "duration": 182
+          "duration": 181
         }
       ],
       "unstable": "Page did not settle within 500ms: the DOM kept mutating (last: attribute \"data-tick\" on p#probe)"

@@ -8,8 +8,6 @@
  *   <hash>.body.html           DOM snapshots (test-results only, when enabled)
  * test-accepted/ also holds:
  *   <test-base>.comments.json  review comments on a test not accepted yet
- *   <tree-hash>.passed         the tests that passed against their baseline
- *                              at that source tree (see sourceTreeHash)
  *
  * One file per test (rather than per spec file) keeps branches that accept
  * different tests from conflicting when they are merged.
@@ -128,17 +126,26 @@ export interface TestRecord {
     steps: StepRecord[];
     /** The source tree the test ran on (see sourceTreeHash). Results only. */
     tree?: string;
-    /**
-     * Results only: the test did not run, as it already passed on this very
-     * source tree; its steps are the baseline's, whose images stay in the
-     * accepted pool.
-     */
-    cached?: boolean;
 }
 
 export type TestIdentity = Pick<TestRecord, 'file' | 'title'>;
 
-/** How a test is named to people: in stamps and in the review's report. */
+/**
+ * A test's title as ShoTest names it. titlePath leads with the file name and
+ * (if set) project name — in an order that has varied between Playwright
+ * versions — followed by the describe blocks and the test title. Keep the
+ * describe blocks, so two same-named tests in different describes stay
+ * distinct.
+ */
+export function testTitle(titlePath: string[], projectName: string, file: string): string {
+    const parts = titlePath.filter(Boolean);
+    while (parts.length > 1 && (parts[0] === projectName || parts[0].endsWith(path.basename(file)))) {
+        parts.shift();
+    }
+    return parts.join(' › ');
+}
+
+/** How a test is named to people, as in the review's report. */
 export function testName(test: TestIdentity): string {
     return `${test.file} › ${test.title}`;
 }
@@ -287,80 +294,6 @@ export function writeComments(dir: string, test: TestIdentity, comments: ReviewC
     writeJson(commentsPath(dir, test), data);
 }
 
-// ── Pass stamps ────────────────────────────────────────────────────
-
-/**
- * Stamps record which tests passed, looking exactly like their baseline, on
- * a source tree: `<tree-hash>.passed` lists their names, one per line. A
- * test listed for the tree a run is on can be skipped — nothing it depends
- * on changed. Only the current tree's stamp is ever useful, so writing one
- * deletes the others. Naming the file after the tree means two branches
- * never write the same file, so merging them does not conflict.
- */
-const STAMP_SUFFIX = '.passed';
-
-function stampPath(dir: string, tree: string): string {
-    return path.join(dir, tree + STAMP_SUFFIX);
-}
-
-export function readPassedTests(dir: string, tree: string): Set<string> {
-    try {
-        return new Set(fs.readFileSync(stampPath(dir, tree), 'utf-8').split('\n').filter(Boolean));
-    } catch {
-        return new Set();
-    }
-}
-
-/** Add a test to the stamp of `tree`. Safe across Playwright worker processes. */
-export function addPassedTest(dir: string, tree: string, test: TestIdentity): void {
-    fs.mkdirSync(dir, { recursive: true });
-    const stamp = stampPath(dir, tree);
-    withFileLock(stamp, () => {
-        const names = readPassedTests(dir, tree);
-        names.add(testName(test));
-        writeFileAtomic(stamp, [...names].sort().join('\n') + '\n');
-        for (const file of fs.readdirSync(dir)) {
-            if (file.endsWith(STAMP_SUFFIX) && file !== tree + STAMP_SUFFIX) fs.rmSync(path.join(dir, file), { force: true });
-        }
-    });
-}
-
-// ── Cross-process file lock ────────────────────────────────────────
-
-function sleepSync(ms: number): void {
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-const LOCK_STALE_MS = 10_000;
-
-export function withFileLock<T>(filePath: string, fn: () => T): T {
-    const lockDir = filePath + '.lock';
-    const deadline = Date.now() + LOCK_STALE_MS;
-    for (; ;) {
-        try {
-            fs.mkdirSync(lockDir);
-            break;
-        } catch {
-            // Steal locks abandoned by a crashed worker.
-            try {
-                if (Date.now() - fs.statSync(lockDir).mtimeMs > LOCK_STALE_MS) {
-                    fs.rmdirSync(lockDir);
-                    continue;
-                }
-            } catch { continue; } // lock vanished between mkdir and stat: retry
-            if (Date.now() > deadline) {
-                throw new Error(`ShoTest: timed out waiting for lock ${lockDir}`);
-            }
-            sleepSync(25);
-        }
-    }
-    try {
-        return fn();
-    } finally {
-        fs.rmdirSync(lockDir);
-    }
-}
-
 // ── Garbage collection ─────────────────────────────────────────────
 
 export function collectReferencedHashes(dir: string): Set<string> {
@@ -377,7 +310,7 @@ export function collectReferencedHashes(dir: string): Set<string> {
  * Delete pool files (hash-named images and HTML snapshots) that no test JSON
  * in `dir` references. Only files matching the pool naming pattern are ever
  * touched; everything else (Playwright's per-test directories, .last-run.json,
- * the test JSONs, comments and stamps) is left alone.
+ * the test JSONs and comments) is left alone.
  */
 export function gcPoolFiles(dir: string): number {
     if (!fs.existsSync(dir)) return 0;

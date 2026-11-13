@@ -1,7 +1,8 @@
 import { expect } from 'shotest';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, fixtureDir } from './review-app.js';
+import { test, fixtureDir, fixtureProject, cli } from './review-app.js';
 
 const CHANGED = 'example-spec-changed-removed-and-new-steps-527f02d4';
 const COMMENTED = 'example-spec-unchanged-with-a-comment-7e8c5eff';
@@ -54,7 +55,6 @@ test('navigate, align, accept, comment and apply', async ({ page, review }) => {
   // The replaced baseline's images are unreferenced now, and gone.
   expect(accepted).not.toContain('623d48343fa21f96.webp');
   expect(accepted).not.toContain('e22d631190963309.webp');
-  expect(accepted.filter((file) => file.endsWith('.passed'))).toHaveLength(1);
   expect(readJson(path.join(review.accepted, `${FAILED}.comments.json`)).comments.map((comment) => comment.text))
     .toEqual(['Should not throw']);
   expect(accepted).not.toContain(`${COMMENTED}.comments.json`);
@@ -81,4 +81,15 @@ test('discard', async ({ page, review }) => {
   }
   expect(fs.readdirSync(review.accepted)).toHaveLength(fs.readdirSync(path.join(fixtureDir, 'test-accepted')).length);
   expect(fs.existsSync(path.join(review.dir, 'test-results', '.review-session.json'))).toBe(false);
+});
+
+test('a baseline whose test did not run is no orphan', () => {
+  const dir = fixtureProject();
+  for (const base of [CHANGED, FAILED]) fs.rmSync(path.join(dir, 'test-results', `${base}.json`));
+  fs.rmSync(path.join(dir, 'test-accepted', `${COMMENTED}.comments.json`));
+  // What did run is unchanged, so there is nothing to review: the review ends
+  // at once, without serving the app.
+  const output = execFileSync(process.execPath, [cli, 'review'], { cwd: dir, encoding: 'utf-8', timeout: 20_000 });
+  expect(output).toContain('all visual changes are accepted');
+  fs.rmSync(dir, { recursive: true, force: true });
 });

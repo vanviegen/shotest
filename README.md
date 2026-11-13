@@ -91,11 +91,9 @@ The `shotest` command forwards arguments to Playwright, so `npx shotest test --u
 
 ### Skipping unchanged tests
 
-A test that passed looking exactly like its accepted baseline is recorded as such for the source tree it ran on: `test-accepted/<tree-hash>.passed` lists those tests. The tree hash covers every file git would see — uncommitted and untracked ones included, ignored ones not — except `test-results/` and `test-accepted/`. When `npx shotest test` runs on a tree whose stamp lists a test, it skips that test, recording the baseline's steps as its result. Change any file and everything runs again; `npx shotest test --all` (or `SHOTEST_RUN_ALL=1`) runs everything regardless. Outside a git work tree nothing is skipped.
+The result of every test that passed is kept in a cache, by the source tree it ran on: every file git would see — uncommitted and untracked ones included, ignored ones not — except `test-results/`, `test-accepted/` and what `SHOTEST_IGNORE` names. When `npx shotest test` runs on a tree that a test has a cached result for, it skips that test and puts the cached result, screenshots included, in `test-results/`. Change any file and everything runs again; `npx shotest test --all` (or `SHOTEST_RUN_ALL=1`) runs everything regardless. Outside a git work tree nothing is skipped, and neither is a run that records video.
 
-Only the current tree's stamp is kept, and since its name is the tree's hash, branches never write the same stamp, so merging them does not conflict on it.
-
-Commit the stamps along with the baselines: a tree tested once, on any machine, then need not be tested again.
+The cache is `~/.cache/shotest` (or `$XDG_CACHE_HOME/shotest`; set `SHOTEST_CACHE_DIR` for another place), outside the project: every checkout of it on the machine shares the cache, so a tree tested in one git worktree is not tested again in another, and running tests never changes a file git tracks. Results are also kept apart by what rendered them (the container image, or the Playwright version of a native run), and whether a result matches its baseline is decided in the checkout that uses it. What goes unused for a month is removed.
 
 `npx shotest collect` summarizes the results on disk (failed tests and visual changes), cleans up unreferenced files, and exits with 0 (all good), 1 (failed tests) or 2 (tests passed, but visual changes await review) — use it after a test run, e.g. to gate CI on visual consistency.
 
@@ -162,7 +160,9 @@ For each test with changes, either press 'Accept' (or `a`) to take its new scree
 
 Comments are stored in `test-accepted/` too (as `<test>.comments.json`), so they reach whoever works on the next round, in whichever checkout. They stay until the test is accepted (which asks first) or they are removed one by one. A later run puts each comment on the step showing the same screenshot, or else on the step with the same actions and checks; comments on screenshots a run no longer has are shown above the test's steps.
 
-Baselines for tests that produced no results at all are listed separately at the bottom, under *not in test-results/*. Usually their test was renamed or deleted and the baseline should go — but the same thing happens when a test simply didn't run (e.g. a filtered run), so ShoTest never removes one on its own. Selecting such an entry shows what would be deleted, and 'Delete baseline' marks it for deletion.
+Baselines whose test is gone (renamed or deleted) are listed separately at the bottom, under *tests that are gone*. To tell them from tests that a run of only some tests left out, the review asks Playwright which tests there are (`playwright test --list`, with the project's default config). ShoTest never removes such a baseline on its own: selecting the entry shows what would be deleted, and 'Delete baseline' marks it for deletion.
+
+A test that ran on code that has changed since (any file git sees, uncommitted ones included) is marked with a clock: what it shows may no longer be how it looks. Run the tests again to be sure.
 
 ### Waiting for the reviewer
 
@@ -247,6 +247,8 @@ For test recording:
 - `SHOTEST_DEMO`: Whether the demo helper functions emulate user behavior (`on` or `off`, defaults to auto-detecting video recording or headed mode)
 - `SHOTEST_NO_CONTAINER`: Set to `1` to run tests natively instead of in the Playwright container
 - `SHOTEST_RUN_ALL`: Set to `1` to run tests that already passed on the current source tree too (like `--all`)
+- `SHOTEST_CACHE_DIR`: Where to keep the results of tests that passed, by source tree (defaults to `~/.cache/shotest`)
+- `SHOTEST_IGNORE`: Files and directories that no test depends on, separated by `:` (`;` on Windows): they are not part of the source tree, so changing them does not make tests run again
 - `SHOTEST_IMAGE`: Container image to run tests in (defaults to the Playwright image matching your installed version)
 
 For the review server:

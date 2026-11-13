@@ -8,6 +8,7 @@ import {
   chevronUp,
   circleAlert,
   circleCheck,
+  clockAlert,
   eye,
   house,
   loaderCircle,
@@ -32,8 +33,10 @@ interface TestSummary {
   title: string;
   status: string;
   hasChanges: boolean;
-  // An accepted baseline with no matching test in test-results.
+  // An accepted baseline whose test is gone.
   orphaned: boolean;
+  // The result is of code that has changed since.
+  stale: boolean;
   // Marked accepted in this review (applied only once the review is).
   accepted: boolean;
   comments: number;
@@ -809,6 +812,15 @@ function fileStatusIcon(groupTests: TestSummary[]): () => void {
   return () => circleCheck({ size: '1.1em', color: 'var(--s-success)' });
 }
 
+// Marks a test whose result ran on code that has changed since.
+function drawStaleMark(test: TestSummary): void {
+  if (!test.stale) return;
+  A('span display:flex flex-shrink:0 color:$s-warning', () => {
+    clockAlert({ size: '1em' });
+    S.addTooltip({ tip: 'Ran on code that has changed since: rerun the test to see how it looks now' });
+  });
+}
+
 const navBadgeStyle = A.insertCss(
   'font-size:0.7em font-weight:700 line-height:1.5 pv:0 ph:0.4rem r:99px margin-left:auto flex-shrink:0',
 );
@@ -856,7 +868,10 @@ function buildNavItems(): S.MenuEntry[] {
     if (only) {
       items.push({
         icon: statusIcon(only),
-        label: () => A('span flex:1 min-width:0 overflow:hidden text-overflow:ellipsis white-space:nowrap #', label),
+        label: () => {
+          A('span flex:1 min-width:0 overflow:hidden text-overflow:ellipsis white-space:nowrap #', label);
+          drawStaleMark(only);
+        },
         href: hrefForTest(only.id),
       });
       continue;
@@ -872,7 +887,8 @@ function buildNavItems(): S.MenuEntry[] {
       items: groupTests.map((test) => ({
         // Orphans are named after their baseline entry, not a live test —
         // muted, to set them apart from the tests this run actually produced.
-        label: test.orphaned ? () => A('span color:$s-muted rich=', test.title) : test.title,
+        label: test.orphaned ? () => A('span color:$s-muted rich=', test.title)
+          : test.stale ? () => { A('span flex:1 #', test.title); drawStaleMark(test); } : test.title,
         icon: statusIcon(test),
         href: hrefForTest(test.id),
       })),

@@ -29,8 +29,8 @@
   },
   "scripts": {
     "build": "node --experimental-strip-types scripts/build.ts && npm run build:docs",
-    "build:docs": "rm -rf skill && mkdir skill && cat skill-header.md README.md > skill/SKILL.md",
-    "test": "npm run build && rm -rf test-results && SHOTEST_CAPTURE_HTML=false SHOTEST_DEMO=off node build/cli.js test",
+    "build:docs": "rm -rf skill && mkdir skill && cat skill-header.md README.md > skill/SKILL.md && cp skill-tps.md skill/TPS.md",
+    "test": "npm run build && SHOTEST_CAPTURE_HTML=false SHOTEST_DEMO=off node build/cli.js test",
     "review": "npm run build && node build/cli.js review",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build"

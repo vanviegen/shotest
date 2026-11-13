@@ -13,8 +13,8 @@
         {
           "type": "console",
           "consoleType": "debug",
-          "message": "Aberdeen queue took 18ms",
-          "source": "http://localhost:43857/:202:13"
+          "message": "Aberdeen queue took 19ms",
+          "source": "http://localhost:35553/:202:13"
         },
         {
           "type": "page",
@@ -41,12 +41,12 @@
             "height": 38
           },
           "source": "tests/shotest.spec.js:193",
-          "duration": 174
+          "duration": 181
         }
       ]
     },
     {
-      "image": "809b1e3e16523fc8",
+      "image": "73bf68aabc641b92",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -61,7 +61,7 @@
           "type": "screenshot",
           "message": "console-final",
           "source": "tests/shotest.spec.js:199",
-          "duration": 181
+          "duration": 178
         }
       ]
     }

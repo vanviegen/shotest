@@ -4,7 +4,7 @@
   "title": "covers splitIntoRoles including repeated role names",
   "steps": [
     {
-      "image": "863e51d9b3203ebf",
+      "image": "f7322d13a224cb64",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -13,8 +13,8 @@
         {
           "type": "console",
           "consoleType": "debug",
-          "message": "Aberdeen queue took 24ms",
-          "source": "http://localhost:35619/test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ:202:13"
+          "message": "Aberdeen queue took 19ms",
+          "source": "http://localhost:43987/test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ:202:13"
         },
         {
           "type": "page",
@@ -31,13 +31,13 @@
             "height": 21
           },
           "source": "tests/shotest.spec.js:95",
-          "duration": 183
+          "duration": 165
         }
       ],
       "role": "beta"
     },
     {
-      "image": "863e51d9b3203ebf",
+      "image": "f7322d13a224cb64",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -53,13 +53,13 @@
             "height": 37
           },
           "source": "tests/shotest.spec.js:97",
-          "duration": 201
+          "duration": 163
         }
       ],
       "role": "alpha"
     },
     {
-      "image": "34ff1b7eda256704",
+      "image": "448dbdd439cfa5db",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -75,13 +75,13 @@
             "height": 21
           },
           "source": "tests/shotest.spec.js:98",
-          "duration": 162
+          "duration": 151
         }
       ],
       "role": "alpha"
     },
     {
-      "image": "863e51d9b3203ebf",
+      "image": "f7322d13a224cb64",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -97,13 +97,13 @@
             "height": 49
           },
           "source": "tests/shotest.spec.js:100",
-          "duration": 151
+          "duration": 131
         }
       ],
       "role": "beta"
     },
     {
-      "image": "fbe01c2763f395f9",
+      "image": "6dcfd7dfcf889eda",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -119,13 +119,13 @@
             "height": 20
           },
           "source": "tests/shotest.spec.js:101",
-          "duration": 496
+          "duration": 500
         }
       ],
       "role": "beta"
     },
     {
-      "image": "34ff1b7eda256704",
+      "image": "448dbdd439cfa5db",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -135,13 +135,13 @@
           "type": "screenshot",
           "message": "alpha-state",
           "source": "tests/shotest.spec.js:103",
-          "duration": 95
+          "duration": 89
         }
       ],
       "role": "alpha"
     },
     {
-      "image": "fbe01c2763f395f9",
+      "image": "6dcfd7dfcf889eda",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -151,7 +151,7 @@
           "type": "screenshot",
           "message": "beta-state",
           "source": "tests/shotest.spec.js:104",
-          "duration": 70
+          "duration": 62
         }
       ],
       "role": "beta"

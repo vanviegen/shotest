@@ -13,13 +13,13 @@
         {
           "type": "console",
           "consoleType": "debug",
-          "message": "Aberdeen queue took 17ms",
-          "source": "http://localhost:39745/:202:13"
+          "message": "Aberdeen queue took 19ms",
+          "source": "http://localhost:46413/:202:13"
         },
         {
           "type": "page",
           "message": "goto /",
-          "source": "tests/review.spec.js:13"
+          "source": "tests/review.spec.js:14"
         },
         {
           "type": "assert",
@@ -30,8 +30,8 @@
             "width": 274,
             "height": 24
           },
-          "source": "tests/review.spec.js:14",
-          "duration": 164
+          "source": "tests/review.spec.js:15",
+          "duration": 179
         },
         {
           "type": "action",
@@ -42,13 +42,13 @@
             "width": 191,
             "height": 38
           },
-          "source": "tests/review.spec.js:15",
-          "duration": 161
+          "source": "tests/review.spec.js:16",
+          "duration": 157
         }
       ]
     },
     {
-      "image": "760dfa2b2813e301",
+      "image": "55fafc1f67dcbdaa",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -57,13 +57,13 @@
         {
           "type": "wait",
           "message": "waitForTimeout 300ms",
-          "source": "tests/review.spec.js:16",
-          "duration": 427
+          "source": "tests/review.spec.js:17",
+          "duration": 424
         }
       ]
     },
     {
-      "image": "809b1e3e16523fc8",
+      "image": "73bf68aabc641b92",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -78,19 +78,19 @@
             "width": 260,
             "height": 21
           },
-          "source": "tests/review.spec.js:18",
-          "duration": 133
+          "source": "tests/review.spec.js:19",
+          "duration": 135
         },
         {
           "type": "assert",
           "message": "expect text \"unchanged\", \"removed\", \"changed\", \"unchanged\", \"new\" (getByRole('main').getByText(/^(unchanged|changed|new|removed)$/))",
-          "source": "tests/review.spec.js:22",
+          "source": "tests/review.spec.js:23",
           "duration": 97
         }
       ]
     },
     {
-      "image": "5264f7e21502898d",
+      "image": "86f9d9063e64a267",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -105,13 +105,13 @@
             "width": 74,
             "height": 19
           },
-          "source": "tests/review.spec.js:25",
-          "duration": 178
+          "source": "tests/review.spec.js:26",
+          "duration": 172
         }
       ]
     },
     {
-      "image": "a3c0d6af2ed577da",
+      "image": "8a9db180d2c8cc9f",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -126,8 +126,8 @@
             "width": 74,
             "height": 19
           },
-          "source": "tests/review.spec.js:26",
-          "duration": 132
+          "source": "tests/review.spec.js:27",
+          "duration": 118
         },
         {
           "type": "action",
@@ -138,13 +138,13 @@
             "width": 40,
             "height": 19
           },
-          "source": "tests/review.spec.js:25",
-          "duration": 154
+          "source": "tests/review.spec.js:26",
+          "duration": 150
         }
       ]
     },
     {
-      "image": "97b42534da6b2698",
+      "image": "359e4fd0bb01f1a3",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -159,8 +159,8 @@
             "width": 40,
             "height": 19
           },
-          "source": "tests/review.spec.js:26",
-          "duration": 133
+          "source": "tests/review.spec.js:27",
+          "duration": 120
         },
         {
           "type": "action",
@@ -171,13 +171,13 @@
             "width": 69,
             "height": 19
           },
-          "source": "tests/review.spec.js:25",
-          "duration": 155
+          "source": "tests/review.spec.js:26",
+          "duration": 146
         }
       ]
     },
     {
-      "image": "663b8702f3d9b6a9",
+      "image": "f6f07ae79467cc61",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -192,13 +192,13 @@
             "width": 69,
             "height": 19
           },
-          "source": "tests/review.spec.js:26",
-          "duration": 119
+          "source": "tests/review.spec.js:27",
+          "duration": 120
         }
       ]
     },
     {
-      "image": "809b1e3e16523fc8",
+      "image": "73bf68aabc641b92",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -213,13 +213,13 @@
             "width": 83,
             "height": 26
           },
-          "source": "tests/review.spec.js:28",
-          "duration": 168
+          "source": "tests/review.spec.js:29",
+          "duration": 164
         }
       ]
     },
     {
-      "image": "4e5c79adec110c5b",
+      "image": "029749cf4cd3be23",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -228,13 +228,13 @@
         {
           "type": "wait",
           "message": "waitForTimeout 300ms",
-          "source": "tests/review.spec.js:29",
-          "duration": 442
+          "source": "tests/review.spec.js:30",
+          "duration": 452
         }
       ]
     },
     {
-      "image": "2c6609ace6eda785",
+      "image": "a6f9b9fbc24206ce",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -249,13 +249,13 @@
             "width": 117,
             "height": 21
           },
-          "source": "tests/review.spec.js:32",
-          "duration": 134
+          "source": "tests/review.spec.js:33",
+          "duration": 123
         }
       ]
     },
     {
-      "image": "6fbd0b0f0f89836c",
+      "image": "ab99341ef5913689",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -270,8 +270,8 @@
             "width": 697,
             "height": 39
           },
-          "source": "tests/review.spec.js:33",
-          "duration": 145
+          "source": "tests/review.spec.js:34",
+          "duration": 148
         },
         {
           "type": "action",
@@ -282,13 +282,13 @@
             "width": 102,
             "height": 28
           },
-          "source": "tests/review.spec.js:34",
-          "duration": 150
+          "source": "tests/review.spec.js:35",
+          "duration": 146
         }
       ]
     },
     {
-      "image": "c8f3e595772d0156",
+      "image": "eeee9efddb45d810",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -303,13 +303,13 @@
             "width": 283,
             "height": 44
           },
-          "source": "tests/review.spec.js:35",
-          "duration": 236
+          "source": "tests/review.spec.js:36",
+          "duration": 237
         }
       ]
     },
     {
-      "image": "4bb82cb0b83b54d8",
+      "image": "f34f3059dd26611b",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -324,13 +324,13 @@
             "width": 56,
             "height": 37
           },
-          "source": "tests/review.spec.js:36",
-          "duration": 150
+          "source": "tests/review.spec.js:37",
+          "duration": 146
         }
       ]
     },
     {
-      "image": "187177596e3508ba",
+      "image": "aea91ab1923f15ec",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -345,13 +345,13 @@
             "width": 267,
             "height": 20
           },
-          "source": "tests/review.spec.js:37",
-          "duration": 206
+          "source": "tests/review.spec.js:38",
+          "duration": 207
         }
       ]
     },
     {
-      "image": "4621648175f1172d",
+      "image": "9644303a3d4de852",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -366,13 +366,13 @@
             "width": 26,
             "height": 26
           },
-          "source": "tests/review.spec.js:39",
-          "duration": 164
+          "source": "tests/review.spec.js:40",
+          "duration": 176
         }
       ]
     },
     {
-      "image": "ef6b06fdf83bb67c",
+      "image": "dc93110693affc35",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -387,8 +387,8 @@
             "width": 267,
             "height": 20
           },
-          "source": "tests/review.spec.js:40",
-          "duration": 214
+          "source": "tests/review.spec.js:41",
+          "duration": 218
         },
         {
           "type": "action",
@@ -399,13 +399,13 @@
             "width": 26,
             "height": 26
           },
-          "source": "tests/review.spec.js:41",
-          "duration": 155
+          "source": "tests/review.spec.js:42",
+          "duration": 149
         }
       ]
     },
     {
-      "image": "f93aadaa62ba857b",
+      "image": "e31f9b296c1629c7",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -414,8 +414,8 @@
         {
           "type": "assert",
           "message": "expect count 0 (getByText('The outline should be blue'))",
-          "source": "tests/review.spec.js:42",
-          "duration": 2169
+          "source": "tests/review.spec.js:43",
+          "duration": 2172
         },
         {
           "type": "action",
@@ -426,13 +426,13 @@
             "width": 75,
             "height": 26
           },
-          "source": "tests/review.spec.js:44",
-          "duration": 164
+          "source": "tests/review.spec.js:45",
+          "duration": 160
         }
       ]
     },
     {
-      "image": "aed00bc74782252c",
+      "image": "5299cbb6a9fc54d5",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -447,8 +447,8 @@
             "width": 498,
             "height": 43
           },
-          "source": "tests/review.spec.js:45",
-          "duration": 211
+          "source": "tests/review.spec.js:46",
+          "duration": 216
         }
       ]
     }

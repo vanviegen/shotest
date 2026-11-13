@@ -1,7 +1,7 @@
 ---
 name: shotest
 description: |
-    ShoTest is a visual testing wrapper built around Playwright Test. If `shotest` is a devDependency of this project, you must provide visual test specs for all new/modified features you create. Just write Playwright specs in `tests/`, but import from `shotest` what you would normally import from `@playwright/test`. Important: try to keep visual drift (visual changes that were not (implicitly) requested) to a minimum, as the human will need to review any changed screenshot. If you need further guidance, load this skill.
+    ShoTest is a visual testing wrapper built around Playwright Test. If `shotest` is a devDependency of this project, you must provide visual test specs for all new/modified features you create. Just write Playwright specs in `tests/`, but import from `shotest` what you would normally import from `@playwright/test`. Important: try to keep visual drift (visual changes that were not (implicitly) requested) to a minimum, as the human will need to review any changed screenshot. If you need further guidance, or the project is managed by TPS, load this skill.
 ---
 
 # UI Testing Guidance
@@ -15,7 +15,7 @@ After running `npx shotest test`, results are written flat into `test-results/`:
 
 To find the screenshot for a step, read the test's JSON file first and look up the step's `image` hash.
 
-Tests that already passed on the very same source tree are skipped; `npx shotest test --all` runs them anyway.
+`test-results/` holds the results of the last run only. Tests that already passed on the very same source tree are skipped, in any checkout of the project: their results come from a cache (`~/.cache/shotest`), without the DOM snapshots. `npx shotest test --all` runs them anyway.
 
 To hand visual changes to the human, run `npx shotest review` and wait for it to end: it prints the tests that were not accepted, with the reviewer's comments, the steps they are on and the paths of their screenshots. Address the comments, run the tests, and review again.
 
@@ -25,14 +25,9 @@ When you create new UI features:
 3. If you are capable of viewing images, review images at some carefully selected points in the test flow, in order for you to see your new/changed features.
 4. Fix any issues (test or visual; humans like things to look good!) and repeat from 1 until satisfaction.
 
-## Setting up ShoTest in TPS
+## ShoTest in TPS
 
-When the project is managed by TPS (there is a `/tps/guest-tool`), set it up in its `Containerfile.dev` so that work only lands once its visuals are accepted:
-
-- Install the static docker CLI in the image, so `shotest test` runs in the pinned Playwright container (through TPS's `$DOCKER_HOST`) and renders like the baselines.
-- `EXPOSE 3847`, the review app's port.
-- `LABEL tps.test="npm install && npx shotest test && /tps/guest-tool show-user-text 'Visual changes await your review in the **3847** tab: accept them or comment on them, then press **Apply**.' && trap '/tps/guest-tool show-user-text' EXIT && npx shotest review"`: the test then passes only once the tests pass and the user has accepted every visual change (with nothing to review, `shotest review` ends right away). While the review runs, the user is told where to find it; the trap removes that text once it ends.
-- Ignore `test-results/` in `.gitignore`, and commit `test-accepted/`, its `.passed` stamps included: TPS commits what the test writes, so a later run on the same tree skips what already passed.
+When the project is managed by TPS (there is a `/tps/guest-tool`), read [TPS.md](TPS.md), next to this file, before you run tests: it tells how to set ShoTest up there, which tests to run yourself, and how to have the user review them.
 
 What follows is the README.md from `shotest`:
 

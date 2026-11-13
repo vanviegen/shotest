@@ -27,4 +27,8 @@ LABEL tps.service.review="npm run review"
 LABEL tps.test="npm install --no-package-lock --no-audit --no-fund && npm test && /tps/guest-tool show-user-text 'Visual changes await your review in the **3847** tab: accept them or comment on them, then press **Apply**.' && trap '/tps/guest-tool show-user-text' EXIT && npm run review"
 # Pushing is the release: GitHub Actions publishes to npm what is pushed.
 LABEL tps.deploy="git push origin HEAD:main"
-LABEL tps.cache="/home/node/.npm"
+# ShoTest's result cache, shared by all tasks and the test that merging runs:
+# no test runs twice on the same source tree, which the commit message TPS
+# asks for is no part of.
+ENV SHOTEST_CACHE_DIR=/home/node/.shotest-cache SHOTEST_IGNORE=.tps-commit-message
+LABEL tps.cache="/home/node/.npm /home/node/.shotest-cache"
