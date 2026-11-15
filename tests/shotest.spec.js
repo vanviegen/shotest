@@ -77,15 +77,24 @@ test('keeps a hover only while the clicked element\'s parent is under the mouse'
     <style>button:hover { outline: 3px solid red; }</style>
     <div><button id="keep">Keep</button></div>
     <div><button onclick="this.parentElement.outerHTML = '<div><button id=new>New</button></div>'">Swap</button></div>
+    <div><button onclick="this.textContent = 'Swapping…'; setTimeout(() => this.parentElement.outerHTML = '<div><button id=late>Late</button></div>', 1000)">Swap late</button></div>
   `);
 
   await page.locator('#keep').click();
   await screenshot(page, 'kept-hover');
   await expect(page.locator('#keep')).toHaveCSS('outline-style', 'solid');
 
-  await page.getByRole('button', { name: 'Swap' }).click();
+  await page.getByRole('button', { name: 'Swap', exact: true }).click();
   await screenshot(page, 'released-hover');
   await expect(page.locator('#new')).toHaveCSS('outline-style', 'none');
+
+  // A page that changes after the first capture following the click (a slow
+  // server's answer) is checked again at the next one.
+  await page.getByRole('button', { name: 'Swap late' }).click();
+  await expect(page.getByRole('button', { name: 'Swapping…' })).toHaveCSS('outline-style', 'solid');
+  await expect(page.locator('#late')).toBeVisible();
+  await screenshot(page, 'released-late-hover');
+  await expect(page.locator('#late')).toHaveCSS('outline-style', 'none');
 });
 
 test('covers splitIntoRoles including repeated role names', async ({ page }) => {

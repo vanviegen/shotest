@@ -4,7 +4,7 @@
   "title": "keeps a hover only while the clicked element's parent is under the mouse",
   "steps": [
     {
-      "image": "6e514602eb459b59",
+      "image": "09dce220ecd240bc",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -19,13 +19,13 @@
             "width": 47,
             "height": 21
           },
-          "source": "tests/shotest.spec.js:82",
-          "duration": 144
+          "source": "tests/shotest.spec.js:83",
+          "duration": 143
         }
       ]
     },
     {
-      "image": "b3018ddd5ac5eda1",
+      "image": "e572497296feb4b2",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -34,7 +34,7 @@
         {
           "type": "screenshot",
           "message": "kept-hover",
-          "source": "tests/shotest.spec.js:83",
+          "source": "tests/shotest.spec.js:84",
           "duration": 63
         },
         {
@@ -46,8 +46,8 @@
             "width": 47,
             "height": 21
           },
-          "source": "tests/shotest.spec.js:84",
-          "duration": 78
+          "source": "tests/shotest.spec.js:85",
+          "duration": 75
         },
         {
           "type": "action",
@@ -58,13 +58,13 @@
             "width": 49,
             "height": 21
           },
-          "source": "tests/shotest.spec.js:86",
-          "duration": 117
+          "source": "tests/shotest.spec.js:87",
+          "duration": 118
         }
       ]
     },
     {
-      "image": "fd326c578f3057c6",
+      "image": "8ef0bf97fca708a9",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -73,8 +73,8 @@
         {
           "type": "screenshot",
           "message": "released-hover",
-          "source": "tests/shotest.spec.js:87",
-          "duration": 112
+          "source": "tests/shotest.spec.js:88",
+          "duration": 107
         },
         {
           "type": "assert",
@@ -85,8 +85,80 @@
             "width": 43,
             "height": 21
           },
-          "source": "tests/shotest.spec.js:88",
-          "duration": 81
+          "source": "tests/shotest.spec.js:89",
+          "duration": 86
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 8,
+            "y": 50,
+            "width": 75,
+            "height": 21
+          },
+          "source": "tests/shotest.spec.js:93",
+          "duration": 111
+        }
+      ]
+    },
+    {
+      "image": "ab6729fc0d1b441c",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect css \"outline-style\" \"solid\"",
+          "box": {
+            "x": 8,
+            "y": 50,
+            "width": 88,
+            "height": 21
+          },
+          "source": "tests/shotest.spec.js:94",
+          "duration": 89
+        }
+      ]
+    },
+    {
+      "image": "1bf052c5090910af",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 8,
+            "y": 50,
+            "width": 42,
+            "height": 21
+          },
+          "source": "tests/shotest.spec.js:95",
+          "duration": 1416
+        },
+        {
+          "type": "screenshot",
+          "message": "released-late-hover",
+          "source": "tests/shotest.spec.js:96",
+          "duration": 50
+        },
+        {
+          "type": "assert",
+          "message": "expect css \"outline-style\" \"none\"",
+          "box": {
+            "x": 8,
+            "y": 50,
+            "width": 42,
+            "height": 21
+          },
+          "source": "tests/shotest.spec.js:97",
+          "duration": 83
         }
       ]
     }

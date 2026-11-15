@@ -407,20 +407,23 @@ async function pointerTarget(locator: Locator, box: EventBox | null, position?: 
  * under the pointer (a page change, a modal on top) — that hover lands on an
  * element nobody pointed at, so the mouse is moved off the page. While the
  * parent is still there, the hover is the one a user would see, and stays
- * (as does a hover menu opened by it). Checked once, on the settled page
- * after the action, by what is at the pointer: Chromium styles :hover but
- * does not report it to matches(). Resolves to whether the mouse was moved.
+ * (as does a hover menu opened by it). Checked on every settled page until
+ * found stale or replaced by the next pointer action — a slow server can
+ * change the page well after the first capture — by what is at the pointer:
+ * Chromium styles :hover but does not report it to matches(). Resolves to
+ * whether the mouse was moved.
  */
 async function releaseStaleHover(page: Page): Promise<boolean> {
     const actualPage = (page as any)._shotestActualPage ?? page;
     const target = pointerTargets.get(actualPage);
     if (!target) return false;
-    pointerTargets.delete(actualPage);
     const stale = await target.parent.evaluate((parent, [x, y]) =>
         !parent?.isConnected || !parent.contains(document.elementFromPoint(x, y)), [target.x, target.y]).catch(() => true);
+    if (!stale) return false;
+    pointerTargets.delete(actualPage);
     target.parent.dispose().catch(() => {});
-    if (stale) await page.mouse.move(-1, -1).catch(() => {});
-    return stale;
+    await page.mouse.move(-1, -1).catch(() => {});
+    return true;
 }
 
 /**
