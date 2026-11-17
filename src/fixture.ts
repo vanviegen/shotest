@@ -462,18 +462,32 @@ function makeEvent(type: StepEventRecord['type'], message: string, loc: SourceLo
 }
 
 /**
+ * Settle the page, then scroll `locator` into view, then settle again:
+ * whether scrolling is needed at all is decided on the page's final layout
+ * (content still rendering above the element, or an expansion still opening,
+ * would answer it differently from run to run), and what is measured next is
+ * the element at rest, where the screenshot shows it. Resolves to the last
+ * settle's verdict, for the capture to act on.
+ */
+async function settleInView(locator: Locator, page: Page, scrollTimeoutMs: number): Promise<SettleResult> {
+    let settle = await settlePage(page);
+    if (settle.settled) {
+        await locator.scrollIntoViewIfNeeded({ timeout: scrollTimeoutMs }).catch(() => {});
+        settle = await settlePage(page);
+    }
+    return settle;
+}
+
+/**
  * Locate the element an event is about, scrolled into view so it shows in the
- * screenshot. The underlying operation has already completed here, so the
- * element is either present now or never will be (e.g. after a successful
- * negative assertion like not.toBeVisible). A bounded wait keeps the absent
- * case from stalling for the full default timeout; the event then simply
- * carries no box. The page is settled before measuring — the box must mark
- * the element where the following screenshot will show it, not mid-animation
- * — and the settle's verdict is handed back for the capture to act on.
+ * screenshot (see settleInView). The underlying operation has already
+ * completed here, so the element is either present now or never will be (e.g.
+ * after a successful negative assertion like not.toBeVisible). A bounded wait
+ * keeps the absent case from stalling for the full default timeout; the event
+ * then simply carries no box.
  */
 async function locatorEventBox(locator: Locator, page: Page): Promise<{ box: EventBox | null; settle: SettleResult }> {
-    await locator.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
-    const settle = await settlePage(page);
+    const settle = await settleInView(locator, page, 1000);
     const box = await locator.boundingBox({ timeout: 1000 }).catch(() => null);
     return { box, settle };
 }
@@ -857,19 +871,11 @@ function wrapLocator(actualLocator: Locator, actualPage: Page): Locator {
                     // Capture *before* the action runs: the shot shows the
                     // page the action found, with the event box marking what
                     // it targeted. The action's effect shows in the next step.
-                    // Settle first, then scroll the target into view, then
-                    // settle again: whether scrolling is needed at all is
-                    // decided on the page's final layout (an expansion still
-                    // opening would answer it differently from run to run),
-                    // and the box marks the element at rest — where both the
-                    // shot and the action find it. Playwright's own
-                    // actionability wait only covers the element holding
+                    // The box marks the element at rest (see settleInView),
+                    // where both the shot and the action find it: Playwright's
+                    // own actionability wait only covers the element holding
                     // still, not the page.
-                    let settle = await settlePage(actualPage);
-                    if (settle.settled) {
-                        await actualLocator.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
-                        settle = await settlePage(actualPage);
-                    }
+                    const settle = await settleInView(actualLocator, actualPage, 3000);
                     box = await actualLocator.boundingBox().catch(() => null);
                     if (!box) {
                         throw new Error(failureText);

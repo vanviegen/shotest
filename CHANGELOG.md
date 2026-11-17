@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.10.3 (2026-11-17)
+
+- Screenshots after `waitFor`, `expect` and the like no longer depend on how far the page had rendered when the element was found: the element is scrolled into view only once the page has settled, as actions already did.
+
 ## 2.10.2 (2026-11-14)
 
 - The mouse is also moved off the page when the page changes under it later than the first screenshot after a click (a slow server's answer, say), so that page no longer shows hover styling at random.
