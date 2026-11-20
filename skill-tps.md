@@ -17,13 +17,13 @@ EXPOSE 3847
 ENV SHOTEST_CACHE_DIR=/home/dev/.shotest-cache SHOTEST_IGNORE=.tps-commit-message
 LABEL tps.cache="/home/dev/.shotest-cache"
 
-LABEL tps.test="npm install && npx shotest test && /tps/guest-tool show-user-text 'Visual changes await your review in the **3847** tab: accept them or comment on them, then press **Apply**.' && trap '/tps/guest-tool show-user-text' EXIT && npx shotest review"
+LABEL tps.test="npm install && npx shotest test && /tps/guest-tool ask-human 'Visual changes await your review in the [review app](http://localhost:3847): accept them or comment on them, then press **Apply**.' --service-command 'npx shotest review'"
 ```
 
 - The docker CLI has `shotest test` run in the pinned Playwright container, so that it renders like the baselines.
 - `SHOTEST_CACHE_DIR` names where ShoTest keeps the results of tests that passed, and `tps.cache` (add the path to the ones it already names) has TPS share that directory between all tasks and the test that merging runs: no test runs twice on the same source tree.
 - `SHOTEST_IGNORE` keeps the commit message TPS asks for out of that source tree, so writing it after the tests ran does not make them run again when merging.
-- `tps.test` runs every test, then the review: with nothing to review, `shotest review` ends right away, and otherwise it ends once the user applies the review, failing if a visual change was not accepted. While it runs, the user is told where to find it; the trap removes that text once it ends.
+- `tps.test` runs every test, then the review: with nothing to review, `shotest review` ends right away, and otherwise it ends once the user applies the review, failing if a visual change was not accepted. `ask-human` runs it as a service, shows the user where to find it while it runs, and passes on its output and exit code.
 
 In `.gitignore`, ignore `test-results/`. Commit `test-accepted/`: running tests leaves it alone, and TPS commits what a review accepts.
 
@@ -40,11 +40,9 @@ In `.gitignore`, ignore `test-results/`. Commit `test-accepted/`: running tests 
 2. Once the work is ready, have the user review what those tests show:
 
    ```sh
-   /tps/guest-tool show-user-text 'Visual changes await your review in the **3847** tab: accept them or comment on them, then press **Apply**.'
-   /tps/guest-tool start rvw 1800 npx shotest review
-   /tps/guest-tool show-user-text
+   /tps/guest-tool start rvw 1800 /tps/guest-tool ask-human 'Visual changes await your review in the [review app](http://localhost:3847): accept them or comment on them, then press **Apply**.' --service-command 'npx shotest review'
    ```
 
-   The review takes as long as the user does: on exit code 124 it is still running, and `/tps/guest-tool await rvw 1800` waits some more. Do not leave it running when your turn ends (`/tps/guest-tool stop rvw`): the review of `tps.test` needs its port. It exits with 0 when everything is accepted. Otherwise it prints the tests that were not accepted and the user's comments: address them, run the tests again, and have them reviewed again.
+   The review takes as long as the user does: on exit code 124 it is still running, and `/tps/guest-tool await rvw 1800` waits some more. Do not leave it running when your turn ends (`/tps/guest-tool stop ask-human`, which ends `rvw` too): the review of `tps.test` needs its port. It exits with 0 when everything is accepted. Otherwise it prints the tests that were not accepted and the user's comments: address them, run the tests again, and have them reviewed again.
 
 3. Leave the rest to `tps.test`, which TPS runs when the task is merged. The merged code is what has to pass, and no run of yours can vouch for that. It runs every test (those that passed on that very source tree come from the cache), and the user accepts what else changed, which TPS commits. If a test fails or the user does not accept everything, the task comes back to you with the test's output: the failed tests, or the tests not accepted and the user's comments.

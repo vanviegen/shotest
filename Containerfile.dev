@@ -22,9 +22,9 @@ WORKDIR /work
 # The review app, served by `shotest review`.
 EXPOSE 3847
 LABEL tps.service.review="npm run review"
-# Passes once the tests do and the user has accepted every visual change,
-# telling the user where to find the review app for as long as it runs.
-LABEL tps.test="npm install --no-package-lock --no-audit --no-fund && npm test && /tps/guest-tool show-user-text 'Visual changes await your review in the **3847** tab: accept them or comment on them, then press **Apply**.' && trap '/tps/guest-tool show-user-text' EXIT && npm run review"
+# Passes once the tests do and the user has accepted every visual change in
+# the review app, which ask-human runs as its service and waits for.
+LABEL tps.test="npm install --no-package-lock --no-audit --no-fund && npm test && /tps/guest-tool ask-human 'Visual changes await your review in the [review app](http://localhost:3847): accept them or comment on them, then press **Apply**.' --service-name review"
 # Pushing is the release: GitHub Actions publishes to npm what is pushed.
 LABEL tps.deploy="git push origin HEAD:main"
 # ShoTest's result cache, shared by all tasks and the test that merging runs:
