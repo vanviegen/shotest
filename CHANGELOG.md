@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.10.4 (2026-11-20)
+
+- The TPS setup (`TPS.md` in the skill) has `ask-human` show the review app and wait for its verdict, in place of `show-user-text`.
+
 ## 2.10.3 (2026-11-17)
 
 - Screenshots after `waitFor`, `expect` and the like no longer depend on how far the page had rendered when the element was found: the element is scrolled into view only once the page has settled, as actions already did.
