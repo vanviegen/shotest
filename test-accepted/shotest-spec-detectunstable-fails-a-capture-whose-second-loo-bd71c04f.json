@@ -4,7 +4,7 @@
   "title": "detectUnstable fails a capture whose second look differs",
   "steps": [
     {
-      "image": "d42b022f6a2e52da",
+      "image": "83cb480df62af3bb",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -13,13 +13,13 @@
         {
           "type": "console",
           "consoleType": "debug",
-          "message": "Aberdeen queue took 31ms",
-          "source": "http://localhost:42687/:202:13"
+          "message": "Aberdeen queue took 30ms",
+          "source": "http://localhost:37349/:202:13"
         },
         {
           "type": "page",
           "message": "goto /",
-          "source": "tests/shotest.spec.js:348"
+          "source": "tests/shotest.spec.js:357"
         },
         {
           "type": "assert",
@@ -30,13 +30,13 @@
             "width": 34,
             "height": 40
           },
-          "source": "tests/shotest.spec.js:359",
-          "duration": 836
+          "source": "tests/shotest.spec.js:368",
+          "duration": 925
         },
         {
           "type": "error",
           "message": "Unstable frame: a second capture 600ms later differed within the marked area. Find what keeps the page moving and stop it under test, or wrap this part in suppressScreenshots() to capture nothing here.",
-          "source": "tests/shotest.spec.js:359",
+          "source": "tests/shotest.spec.js:368",
           "box": {
             "x": 966,
             "y": 660,

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.11.0 (2026-11-23)
+
+- With fewer than 15 changed screenshots to decide on, the review app's overview shows them all, each with links to the tests and steps it appears in, and accepts them in one go.
+- In a test, `n` and `p` scroll to the next and previous changed screenshot.
+- Opening a test scrolls to its first change only once the screenshots above it have loaded, so it no longer stops short of it.
+- Screenshots are shown at 60% by default, down from 80%.
+
 ## 2.10.4 (2026-11-20)
 
 - The TPS setup (`TPS.md` in the skill) has `ask-human` show the review app and wait for its verdict, in place of `show-user-text`.

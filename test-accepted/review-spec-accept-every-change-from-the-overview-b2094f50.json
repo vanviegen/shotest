@@ -1,0 +1,153 @@
+{
+  "version": 4,
+  "file": "tests/review.spec.js",
+  "title": "accept every change from the overview",
+  "steps": [
+    {
+      "image": "fab311dc0b5bcd8b",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 17ms",
+          "source": "http://localhost:39379/:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goto /",
+          "source": "tests/review.spec.js:87"
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 526,
+            "y": 527,
+            "width": 306,
+            "height": 22
+          },
+          "source": "tests/review.spec.js:89",
+          "duration": 199
+        }
+      ]
+    },
+    {
+      "image": "c78a2168ab7b342e",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 231,
+            "y": 4,
+            "width": 260,
+            "height": 21
+          },
+          "source": "tests/review.spec.js:90",
+          "duration": 261
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 18,
+            "y": 78,
+            "width": 178,
+            "height": 37
+          },
+          "source": "tests/review.spec.js:91",
+          "duration": 167
+        }
+      ]
+    },
+    {
+      "image": "fab311dc0b5bcd8b",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 250,
+            "y": 458,
+            "width": 196,
+            "height": 38
+          },
+          "source": "tests/review.spec.js:93",
+          "duration": 185
+        }
+      ]
+    },
+    {
+      "image": "7fc5cd3043d239cf",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 227,
+            "y": 325,
+            "width": 348,
+            "height": 48
+          },
+          "source": "tests/review.spec.js:94",
+          "duration": 282
+        },
+        {
+          "type": "assert",
+          "message": "expect count 0 (getByText('Changed screenshots'))",
+          "source": "tests/review.spec.js:95",
+          "duration": 2141
+        },
+        {
+          "type": "action",
+          "message": "click",
+          "box": {
+            "x": 908,
+            "y": 17,
+            "width": 75,
+            "height": 26
+          },
+          "source": "tests/review.spec.js:96",
+          "duration": 169
+        }
+      ]
+    },
+    {
+      "image": "320c19fb72a6cb1e",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
+        {
+          "type": "assert",
+          "message": "expect visible",
+          "box": {
+            "x": 251,
+            "y": 266,
+            "width": 498,
+            "height": 43
+          },
+          "source": "tests/review.spec.js:97",
+          "duration": 255
+        }
+      ]
+    }
+  ]
+}

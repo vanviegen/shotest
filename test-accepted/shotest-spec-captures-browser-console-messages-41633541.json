@@ -4,7 +4,7 @@
   "title": "captures browser console messages",
   "steps": [
     {
-      "image": "f3d3090e09c97932",
+      "image": "fab311dc0b5bcd8b",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -13,13 +13,13 @@
         {
           "type": "console",
           "consoleType": "debug",
-          "message": "Aberdeen queue took 19ms",
-          "source": "http://localhost:35553/:202:13"
+          "message": "Aberdeen queue took 17ms",
+          "source": "http://localhost:42227/:202:13"
         },
         {
           "type": "page",
           "message": "goto /",
-          "source": "tests/shotest.spec.js:186"
+          "source": "tests/shotest.spec.js:195"
         },
         {
           "type": "console",
@@ -40,13 +40,13 @@
             "width": 191,
             "height": 38
           },
-          "source": "tests/shotest.spec.js:193",
-          "duration": 181
+          "source": "tests/shotest.spec.js:202",
+          "duration": 214
         }
       ]
     },
     {
-      "image": "73bf68aabc641b92",
+      "image": "50c48632d41df695",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -60,7 +60,7 @@
         {
           "type": "screenshot",
           "message": "console-final",
-          "source": "tests/shotest.spec.js:199",
+          "source": "tests/shotest.spec.js:208",
           "duration": 178
         }
       ]

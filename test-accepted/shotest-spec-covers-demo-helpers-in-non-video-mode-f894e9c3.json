@@ -4,7 +4,7 @@
   "title": "covers demo helpers in non-video mode",
   "steps": [
     {
-      "image": "f7322d13a224cb64",
+      "image": "5437b92775f7707a",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -14,12 +14,12 @@
           "type": "console",
           "consoleType": "debug",
           "message": "Aberdeen queue took 18ms",
-          "source": "http://localhost:39253/test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ:202:13"
+          "source": "http://localhost:37841/test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ:202:13"
         },
         {
           "type": "page",
           "message": "goto /test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ",
-          "source": "tests/shotest.spec.js:108"
+          "source": "tests/shotest.spec.js:117"
         },
         {
           "type": "action",
@@ -30,13 +30,13 @@
             "width": 175,
             "height": 49
           },
-          "source": "tests/shotest.spec.js:110",
-          "duration": 193
+          "source": "tests/shotest.spec.js:119",
+          "duration": 169
         }
       ]
     },
     {
-      "image": "6dcfd7dfcf889eda",
+      "image": "a308c003abaa3e8d",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -47,29 +47,38 @@
           "message": "expect visible",
           "box": {
             "x": 276,
-            "y": 370,
-            "width": 267,
+            "y": 645,
+            "width": 183,
             "height": 20
           },
-          "source": "tests/shotest.spec.js:111",
-          "duration": 168
-        },
+          "source": "tests/shotest.spec.js:120",
+          "duration": 212
+        }
+      ]
+    },
+    {
+      "image": "1e2a3c4d43fd156f",
+      "viewport": {
+        "width": 1000,
+        "height": 700
+      },
+      "events": [
         {
           "type": "action",
           "message": "click",
           "box": {
             "x": 247,
-            "y": 410,
+            "y": 672,
             "width": 102,
             "height": 28
           },
-          "source": "tests/shotest.spec.js:113",
-          "duration": 153
+          "source": "tests/shotest.spec.js:122",
+          "duration": 176
         }
       ]
     },
     {
-      "image": "38557f912ad186ec",
+      "image": "557ed83cef65a638",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -84,13 +93,13 @@
             "width": 283,
             "height": 44
           },
-          "source": "tests/shotest.spec.js:114",
-          "duration": 233
+          "source": "tests/shotest.spec.js:123",
+          "duration": 252
         }
       ]
     },
     {
-      "image": "0ac2b40b290c5f34",
+      "image": "56ea20930de15312",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -105,8 +114,8 @@
             "width": 283,
             "height": 44
           },
-          "source": "tests/shotest.spec.js:115",
-          "duration": 129
+          "source": "tests/shotest.spec.js:124",
+          "duration": 169
         },
         {
           "type": "action",
@@ -117,13 +126,13 @@
             "width": 84,
             "height": 37
           },
-          "source": "tests/shotest.spec.js:117",
-          "duration": 161
+          "source": "tests/shotest.spec.js:126",
+          "duration": 163
         }
       ]
     },
     {
-      "image": "41b9712d2a26170c",
+      "image": "1e2a3c4d43fd156f",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -132,176 +141,158 @@
         {
           "type": "wait",
           "message": "waitForTimeout 50ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 193
-        }
-      ]
-    },
-    {
-      "image": "6dcfd7dfcf889eda",
-      "viewport": {
-        "width": 1000,
-        "height": 700
-      },
-      "events": [
-        {
-          "type": "wait",
-          "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 92
+          "source": "tests/shotest.spec.js:129",
+          "duration": 210
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 93
+          "source": "tests/shotest.spec.js:129",
+          "duration": 112
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 91
+          "source": "tests/shotest.spec.js:129",
+          "duration": 111
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 90
+          "source": "tests/shotest.spec.js:129",
+          "duration": 116
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 91
+          "source": "tests/shotest.spec.js:129",
+          "duration": 111
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 89
+          "source": "tests/shotest.spec.js:129",
+          "duration": 115
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 95
+          "source": "tests/shotest.spec.js:129",
+          "duration": 118
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 93
+          "source": "tests/shotest.spec.js:129",
+          "duration": 110
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 96
+          "source": "tests/shotest.spec.js:129",
+          "duration": 114
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 91
+          "source": "tests/shotest.spec.js:129",
+          "duration": 117
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 91
+          "source": "tests/shotest.spec.js:129",
+          "duration": 112
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 91
+          "source": "tests/shotest.spec.js:129",
+          "duration": 114
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 92
+          "source": "tests/shotest.spec.js:129",
+          "duration": 123
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 94
+          "source": "tests/shotest.spec.js:129",
+          "duration": 117
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 91
+          "source": "tests/shotest.spec.js:129",
+          "duration": 109
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 89
+          "source": "tests/shotest.spec.js:129",
+          "duration": 117
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 89
+          "source": "tests/shotest.spec.js:129",
+          "duration": 114
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 89
+          "source": "tests/shotest.spec.js:129",
+          "duration": 112
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 95
+          "source": "tests/shotest.spec.js:129",
+          "duration": 119
         },
         {
           "type": "wait",
           "message": "waitForTimeout 10ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 95
+          "source": "tests/shotest.spec.js:129",
+          "duration": 110
+        },
+        {
+          "type": "wait",
+          "message": "waitForTimeout 10ms",
+          "source": "tests/shotest.spec.js:129",
+          "duration": 114
         },
         {
           "type": "wait",
           "message": "waitForTimeout 50ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 133
+          "source": "tests/shotest.spec.js:129",
+          "duration": 157
         },
         {
           "type": "wait",
           "message": "waitForTimeout 200ms",
-          "source": "tests/shotest.spec.js:120",
-          "duration": 295
-        }
-      ]
-    },
-    {
-      "image": "8865918b98b7cc0b",
-      "viewport": {
-        "width": 1000,
-        "height": 700
-      },
-      "events": [
+          "source": "tests/shotest.spec.js:129",
+          "duration": 324
+        },
         {
           "type": "assert",
           "message": "expect visible",
           "box": {
             "x": 247,
-            "y": 61,
-            "width": 336,
-            "height": 560
+            "y": 166,
+            "width": 252,
+            "height": 420
           },
-          "source": "tests/shotest.spec.js:121",
-          "duration": 131
+          "source": "tests/shotest.spec.js:130",
+          "duration": 180
         },
         {
           "type": "screenshot",
           "message": "demo-final",
-          "source": "tests/shotest.spec.js:123",
-          "duration": 82
+          "source": "tests/shotest.spec.js:132",
+          "duration": 117
         }
       ]
     }

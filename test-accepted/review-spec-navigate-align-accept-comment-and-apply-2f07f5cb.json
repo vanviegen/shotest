@@ -4,7 +4,7 @@
   "title": "navigate, align, accept, comment and apply",
   "steps": [
     {
-      "image": "f3d3090e09c97932",
+      "image": "fab311dc0b5bcd8b",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -13,8 +13,8 @@
         {
           "type": "console",
           "consoleType": "debug",
-          "message": "Aberdeen queue took 19ms",
-          "source": "http://localhost:46413/:202:13"
+          "message": "Aberdeen queue took 17ms",
+          "source": "http://localhost:42287/:202:13"
         },
         {
           "type": "page",
@@ -27,11 +27,11 @@
           "box": {
             "x": 277,
             "y": 171,
-            "width": 274,
+            "width": 667,
             "height": 24
           },
           "source": "tests/review.spec.js:15",
-          "duration": 179
+          "duration": 198
         },
         {
           "type": "action",
@@ -43,12 +43,12 @@
             "height": 38
           },
           "source": "tests/review.spec.js:16",
-          "duration": 157
+          "duration": 158
         }
       ]
     },
     {
-      "image": "55fafc1f67dcbdaa",
+      "image": "ad93b0bfc7342f6b",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -58,12 +58,12 @@
           "type": "wait",
           "message": "waitForTimeout 300ms",
           "source": "tests/review.spec.js:17",
-          "duration": 424
+          "duration": 435
         }
       ]
     },
     {
-      "image": "73bf68aabc641b92",
+      "image": "50c48632d41df695",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -79,18 +79,18 @@
             "height": 21
           },
           "source": "tests/review.spec.js:19",
-          "duration": 135
+          "duration": 181
         },
         {
           "type": "assert",
           "message": "expect text \"unchanged\", \"removed\", \"changed\", \"unchanged\", \"new\" (getByRole('main').getByText(/^(unchanged|changed|new|removed)$/))",
           "source": "tests/review.spec.js:23",
-          "duration": 97
+          "duration": 152
         }
       ]
     },
     {
-      "image": "86f9d9063e64a267",
+      "image": "08ca14ff39b0cb7b",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -106,12 +106,12 @@
             "height": 19
           },
           "source": "tests/review.spec.js:26",
-          "duration": 172
+          "duration": 188
         }
       ]
     },
     {
-      "image": "8a9db180d2c8cc9f",
+      "image": "c2bb1d88803d7b6d",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -127,7 +127,7 @@
             "height": 19
           },
           "source": "tests/review.spec.js:27",
-          "duration": 118
+          "duration": 171
         },
         {
           "type": "action",
@@ -139,12 +139,12 @@
             "height": 19
           },
           "source": "tests/review.spec.js:26",
-          "duration": 150
+          "duration": 149
         }
       ]
     },
     {
-      "image": "359e4fd0bb01f1a3",
+      "image": "31d51373b686092d",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -160,7 +160,7 @@
             "height": 19
           },
           "source": "tests/review.spec.js:27",
-          "duration": 120
+          "duration": 178
         },
         {
           "type": "action",
@@ -172,12 +172,12 @@
             "height": 19
           },
           "source": "tests/review.spec.js:26",
-          "duration": 146
+          "duration": 165
         }
       ]
     },
     {
-      "image": "f6f07ae79467cc61",
+      "image": "c828a93e56cbfb12",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -193,12 +193,12 @@
             "height": 19
           },
           "source": "tests/review.spec.js:27",
-          "duration": 120
+          "duration": 169
         }
       ]
     },
     {
-      "image": "73bf68aabc641b92",
+      "image": "50c48632d41df695",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -214,12 +214,12 @@
             "height": 26
           },
           "source": "tests/review.spec.js:29",
-          "duration": 164
+          "duration": 216
         }
       ]
     },
     {
-      "image": "029749cf4cd3be23",
+      "image": "d6f016b71af084aa",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -229,12 +229,12 @@
           "type": "wait",
           "message": "waitForTimeout 300ms",
           "source": "tests/review.spec.js:30",
-          "duration": 452
+          "duration": 445
         }
       ]
     },
     {
-      "image": "a6f9b9fbc24206ce",
+      "image": "beb20e821c9cd442",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -250,12 +250,12 @@
             "height": 21
           },
           "source": "tests/review.spec.js:33",
-          "duration": 123
+          "duration": 163
         }
       ]
     },
     {
-      "image": "ab99341ef5913689",
+      "image": "ee88611851ba42e2",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -271,7 +271,7 @@
             "height": 39
           },
           "source": "tests/review.spec.js:34",
-          "duration": 148
+          "duration": 180
         },
         {
           "type": "action",
@@ -283,12 +283,12 @@
             "height": 28
           },
           "source": "tests/review.spec.js:35",
-          "duration": 146
+          "duration": 149
         }
       ]
     },
     {
-      "image": "eeee9efddb45d810",
+      "image": "d30a2cbf7ee28aee",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -304,12 +304,12 @@
             "height": 44
           },
           "source": "tests/review.spec.js:36",
-          "duration": 237
+          "duration": 236
         }
       ]
     },
     {
-      "image": "f34f3059dd26611b",
+      "image": "89e94df9f9999929",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -325,12 +325,12 @@
             "height": 37
           },
           "source": "tests/review.spec.js:37",
-          "duration": 146
+          "duration": 168
         }
       ]
     },
     {
-      "image": "aea91ab1923f15ec",
+      "image": "6974fee62bf7957a",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -342,16 +342,16 @@
           "box": {
             "x": 276,
             "y": 491,
-            "width": 267,
+            "width": 183,
             "height": 20
           },
           "source": "tests/review.spec.js:38",
-          "duration": 207
+          "duration": 238
         }
       ]
     },
     {
-      "image": "9644303a3d4de852",
+      "image": "5e9369c2e50bf729",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -367,12 +367,12 @@
             "height": 26
           },
           "source": "tests/review.spec.js:40",
-          "duration": 176
+          "duration": 167
         }
       ]
     },
     {
-      "image": "dc93110693affc35",
+      "image": "ba5ff39d4c15d987",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -383,29 +383,29 @@
           "message": "expect visible",
           "box": {
             "x": 276,
-            "y": 370,
-            "width": 267,
+            "y": 645,
+            "width": 183,
             "height": 20
           },
           "source": "tests/review.spec.js:41",
-          "duration": 218
+          "duration": 257
         },
         {
           "type": "action",
           "message": "click",
           "box": {
-            "x": 549,
-            "y": 370,
+            "x": 465,
+            "y": 645,
             "width": 26,
             "height": 26
           },
           "source": "tests/review.spec.js:42",
-          "duration": 149
+          "duration": 168
         }
       ]
     },
     {
-      "image": "e31f9b296c1629c7",
+      "image": "c02787bfd3aaacfb",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -415,7 +415,7 @@
           "type": "assert",
           "message": "expect count 0 (getByText('The outline should be blue'))",
           "source": "tests/review.spec.js:43",
-          "duration": 2172
+          "duration": 2201
         },
         {
           "type": "action",
@@ -427,12 +427,12 @@
             "height": 26
           },
           "source": "tests/review.spec.js:45",
-          "duration": 160
+          "duration": 165
         }
       ]
     },
     {
-      "image": "5299cbb6a9fc54d5",
+      "image": "0ced631c9a5f372a",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -448,7 +448,7 @@
             "height": 43
           },
           "source": "tests/review.spec.js:46",
-          "duration": 216
+          "duration": 251
         }
       ]
     }

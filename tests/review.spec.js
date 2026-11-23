@@ -83,6 +83,23 @@ test('discard', async ({ page, review }) => {
   expect(fs.existsSync(path.join(review.dir, 'test-results', '.review-session.json'))).toBe(false);
 });
 
+test('accept every change from the overview', async ({ page, review }) => {
+  await page.goto('/');
+  // Each changed screenshot links to the steps it appears in.
+  await page.getByRole('link', { name: 'changed, removed and new steps · screenshot 2' }).click();
+  await expect(page.getByRole('heading', { name: 'changed, removed and new steps' })).toBeVisible();
+  await page.getByRole('link', { name: 'Overview' }).click();
+
+  await page.getByRole('button', { name: 'Accept all (2 tests)' }).click();
+  await expect(page.getByText('Every change is decided on')).toBeVisible();
+  await expect(page.getByText('Changed screenshots')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Apply' }).click();
+  await expect(page.getByText('Review applied')).toBeVisible();
+  // Only the commented test is left unaccepted.
+  expect(await review.exited).toBe(1);
+  expect(fs.readdirSync(review.accepted)).toEqual(expect.arrayContaining([`${CHANGED}.json`, `${FAILED}.json`]));
+});
+
 test('a baseline whose test did not run is no orphan', () => {
   const dir = fixtureProject();
   for (const base of [CHANGED, FAILED]) fs.rmSync(path.join(dir, 'test-results', `${base}.json`));

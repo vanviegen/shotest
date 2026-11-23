@@ -4,7 +4,7 @@
   "title": "negative assertions on absent elements complete quickly",
   "steps": [
     {
-      "image": "f3d3090e09c97932",
+      "image": "fab311dc0b5bcd8b",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -13,31 +13,31 @@
         {
           "type": "console",
           "consoleType": "debug",
-          "message": "Aberdeen queue took 18ms",
-          "source": "http://localhost:42625/:202:13"
+          "message": "Aberdeen queue took 23ms",
+          "source": "http://localhost:46079/:202:13"
         },
         {
           "type": "page",
           "message": "goto /",
-          "source": "tests/shotest.spec.js:232"
+          "source": "tests/shotest.spec.js:241"
         },
         {
           "type": "assert",
           "message": "expect not visible (getByText('this text exists nowhere on the page'))",
-          "source": "tests/shotest.spec.js:239",
-          "duration": 2126
+          "source": "tests/shotest.spec.js:248",
+          "duration": 2179
         },
         {
           "type": "check",
           "message": "waitFor hidden (getByText('no such element either'))",
-          "source": "tests/shotest.spec.js:240",
-          "duration": 2098
+          "source": "tests/shotest.spec.js:249",
+          "duration": 2171
         },
         {
           "type": "check",
           "message": "isHidden (getByText('still nothing'))",
-          "source": "tests/shotest.spec.js:241",
-          "duration": 2102
+          "source": "tests/shotest.spec.js:250",
+          "duration": 2164
         }
       ]
     }

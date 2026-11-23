@@ -4,7 +4,7 @@
   "title": "logs page-level commands as events without screenshots",
   "steps": [
     {
-      "image": "4d63ed9e9e246a79",
+      "image": "280dfc923e059442",
       "viewport": {
         "width": 500,
         "height": 700
@@ -13,62 +13,62 @@
         {
           "type": "page",
           "message": "setViewportSize 500×700",
-          "source": "tests/shotest.spec.js:167"
-        },
-        {
-          "type": "console",
-          "consoleType": "debug",
-          "message": "Aberdeen queue took 24ms",
-          "source": "http://localhost:36983/:202:13"
-        },
-        {
-          "type": "page",
-          "message": "goto /",
-          "source": "tests/shotest.spec.js:168"
-        },
-        {
-          "type": "console",
-          "consoleType": "debug",
-          "message": "Aberdeen queue took 23ms",
-          "source": "http://localhost:36983/?variant=1:202:13"
-        },
-        {
-          "type": "page",
-          "message": "goto /?variant=1",
-          "source": "tests/shotest.spec.js:169"
-        },
-        {
-          "type": "console",
-          "consoleType": "debug",
-          "message": "Aberdeen queue took 21ms",
-          "source": "http://localhost:36983/:202:13"
-        },
-        {
-          "type": "page",
-          "message": "goBack",
-          "source": "tests/shotest.spec.js:170"
+          "source": "tests/shotest.spec.js:176"
         },
         {
           "type": "console",
           "consoleType": "debug",
           "message": "Aberdeen queue took 18ms",
-          "source": "http://localhost:36983/?variant=1:202:13"
+          "source": "http://localhost:46775/:202:13"
         },
         {
           "type": "page",
-          "message": "goForward",
-          "source": "tests/shotest.spec.js:171"
+          "message": "goto /",
+          "source": "tests/shotest.spec.js:177"
         },
         {
           "type": "console",
           "consoleType": "debug",
           "message": "Aberdeen queue took 17ms",
-          "source": "http://localhost:36983/?variant=1:202:13"
+          "source": "http://localhost:46775/?variant=1:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goto /?variant=1",
+          "source": "tests/shotest.spec.js:178"
+        },
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 17ms",
+          "source": "http://localhost:46775/:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goBack",
+          "source": "tests/shotest.spec.js:179"
+        },
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 17ms",
+          "source": "http://localhost:46775/?variant=1:202:13"
+        },
+        {
+          "type": "page",
+          "message": "goForward",
+          "source": "tests/shotest.spec.js:180"
+        },
+        {
+          "type": "console",
+          "consoleType": "debug",
+          "message": "Aberdeen queue took 15ms",
+          "source": "http://localhost:46775/?variant=1:202:13"
         },
         {
           "type": "page",
           "message": "reload",
-          "source": "tests/shotest.spec.js:172"
+          "source": "tests/shotest.spec.js:181"
         },
         {
           "type": "assert",
@@ -79,8 +79,8 @@
             "width": 381,
             "height": 24
           },
-          "source": "tests/shotest.spec.js:173",
-          "duration": 143
+          "source": "tests/shotest.spec.js:182",
+          "duration": 187
         }
       ]
     }

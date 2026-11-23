@@ -4,7 +4,7 @@
   "title": "a capture on a page that never settles fails the test, naming the culprit",
   "steps": [
     {
-      "image": "d42b022f6a2e52da",
+      "image": "83cb480df62af3bb",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -13,13 +13,13 @@
         {
           "type": "console",
           "consoleType": "debug",
-          "message": "Aberdeen queue took 19ms",
-          "source": "http://localhost:44921/:202:13"
+          "message": "Aberdeen queue took 17ms",
+          "source": "http://localhost:33511/:202:13"
         },
         {
           "type": "page",
           "message": "goto /",
-          "source": "tests/shotest.spec.js:318"
+          "source": "tests/shotest.spec.js:327"
         },
         {
           "type": "assert",
@@ -30,13 +30,13 @@
             "width": 34,
             "height": 40
           },
-          "source": "tests/shotest.spec.js:322",
-          "duration": 639
+          "source": "tests/shotest.spec.js:331",
+          "duration": 630
         },
         {
           "type": "error",
           "message": "Page did not settle within 500ms: the DOM kept mutating (last: attribute \"data-tick\" on p#probe). Find what keeps the page moving and stop it under test, or wrap this part in suppressScreenshots() to capture nothing here.",
-          "source": "tests/shotest.spec.js:322"
+          "source": "tests/shotest.spec.js:331"
         }
       ],
       "unstable": "Page did not settle within 500ms: the DOM kept mutating (last: attribute \"data-tick\" on p#probe)"
@@ -48,7 +48,7 @@
       "gap": "Capture the moving page anyway"
     },
     {
-      "image": "cbfad45069a46ecc",
+      "image": "df23047b6c0d5699",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -57,8 +57,8 @@
         {
           "type": "screenshot",
           "message": "ticking",
-          "source": "tests/shotest.spec.js:335",
-          "duration": 579
+          "source": "tests/shotest.spec.js:344",
+          "duration": 600
         },
         {
           "type": "assert",
@@ -69,8 +69,8 @@
             "width": 34,
             "height": 40
           },
-          "source": "tests/shotest.spec.js:339",
-          "duration": 181
+          "source": "tests/shotest.spec.js:348",
+          "duration": 231
         }
       ],
       "unstable": "Page did not settle within 500ms: the DOM kept mutating (last: attribute \"data-tick\" on p#probe)"

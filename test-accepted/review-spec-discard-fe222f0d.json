@@ -4,7 +4,7 @@
   "title": "discard",
   "steps": [
     {
-      "image": "f3d3090e09c97932",
+      "image": "fab311dc0b5bcd8b",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -13,8 +13,8 @@
         {
           "type": "console",
           "consoleType": "debug",
-          "message": "Aberdeen queue took 21ms",
-          "source": "http://localhost:43393/:202:13"
+          "message": "Aberdeen queue took 18ms",
+          "source": "http://localhost:37715/:202:13"
         },
         {
           "type": "page",
@@ -31,12 +31,12 @@
             "height": 38
           },
           "source": "tests/review.spec.js:66",
-          "duration": 171
+          "duration": 170
         }
       ]
     },
     {
-      "image": "55fafc1f67dcbdaa",
+      "image": "ad93b0bfc7342f6b",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -46,12 +46,12 @@
           "type": "wait",
           "message": "waitForTimeout 300ms",
           "source": "tests/review.spec.js:68",
-          "duration": 393
+          "duration": 395
         }
       ]
     },
     {
-      "image": "73bf68aabc641b92",
+      "image": "50c48632d41df695",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -67,12 +67,12 @@
             "height": 21
           },
           "source": "tests/review.spec.js:69",
-          "duration": 150
+          "duration": 189
         }
       ]
     },
     {
-      "image": "a6f9b9fbc24206ce",
+      "image": "beb20e821c9cd442",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -88,7 +88,7 @@
             "height": 21
           },
           "source": "tests/review.spec.js:71",
-          "duration": 157
+          "duration": 205
         },
         {
           "type": "assert",
@@ -100,7 +100,7 @@
             "height": 20
           },
           "source": "tests/review.spec.js:72",
-          "duration": 133
+          "duration": 177
         },
         {
           "type": "action",
@@ -112,12 +112,12 @@
             "height": 26
           },
           "source": "tests/review.spec.js:74",
-          "duration": 176
+          "duration": 153
         }
       ]
     },
     {
-      "image": "324e4862b2018916",
+      "image": "0e9b7104f3e5e3bf",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -133,12 +133,12 @@
             "height": 37
           },
           "source": "tests/review.spec.js:75",
-          "duration": 222
+          "duration": 219
         }
       ]
     },
     {
-      "image": "1f6178aa1966564d",
+      "image": "0b173251c98a7f39",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -154,7 +154,7 @@
             "height": 43
           },
           "source": "tests/review.spec.js:76",
-          "duration": 208
+          "duration": 237
         }
       ]
     }

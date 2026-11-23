@@ -4,7 +4,7 @@
   "title": "captures wait while busySelector matches",
   "steps": [
     {
-      "image": "120618b76cab1738",
+      "image": "d014a0af3218982d",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -14,12 +14,12 @@
           "type": "console",
           "consoleType": "debug",
           "message": "Aberdeen queue took 18ms",
-          "source": "http://localhost:40229/:202:13"
+          "source": "http://localhost:45347/:202:13"
         },
         {
           "type": "page",
           "message": "goto /",
-          "source": "tests/shotest.spec.js:142"
+          "source": "tests/shotest.spec.js:151"
         },
         {
           "type": "assert",
@@ -30,8 +30,8 @@
             "width": 62,
             "height": 40
           },
-          "source": "tests/shotest.spec.js:160",
-          "duration": 159
+          "source": "tests/shotest.spec.js:169",
+          "duration": 229
         }
       ]
     }

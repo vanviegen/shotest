@@ -7,7 +7,7 @@
       "gap": "Open the failed test"
     },
     {
-      "image": "70a8011c60f1722d",
+      "image": "036f8135cbe786c4",
       "viewport": {
         "width": 1000,
         "height": 700
@@ -16,18 +16,18 @@
         {
           "type": "console",
           "consoleType": "debug",
-          "message": "Aberdeen queue took 19ms",
-          "source": "http://localhost:42271/test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ:202:13"
+          "message": "Aberdeen queue took 18ms",
+          "source": "http://localhost:44239/test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ:202:13"
         },
         {
           "type": "page",
           "message": "goto /test/WyJ0ZXN0cy9leGFtcGxlLnNwZWMuanMiLCJ1bmNoYW5nZWQiXQ",
-          "source": "tests/shotest.spec.js:127"
+          "source": "tests/shotest.spec.js:136"
         },
         {
           "type": "describe",
           "message": "Verify the error is shown",
-          "source": "tests/shotest.spec.js:134"
+          "source": "tests/shotest.spec.js:143"
         },
         {
           "type": "assert",
@@ -38,8 +38,8 @@
             "width": 33,
             "height": 24
           },
-          "source": "tests/shotest.spec.js:135",
-          "duration": 138
+          "source": "tests/shotest.spec.js:144",
+          "duration": 201
         }
       ]
     }

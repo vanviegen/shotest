@@ -133,7 +133,7 @@ interface ReviewState {
 const state = A.proxy<ReviewState>({
   tests: [],
   loadingTests: true,
-  scale: 0.8,
+  scale: 0.6,
   toggleShowNew: true,
   connection: 'ok',
 });
@@ -143,6 +143,8 @@ const state = A.proxy<ReviewState>({
 // the URL is on.
 interface TestPanelCtx {
   id: string;
+  // Marks the panel's list of steps, whose children are the steps in order.
+  stepsClass: string;
   $local: { detail: TestDetail | null; loading: boolean };
   reload: () => Promise<void>;
 }
@@ -542,6 +544,9 @@ document.addEventListener('keydown', (event) => {
   if (key === 'a' && ctx && !ctx.$local.loading && canAccept(ctx.$local.detail)) {
     event.preventDefault();
     void setAccepted(ctx, !ctx.$local.detail!.accepted);
+  } else if ((key === 'n' || key === 'p') && ctx) {
+    event.preventDefault();
+    scrollToChange(ctx, key === 'n' ? 1 : -1);
   }
 });
 
@@ -1144,25 +1149,36 @@ function renderStep(ctx: TestPanelCtx, detail: TestDetail, index: number, roles:
   });
 }
 
-function renderSteps(ctx: TestPanelCtx, detail: TestDetail, markerClass: string): void {
+function renderSteps(ctx: TestPanelCtx, detail: TestDetail): void {
   const { steps } = detail;
   if (steps.length === 0) {
     A('div color:$s-muted #No screenshots taken');
     return;
   }
   const roles = buildRoleInfo(steps);
-  const firstChanged = steps.findIndex((step) => getStepChange(step) !== 'unchanged');
   // Row gap well above the image↔events gap inside a step, so an event list
   // reads as belonging to the screenshot above it, not the one below.
-  A('div display:flex flex-wrap:wrap column-gap:2.5rem row-gap:3rem align-items:flex-start pt:0.5rem', () => {
-    steps.forEach((_, index) => {
-      // Tag the first screenshot that needs review, so the panel can scroll it
-      // into view. The panel already opens at the top; only mark when the
-      // first change sits somewhere below it.
-      const mark = index === firstChanged && index > 0 ? `.${markerClass}` : '';
-      renderStep(ctx, detail, index, roles, mark);
+  A(`div.${ctx.stepsClass} display:flex flex-wrap:wrap column-gap:2.5rem row-gap:3rem align-items:flex-start pt:0.5rem`, () => {
+    steps.forEach((step, index) => {
+      // Changed steps are tagged for 'n'/'p' to find.
+      renderStep(ctx, detail, index, roles, getStepChange(step) === 'unchanged' ? '' : '.shotest-change');
     });
   });
+}
+
+// Scrolls the panel to the changed step after (1) or before (-1) the one at
+// its top.
+function scrollToChange(ctx: TestPanelCtx, direction: 1 | -1): void {
+  const changes = [...document.querySelectorAll(`.${ctx.stepsClass} > .shotest-change`)];
+  const container = changes[0]?.closest('.s-content');
+  if (!container) return;
+  const top = container.getBoundingClientRect().top;
+  // How far each sits below where scrolling it into view would put it.
+  const below = (el: Element) => el.getBoundingClientRect().top - top - parseFloat(getComputedStyle(el).scrollMarginTop);
+  const target = direction > 0
+    ? changes.find((el) => below(el) > 1)
+    : changes.reverse().find((el) => below(el) < -1);
+  target?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
 // ── Rendering: test panel ───────────────────────────────────────────
@@ -1270,14 +1286,15 @@ function renderErrorBox(manifest: TestRecord): void {
 
 let panelSeq = 0;
 
-function drawTestPanel($panel: S.Panel<{ id: string }>): void {
+// A test, scrolled to the given step or else to its first change.
+function drawTestPanel($panel: S.Panel<{ id: string; step?: number }>): void {
   $panel.maxWidth = 'screen';
   const id = $panel.params.id;
-  const markerClass = `shotest-first-change-${++panelSeq}`;
 
   const $local = A.proxy<TestPanelCtx['$local']>({ detail: null, loading: true });
   const ctx: TestPanelCtx = {
     id,
+    stepsClass: `shotest-steps-${++panelSeq}`,
     $local,
     reload: async () => {
       $local.loading = true;
@@ -1302,17 +1319,23 @@ function drawTestPanel($panel: S.Panel<{ id: string }>): void {
   });
 
   // Once the detail is drawn and the panel is actually on screen, bring the
-  // first screenshot that needs review into view. Marker classes rather than
-  // element refs: Aberdeen offers no ref hook, and `create=` transitions only
-  // fire for top-level redraws.
+  // step to start at into view — once the images above it have loaded, as
+  // until then they take up no room. A marker class rather than an element
+  // ref: Aberdeen offers no ref hook, and `create=` transitions only fire for
+  // top-level redraws.
   let scrolledDetail: TestDetail | null = null;
   A(() => {
     const detail = $local.detail;
     if (!detail || $local.loading || !$panel.visible || scrolledDetail === detail) return;
     scrolledDetail = detail;
-    setTimeout(() => {
-      document.getElementsByClassName(markerClass)[0]
-        ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    const step = $panel.params.step ?? detail.steps.findIndex((entry) => getStepChange(entry) !== 'unchanged');
+    // The panel opens at the top already.
+    if (step <= 0) return;
+    setTimeout(async () => {
+      const steps = document.getElementsByClassName(ctx.stepsClass)[0];
+      if (!steps) return;
+      await Promise.all([...steps.getElementsByTagName('img')].map((img) => img.decode().catch(() => { })));
+      steps.children[step]?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }, 150);
   });
 
@@ -1331,7 +1354,7 @@ function drawTestPanel($panel: S.Panel<{ id: string }>): void {
         renderComments(ctx, detail.comments);
       });
     }
-    renderSteps(ctx, detail, markerClass);
+    renderSteps(ctx, detail);
     if (detail.manifest?.error) renderErrorBox(detail.manifest);
   });
 }
@@ -1355,10 +1378,96 @@ function drawShortcutRow(keys: string[], label: string): void {
   });
 }
 
+// With fewer than this many changed screenshots to decide on, the overview
+// shows them all, to be accepted in one go.
+const GALLERY_LIMIT = 15;
+
+// A changed screenshot (or gap), with every test step it appears in.
+interface GalleryShot {
+  step: ReviewStep;
+  uses: { test: TestSummary; step: number }[];
+}
+
+const $gallery = A.proxy({ shots: [] as GalleryShot[] });
+let gallerySeq = 0;
+
+async function loadGallery(tests: TestSummary[]): Promise<void> {
+  const seq = ++gallerySeq;
+  const shots = new Map<string, GalleryShot>();
+  if (tests.length < GALLERY_LIMIT) {
+    let details: TestDetail[];
+    try {
+      details = await Promise.all(tests.map((test) => fetchJson<TestDetail>(`/api/test/${encodeURIComponent(test.id)}`)));
+    } catch (error) {
+      reportFailure('Could not load the changed screenshots', error);
+      return;
+    }
+    details.forEach((detail, index) => detail.steps.forEach((step, stepIndex) => {
+      if (getStepChange(step) === 'unchanged') return;
+      const key = JSON.stringify([step.acceptedImage, step.currentImage, step.acceptedGap, step.currentGap]);
+      if (!shots.has(key)) shots.set(key, { step, uses: [] });
+      shots.get(key)!.uses.push({ test: tests[index], step: stepIndex });
+    }));
+  }
+  if (seq === gallerySeq) $gallery.shots = shots.size < GALLERY_LIMIT ? [...shots.values()] : [];
+}
+
+async function acceptAll(tests: TestSummary[]): Promise<void> {
+  try {
+    for (const test of tests) await fetchJson(`/api/accepted/${encodeURIComponent(test.id)}`, { method: 'PUT' });
+  } catch (error) {
+    reportFailure('Could not save that', error);
+  }
+  await fetchTests();
+}
+
+function drawGallery(tests: TestSummary[]): void {
+  S.box({
+    header: 'Changed screenshots',
+    contentAttrs: 'display:flex flex-direction:column gap:2rem',
+    content: () => {
+      A('div', () => {
+        S.button({
+          content: `Accept all (${tests.length} ${tests.length === 1 ? 'test' : 'tests'})`,
+          icon: check,
+          click: () => void acceptAll(tests),
+        });
+      });
+      for (const { step, uses } of $gallery.shots) {
+        A('div display:flex flex-wrap:wrap align-items:flex-start gap:1.5rem', () => {
+          const change = getStepChange(step);
+          if (isGapStep(step)) {
+            renderGapStep(step, change);
+          } else {
+            const fade = change === 'changed' && step.acceptedImage !== step.currentImage;
+            const $ui = A.proxy<StepUi>({ imageHovered: false, side: 'auto' });
+            A('div display:flex flex-direction:column gap:0.6rem max-width:100%', () => {
+              renderStepHeader(change, change === 'changed', fade, step.unstable, $ui);
+              renderStage(step, fade, buildEventLists(step, false), $ui, plainShadowStyle);
+            });
+          }
+          A('div display:flex flex-direction:column gap:0.3rem font-size:0.9em', () => {
+            for (const use of uses) {
+              A('div display:flex align-items:center gap:0.4rem', () => {
+                A('a href=', `${hrefForTest(use.test.id)}/${use.step}`, '#', `${use.test.title} · screenshot ${use.step + 1}`);
+                if (testIsFailed(use.test.status)) drawFailedChip(use.test.status);
+              });
+              A('div font-size:0.85em color:$s-muted #', use.test.file);
+            }
+          });
+        });
+      }
+    },
+  });
+}
+
 function drawHomePanel($panel: S.Panel<{}>): void {
   $panel.title = 'Overview';
-  $panel.maxWidth = 'half';
+  A(() => {
+    $panel.maxWidth = $gallery.shots.length ? 'screen' : 'half';
+  });
   A(() => { $panel.loading = state.loadingTests && state.tests.length === 0; });
+  A(() => void loadGallery(state.tests.filter(isUndecided)));
 
   A('div display:flex flex-direction:column gap:1rem align-items:stretch', () => {
     A(() => {
@@ -1418,11 +1527,16 @@ function drawHomePanel($panel: S.Panel<{}>): void {
       }
     });
 
+    A(() => {
+      if ($gallery.shots.length) drawGallery(state.tests.filter(isUndecided));
+    });
+
     S.box({
       header: 'Keyboard shortcuts',
       contentAttrs: 'display:flex flex-direction:column gap:0.4rem',
       content: () => {
         drawShortcutRow(['a'], 'accept the new visuals, or undo that');
+        drawShortcutRow(['n', 'p'], 'next / previous changed screenshot');
         drawShortcutRow(['Ctrl', '↑/↓'], 'previous / next test');
         drawShortcutRow(['Esc'], 'jump to the test list');
       },
@@ -1444,8 +1558,8 @@ function drawToolbar(): void {
     });
   });
   A(() => {
-    // The scale control only means something while a test is on screen.
-    if (route.current.p[0] !== 'test') return;
+    // The scale control only means something while screenshots are on screen.
+    if (route.current.p[0] !== 'test' && !(route.current.p.length === 0 && $gallery.shots.length)) return;
     A('label display:flex align-items:center gap:0.4rem font-size:0.85em color:$s-muted', () => {
       A('span #Scale');
       A('input type=range min=0.1 max=1 step=0.01 bind=', A.ref(state, 'scale'), sliderStyle, () => {
@@ -1473,6 +1587,7 @@ const shell = S.main({
   routes: {
     '/': drawHomePanel,
     '/test/[id]': drawTestPanel,
+    '/test/[id]/[step=integer]': drawTestPanel,
   },
   notFound: ($panel) => {
     $panel.title = 'Not found';
