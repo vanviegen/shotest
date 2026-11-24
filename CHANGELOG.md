@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.12.1 (2026-11-24)
+
+- Working out the source tree to look up cached results takes a fraction of a second again, instead of reading every file in the project each time: `shotest test`, `restore` and `review` start much faster in large projects.
+
 ## 2.12.0 (2026-11-24)
 
 - `npx shotest restore [spec files...]` puts the cached results of those files' tests in `test-results/` without running anything, and prints the files that still have tests to run: for runners that set up something costly per spec file.

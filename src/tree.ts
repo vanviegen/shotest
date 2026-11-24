@@ -17,14 +17,15 @@ import * as path from 'node:path';
  */
 export function sourceTreeHash(excluded: string[]): string | undefined {
   const index = path.join(tmpdir(), `shotest-index-${process.pid}`);
-  const git = (args: string[]) => execFileSync('git', args, {
+  const git = (args: string[], env: NodeJS.ProcessEnv = { ...process.env, GIT_INDEX_FILE: index }) => execFileSync('git', args, {
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'ignore'],
-    env: { ...process.env, GIT_INDEX_FILE: index },
+    env,
   }).trim();
   try {
     try {
-      copyFileSync(git(['rev-parse', '--path-format=absolute', '--git-path', 'index']), index);
+      // The real index: with GIT_INDEX_FILE set, git would name the scratch one.
+      copyFileSync(git(['rev-parse', '--path-format=absolute', '--git-path', 'index'], process.env), index);
     } catch { } // no commits yet: start from an empty index
     // Not an exclude pathspec on the add: naming an ignored directory (as
     // test-results/ is, as a rule) there makes it fail.
