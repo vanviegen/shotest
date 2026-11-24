@@ -4,7 +4,8 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cacheDir, pruneCache } from './cache.js';
+import { cacheDir, cacheResultsDir, pruneCache, restoreResult } from './cache.js';
+import { listTests } from './list-reporter.js';
 import { startReviewServer, testId } from './review.js';
 import { sourceTreeHash } from './tree.js';
 import {
@@ -150,6 +151,34 @@ function runCollect(): number {
 }
 
 /**
+ * What renders the tests `shotest test` runs, as the result cache knows it
+ * (see cachedResultsDir in fixture.ts): the container image
+ * bin/shotest-playwright picks, or for a native run SHOTEST_RENDERER, else
+ * the installed Playwright.
+ */
+function renderer(noContainer: boolean): string {
+  const version: string = require('@playwright/test/package.json').version;
+  const containerized = !noContainer && process.platform !== 'win32' &&
+    ['podman', 'docker'].some((runner) => spawnSync(runner, ['--version'], { stdio: 'ignore' }).status === 0);
+  if (containerized) return process.env.SHOTEST_IMAGE || `mcr.microsoft.com/playwright:v${version}-noble`;
+  return process.env.SHOTEST_RENDERER || `native-${version}`;
+}
+
+// `shotest restore [files]` puts the cached results of the tests in the given
+// spec files (all, if none) into the results directory, as `shotest test`
+// would on this source tree, and prints the files that still have a test to
+// run: the ones a run needs.
+function runRestore(files: string[], noContainer: boolean): void {
+  const tree = sourceTreeHash([getOutputDir(), getAcceptedDir()]);
+  const cached = tree && cacheResultsDir(cacheDir(), tree, renderer(noContainer));
+  const toRun = new Set<string>();
+  for (const test of listTests(files)) {
+    if (!cached || !restoreResult(test, cached, getOutputDir())) toRun.add(test.file);
+  }
+  for (const file of toRun) console.log(file);
+}
+
+/**
  * Hand the arguments to the Playwright CLI via bin/shotest-playwright, which
  * owns the how: `test` runs go inside the pinned Playwright container image
  * when podman or docker is available (see the README's "Deterministic
@@ -205,6 +234,11 @@ async function main(): Promise<void> {
 
   if (firstArg === 'collect') {
     process.exit(runCollect());
+  }
+
+  if (firstArg === 'restore') {
+    runRestore(argv.slice(1), noContainer);
+    return;
   }
 
   // Everything else is Playwright's, `test` included: reporting on a test

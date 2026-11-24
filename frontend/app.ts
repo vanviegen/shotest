@@ -72,6 +72,8 @@ interface ReviewStep {
   // plus the list of events (actions, checks) recorded on that screenshot.
   acceptedGap?: string;
   currentGap?: string;
+  // Where suppressScreenshots() was called, like "tests/my.spec.ts:10".
+  gapSource?: string;
   acceptedImage?: string;
   currentImage?: string;
   acceptedEvents?: StepEvent[];
@@ -452,9 +454,9 @@ async function discardReview(): Promise<void> {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-// The source line an event ran from, e.g. "tests/my.spec.ts:10" → "10".
-function eventLine(event: StepEvent): string {
-  const line = event.source?.slice(event.source.lastIndexOf(':') + 1) ?? '';
+// The line of a source location, e.g. "tests/my.spec.ts:10" → "10".
+function sourceLine(source: string | undefined): string {
+  const line = source?.slice(source.lastIndexOf(':') + 1) ?? '';
   return /^\d+$/.test(line) ? line : '';
 }
 
@@ -750,7 +752,7 @@ function renderEvent(event: StepEvent, index: number, $sel: ListSel): void {
     const chip = isConsole ? (tone === 'warning' ? 'warn' : tone) : event.type;
     A('.' + (isConsole ? `console.${tone}` : event.type));
     if (!isConsole) {
-      const line = eventLine(event);
+      const line = sourceLine(event.source);
       if (line) A('span.line #', line);
     }
     A('span', chipStyle, eventChipStyles[chip] ?? plainChipStyle, '#', chip);
@@ -1033,6 +1035,7 @@ const gapStyle = A.insertCss({
   '&': 'align-self:stretch display:flex flex-direction:column align-items:center justify-content:center gap:0.4rem border: 2px dashed $s-faint; border-radius:8px pv:1rem ph:0.75rem max-width:11rem color:$s-muted scroll-margin:1rem',
   '.text': 'font-size:0.8em font-style:italic text-align:center word-break:break-word',
   '.text.was': 'text-decoration:line-through opacity:0.7',
+  '.line': 'font-size:0.75em font-variant-numeric:tabular-nums',
 });
 
 // A gap carries no image, so its text is the only thing the reviewer can look
@@ -1050,6 +1053,8 @@ function renderGapStep(step: ReviewStep, change: StepChange, extraAttrs = ''): v
       A('div.text.was #', gapText(step.acceptedGap));
     }
     A('div.text #', gapText(step.currentGap ?? step.acceptedGap));
+    const line = sourceLine(step.gapSource);
+    if (line) A('div.line #', `line ${line}`);
   });
 }
 

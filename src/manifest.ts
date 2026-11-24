@@ -104,6 +104,8 @@ export interface ImageStepRecord {
 /** A placeholder for steps that ran without screenshots (suppressScreenshots). */
 export interface GapStepRecord {
     gap: string;
+    /** Where suppressScreenshots() was called, like "tests/my.spec.ts:10". */
+    source?: string;
 }
 
 export type StepRecord = ImageStepRecord | GapStepRecord;

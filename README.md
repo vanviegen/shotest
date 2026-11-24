@@ -95,6 +95,8 @@ The result of every test that passed is kept in a cache, by the source tree it r
 
 The cache is `~/.cache/shotest` (or `$XDG_CACHE_HOME/shotest`; set `SHOTEST_CACHE_DIR` for another place), outside the project: every checkout of it on the machine shares the cache, so a tree tested in one git worktree is not tested again in another, and running tests never changes a file git tracks. Results are also kept apart by what rendered them (the container image, or the Playwright version of a native run), and whether a result matches its baseline is decided in the checkout that uses it. What goes unused for a month is removed.
 
+A runner that sets up something costly per spec file before Playwright starts (an app container with its own database, say) can skip that for spec files with nothing left to run: `npx shotest restore [spec files...]` puts the cached results of the tests in those files (all, if none are given) into `test-results/`, as `npx shotest test` would, and prints the files that still have a test without one, one per line, relative to the project. Run those only; within them, `npx shotest test` skips the tests that have a result. It lists the tests natively with Playwright (loading the spec files, running nothing), and takes the renderer to be the one `npx shotest test` would use, so pass `--no-container` where that run gets it. As Playwright empties `test-results/` when a run starts, restore again after the last run.
+
 `npx shotest collect` summarizes the results on disk (failed tests and visual changes), cleans up unreferenced files, and exits with 0 (all good), 1 (failed tests) or 2 (tests passed, but visual changes await review) — use it after a test run, e.g. to gate CI on visual consistency.
 
 ## Deterministic screenshots
@@ -127,7 +129,7 @@ page.describe('Create lunch talk event');
 await page.getByRole('button', { name: 'New event' }).click();
 ```
 
-Routine flows that reoccur in many tests (logging in, seeding data) would otherwise produce countless screenshots. Wrap them in `suppressScreenshots(description, fn)` to skip capture — the review tool shows a placeholder with your description instead, and the wrapped part runs faster too:
+Routine flows that reoccur in many tests (logging in, seeding data) would otherwise produce countless screenshots. Wrap them in `suppressScreenshots(description, fn)` to skip capture — the review tool shows a placeholder with your description (and the line it was called from) instead, and the wrapped part runs faster too:
 
 ```ts
 import { test, suppressScreenshots } from 'shotest';

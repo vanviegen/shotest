@@ -15,9 +15,7 @@
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFileSync, execSync } from 'child_process';
-import { createRequire } from 'module';
-import * as os from 'os';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { compressImages, conversionProgress } from './webp.js';
 import {
@@ -42,6 +40,7 @@ import {
     type TestIdentity,
     type TestRecord,
 } from './manifest.js';
+import { listTests } from './list-reporter.js';
 import { sourceTreeHash } from './tree.js';
 
 // ── Configuration ──────────────────────────────────────────────────
@@ -51,7 +50,6 @@ const acceptedDir = process.env.SHOTEST_ACCEPTED_DIR || 'test-accepted';
 const defaultPreferredPort = Number.parseInt(process.env.SHOTEST_PORT || '3847', 10);
 const maxPortAttempts = 10;
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
 const reviewUiPath = path.join(thisDir, '..', 'build.frontend', 'index.html');
 
 export interface StartReviewServerOptions {
@@ -95,11 +93,11 @@ function decodeTestId(id: string): TestIdentity | null {
 
 type AlignEntry =
     | { kind: 'image'; step: ImageStepRecord }
-    | { kind: 'gap'; text: string };
+    | { kind: 'gap'; text: string; source?: string };
 
 function buildAlignEntries(steps: StepRecord[]): AlignEntry[] {
     return steps.map((step) => isGapStep(step)
-        ? { kind: 'gap' as const, text: step.gap }
+        ? { kind: 'gap' as const, text: step.gap, source: step.source }
         : { kind: 'image' as const, step });
 }
 
@@ -119,6 +117,7 @@ interface AlignedPair {
     // gap steps carry their (possibly differing) texts per side,
     acceptedGap?: string;
     currentGap?: string;
+    gapSource?: string;
     // image steps carry the image hash and event list per side.
     acceptedImage?: string;
     currentImage?: string;
@@ -141,6 +140,7 @@ function makeAlignedPair(
         return {
             acceptedGap: accepted?.kind === 'gap' ? accepted.text : undefined,
             currentGap: current?.kind === 'gap' ? current.text : undefined,
+            gapSource: entry.source,
             changed,
         };
     }
@@ -348,7 +348,7 @@ interface TestSummary {
 }
 
 // Set when the review starts: the source tree under review (see
-// sourceTreeHash), and the names of the tests there are (see listTests).
+// sourceTreeHash), and the names of the tests there are (see existingTestNames).
 // Undefined when it cannot tell.
 let currentTree: string | undefined;
 let existingTests: Set<string> | undefined;
@@ -358,19 +358,12 @@ let existingTests: Set<string> | undefined;
  * project's own config — so a test missing from them is gone, and not
  * merely left out of a run. Undefined when Playwright could not list them.
  */
-function listTests(): Set<string> | undefined {
-    const listFile = path.join(os.tmpdir(), `shotest-list-${process.pid}.json`);
+function existingTestNames(): Set<string> | undefined {
     try {
-        execFileSync(process.execPath, [
-            require.resolve('@playwright/test/cli'), 'test', '--list', `--reporter=${path.join(thisDir, 'list-reporter.js')}`,
-        ], { stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, SHOTEST_LIST_FILE: listFile } });
-        return new Set(JSON.parse(fs.readFileSync(listFile, 'utf-8')));
+        return new Set(listTests().map(testName));
     } catch (error) {
-        const stderr = (error as { stderr?: Buffer }).stderr?.toString().trim();
-        console.warn(`ShoTest review: could not list the tests, so no baseline is offered for deletion${stderr ? `:\n${stderr}` : ''}`);
+        console.warn(`ShoTest review: could not list the tests, so no baseline is offered for deletion:\n${(error as Error).message}`);
         return undefined;
-    } finally {
-        fs.rmSync(listFile, { force: true });
     }
 }
 
@@ -682,7 +675,7 @@ export function startReviewServer(options: StartReviewServerOptions = {}): Promi
         throw new Error('ShoTest Review: ' + legacyAcceptedHint(acceptedDir));
     }
 
-    existingTests = listTests();
+    existingTests = existingTestNames();
 
     // Test JSONs from an older format version are ignored, so their tests
     // read as never-accepted (all steps "new") — accepting rebuilds them in

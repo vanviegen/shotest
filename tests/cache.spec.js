@@ -32,10 +32,11 @@ test('hello', async ({ page }) => {
   return dir;
 }
 
-// `shotest test` there, in the browser this test itself runs in.
-function runTests(dir, cache) {
+// A shotest command there, natively: `test` runs in the browser this test
+// itself runs in.
+function shotest(dir, cache, command) {
   const { SHOTEST_RUN_ALL, ...env } = process.env;
-  return execFileSync(process.execPath, [path.join(root, 'build', 'cli.js'), 'test', '--no-container'], {
+  return execFileSync(process.execPath, [path.join(root, 'build', 'cli.js'), command, '--no-container'], {
     cwd: dir,
     encoding: 'utf-8',
     env: { ...env, SHOTEST_CACHE_DIR: cache },
@@ -54,14 +55,21 @@ test('a test that passed on a source tree is not run again, in another checkout 
   test.setTimeout(60_000);
   const cache = fs.mkdtempSync(path.join(os.tmpdir(), 'shotest-cache-'));
   const first = checkout();
-  expect(runTests(first, cache)).toContain('1 passed');
+  expect(shotest(first, cache, 'test')).toContain('1 passed');
   expect(Object.keys(results(first))).toHaveLength(2);
 
   const second = checkout();
-  expect(runTests(second, cache)).toContain('1 skipped');
+  expect(shotest(second, cache, 'test')).toContain('1 skipped');
   expect(results(second)).toEqual(results(first));
   // Testing leaves the files git tracks alone.
   expect(fs.existsSync(path.join(second, 'test-accepted'))).toBe(false);
 
-  for (const dir of [cache, first, second]) fs.rmSync(dir, { recursive: true, force: true });
+  // Restoring ahead of a run tells which spec files still need one.
+  const third = checkout();
+  expect(shotest(third, cache, 'restore')).toBe('');
+  expect(results(third)).toEqual(results(first));
+  fs.appendFileSync(path.join(third, 'tests', 'hello.spec.js'), '// changed\n');
+  expect(shotest(third, cache, 'restore')).toBe('tests/hello.spec.js\n');
+
+  for (const dir of [cache, first, second, third]) fs.rmSync(dir, { recursive: true, force: true });
 });

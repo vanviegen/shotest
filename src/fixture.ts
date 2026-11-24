@@ -613,7 +613,8 @@ export async function suppressScreenshots<T>(description: string, fn: () => Prom
     // off: inside forceScreenshots (depth negative) suppression is inert,
     // and real screenshots will document the block instead.
     if (suppressDepth === 0) {
-        currentSteps.push({ gap: String(description) });
+        const loc = getCallerLocation();
+        currentSteps.push({ gap: String(description), source: `${path.relative(process.cwd(), loc.file)}:${loc.line}` });
     }
     suppressDepth++;
     try {

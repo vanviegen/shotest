@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.12.0 (2026-11-24)
+
+- `npx shotest restore [spec files...]` puts the cached results of those files' tests in `test-results/` without running anything, and prints the files that still have tests to run: for runners that set up something costly per spec file.
+- A `suppressScreenshots()` placeholder in the review app shows the line it was called from.
+
 ## 2.11.0 (2026-11-23)
 
 - With fewer than 15 changed screenshots to decide on, the review app's overview shows them all, each with links to the tests and steps it appears in, and accepts them in one go.
