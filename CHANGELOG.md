@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.12.2 (2026-11-24)
+
+- Looking up cached results no longer reads every file in the project when ShoTest runs in a container that sees the files under another owner (a bind mount under rootless podman, say): it takes a fraction of a second there too.
+- Working out the source tree no longer writes anything into the project's `.git` directory, so running as another user (root in a container, say) leaves no files there that you cannot write to.
+- When git refuses the repository (as it does for one owned by another user), ShoTest warns that the result cache goes unused, instead of quietly running every test.
+
 ## 2.12.1 (2026-11-24)
 
 - Working out the source tree to look up cached results takes a fraction of a second again, instead of reading every file in the project each time: `shotest test`, `restore` and `review` start much faster in large projects.
